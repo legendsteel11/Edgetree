@@ -1,4 +1,4 @@
-# Edgetree v2.6.0
+# Edgetree v2.6.1
 
 [한국어 안내](README-ko.md)
 
@@ -216,6 +216,15 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.6.1 (2026-09-14)
+
+- Properties is now on a thumbnail's right-click menu.
+- Right-click a file in the tree and Go to folder takes you to the folder it sits in. Alt+↑ does the same.
+- Right-click menus now use the height of the screen, so a menu that fits shows everything without scrolling.
+- The playing indicator and the play/pause button are easier to see.
+- The multimedia panel starts closed when launched by Start with Windows, and folds on auto-hide when there is nothing in it to show.
+- Fixed the edges of PNG thumbnails with transparent corners looking broken.
 
 ### v2.6.0 (2026-09-08)
 

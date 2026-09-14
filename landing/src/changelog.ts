@@ -45,13 +45,46 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // SIX LINES, the longest card in a while, kept at six on the author's
+    // reading of the draft. The two additions lead, then the three changes
+    // someone will notice in use, then the one fix.
+    //
+    // The menu line is written as an improvement although it closes a defect:
+    // every menu in the window had been stopping at 600px since the cap was
+    // added, because the computed value was written to a dictionary the menus
+    // never read. Saying so here would tell a reader who never noticed that it
+    // was wrong for months, directly above the download button - the fix ships
+    // either way, and the commit carries the account.
+    //
+    // The multimedia panel line holds two behaviours (a sign-in start, and an
+    // auto-hide with nothing to show) because both are the same promise: the
+    // panel does not unfold when there is nothing in it to look at.
+    version: 'v2.6.1',
+    ko: [
+      '썸네일 우클릭 메뉴에 `속성`이 추가되었습니다.',
+      '트리에서 파일을 우클릭하면 `폴더로 이동`으로 그 파일이 있는 폴더로 바로 이동할 수 있습니다. 단축키는 `Alt+↑`입니다.',
+      '우클릭 메뉴가 화면 높이만큼 표시됩니다. 화면에 들어가는 메뉴는 스크롤 없이 모두 표시됩니다.',
+      '재생 중 표시와 재생/일시정지 버튼이 더 잘 보이도록 변경되었습니다.',
+      '`부팅 후 자동 시작`으로 실행되거나, 보여 줄 파일이 없는 상태에서 자동 숨김되면 멀티미디어 패널이 닫힌 상태로 표시됩니다.',
+      '투명한 모서리가 있는 PNG 썸네일의 가장자리가 깨져 보이던 문제를 수정했습니다.',
+    ],
+    en: [
+      "Properties is now on a thumbnail's right-click menu.",
+      'Right-click a file in the tree and Go to folder takes you to the folder it sits in. Alt+↑ does the same.',
+      'Right-click menus now use the height of the screen, so a menu that fits shows everything without scrolling.',
+      'The playing indicator and the play/pause button are easier to see.',
+      'The multimedia panel starts closed when launched by Start with Windows, and folds on auto-hide when there is nothing in it to show.',
+      'Fixed the edges of PNG thumbnails with transparent corners looking broken.',
+    ],
+  },
+  {
     // TWO FIXES, AND THE MINOR NUMBER MOVED ANYWAY (the author's call): the
     // patch place would have gone to two digits, which they have declined
     // before (v1.0.11 became v1.1.0 for the same reason).
     //
-    // The picture line leads because it is the one anyone can see - the author
-    // put it as 조금 크게 느껴졌다 after comparing the same file against an
-    // image editor. It says WHAT WAS WRONG (half a pixel off) because a reader
+    // The picture line leads because it is the one anyone can see - it was
+    // reported as a clearly visible loss, found by putting the same file beside
+    // an image editor. It says WHAT WAS WRONG (half a pixel off) because a reader
     // who noticed their screenshots looking soft has no other way to recognise
     // their own case.
     //
