@@ -38,7 +38,30 @@ public static class ThumbnailCacheService
     // 판 번호를 올리면 안 맞는 항목이 전부 없는 것으로 처리되어 다음에 볼 때
     // 다시 받아온다. **대가는 업데이트 직후 폴더마다 한 번씩 다시 받아오는
     // 것이고, NAS 폴더의 첫 방문이 그만큼 느려진다.**
-    private const int Version = 2;
+    //
+    // 3 (2026-09-14): a picture with any transparency is stored as PNG instead
+    // of JPEG. See Write. Measured on a 128px rounded rectangle put through the
+    // old encode: a transparent corner (A=0) came back opaque near-black
+    // (A=255, RGB 16-30 of ringing noise) and the anti-aliased edge (A=243) came
+    // back opaque - reported as rounded PNG corners that looked broken, and no
+    // thumbnail size could help because the damage was already on disk.
+    private const int Version = 3;
+
+    // Version 2 entries are still good for anything that can never have carried
+    // transparency, and those are the bulk of any cache - photographs and film
+    // frames. Throwing them away with the rest would make every NAS folder slow
+    // on its first visit after the update, which is the cost version 2 already
+    // charged once, to fix pictures that were never broken. Everything NOT on
+    // this list regenerates: PNG, GIF, WebP and ICO obviously, but also the
+    // shell's thumbnails of executables, shortcuts and documents, which are
+    // icons and routinely transparent.
+    private const int OpaqueOnlyVersion = 2;
+
+    private static readonly HashSet<string> NeverTransparentExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".jpe", ".jfif",
+        ".mp4", ".m4v", ".mkv", ".avi", ".mov", ".wmv", ".mpg", ".mpeg", ".ts", ".m2ts", ".flv",
+    };
 
     // Above this the oldest entries go. 300MB is roughly 20,000 thumbnails at
     // the size they encode to, which is more folders than anyone browses in a
@@ -123,7 +146,15 @@ public static class ThumbnailCacheService
 
             using var stream = File.OpenRead(entry);
             using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
-            if (reader.ReadUInt32() != Magic || reader.ReadInt32() != Version)
+            if (reader.ReadUInt32() != Magic)
+            {
+                return null;
+            }
+
+            int version = reader.ReadInt32();
+            if (version != Version &&
+                !(version == OpaqueOnlyVersion &&
+                  NeverTransparentExtensions.Contains(Path.GetExtension(filePath))))
             {
                 return null;
             }
@@ -200,12 +231,22 @@ public static class ThumbnailCacheService
                 return;
             }
 
-            // JPEG, and the trade is stated rather than hidden: it drops the
-            // alpha channel. A thumbnail is a preview of a photograph in all but
-            // a handful of cases, and PNG at this size is five to ten times the
-            // bytes - which would turn a 20MB folder into 150MB and make the cap
-            // above bite in an afternoon.
-            var encoder = new JpegBitmapEncoder { QualityLevel = 82 };
+            // JPEG for anything opaque, PNG for anything that is not. JPEG was
+            // the only encoder here until 2026-09-14, on the reasoning that a
+            // thumbnail is a photograph in all but a handful of cases and PNG at
+            // this size is five to ten times the bytes. That reasoning still
+            // holds for photographs, which is why they stay JPEG. What it missed
+            // is that the handful are exactly the pictures where dropping alpha
+            // SHOWS: JPEG has no alpha channel, so a transparent corner came back
+            // as opaque black noise (the measurement is at Version above).
+            //
+            // Decided by looking at the pixels rather than the extension. A PNG
+            // screenshot is opaque and gets JPEG's size; an exe's icon comes
+            // through the shell with no telling extension and still gets PNG.
+            // The scan is one pass over a thumbnail's bytes - 65KB at 128px.
+            BitmapEncoder encoder = HasTransparency(source)
+                ? new PngBitmapEncoder()
+                : new JpegBitmapEncoder { QualityLevel = 82 };
             encoder.Frames.Add(BitmapFrame.Create(source));
             using var pixels = new MemoryStream();
             encoder.Save(pixels);
@@ -235,6 +276,42 @@ public static class ThumbnailCacheService
         {
             // A cache that cannot be written is still a working app.
         }
+    }
+
+    // True when any pixel is less than fully opaque. A format with no alpha
+    // channel at all answers without a scan; everything else - including the
+    // indexed formats, whose palette can carry a transparent entry - is read
+    // as BGRA and checked byte by byte. Premultiplied or not, the alpha byte
+    // sits at the same offset, so Pbgra32 (what the shell path produces) is
+    // read as it stands.
+    private static bool HasTransparency(BitmapSource source)
+    {
+        PixelFormat format = source.Format;
+        if (format == PixelFormats.Bgr24 || format == PixelFormats.Rgb24 ||
+            format == PixelFormats.Bgr32 || format == PixelFormats.Bgr101010 ||
+            format == PixelFormats.Rgb48 || format == PixelFormats.Cmyk32 ||
+            format == PixelFormats.BlackWhite || format == PixelFormats.Gray2 ||
+            format == PixelFormats.Gray4 || format == PixelFormats.Gray8 ||
+            format == PixelFormats.Gray16 || format == PixelFormats.Gray32Float)
+        {
+            return false;
+        }
+
+        BitmapSource bgra = format == PixelFormats.Bgra32 || format == PixelFormats.Pbgra32
+            ? source
+            : new FormatConvertedBitmap(source, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        var pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        for (int i = 3; i < pixels.Length; i += 4)
+        {
+            if (pixels[i] != 255)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static void NoteWritten(long bytes)
