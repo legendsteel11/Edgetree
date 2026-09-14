@@ -1517,6 +1517,15 @@
             <MenuItem Header="{x:Static services:Strings.MenuOpenWithCode}"
                     Tag="openWithCode"
                     Click="OpenWithCode_Click"/>
+            <!-- A FILE ROW ONLY, and absent rather than greyed on a folder,
+                 where "go to the folder" has no meaning (2026-09-14). Beside
+                 탐색기에서 위치 열기 because both answer "where is this": that
+                 one in Explorer, this one in the tree. For a file deep inside a
+                 long expanded list, whose folder row is a long way up. -->
+            <MenuItem Header="{x:Static services:Strings.MenuGoToFolder}"
+                    Tag="goToFolder"
+                    InputGestureText="Alt+↑"
+                    Click="GoToFolder_Click"/>
             <MenuItem Header="{x:Static services:Strings.MenuRevealInExplorer}"
                     Click="RevealInExplorer_Click"/>
             <Separator/>
@@ -8637,6 +8646,15 @@
                                     <Separator/>
                                     <MenuItem Header="{x:Static services:Strings.MenuRevealInExplorer}"
                                             Click="RevealInExplorer_Click"/>
+                                    <!-- LAST, where the tree menu keeps it. Its own
+                                         handler rather than the tree's: a right-click
+                                         here marks a cell without moving the tree's
+                                         selection, so the tree's handler would open
+                                         the properties of whatever the TREE is on -
+                                         the folder, when the list is showing a
+                                         folder's pictures. -->
+                                    <MenuItem Header="{x:Static services:Strings.MenuProperties}"
+                                            Click="FilmstripProperties_Click"/>
                                 </ContextMenu>
                             </ListBox.ContextMenu>
                             <!-- The starting layout only; ApplyFilmstripLayout

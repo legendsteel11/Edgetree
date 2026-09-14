@@ -14448,6 +14448,21 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 폴더로 이동, on the key Explorer uses for "up one level" (2026-09-14).
+        // Same Alt trap as above, so read through SystemKey. PgUp was the other
+        // candidate and is already JumpToAdjacentVisibleFolder - close to this,
+        // but it lands on a subfolder when one is open above the file, so the
+        // two could not share a key without one of them changing meaning.
+        // File rows only, like the menu row; on a folder the key is left alone.
+        if ((e.Key == Key.System ? e.SystemKey : e.Key) == Key.Up &&
+            Keyboard.Modifiers == ModifierKeys.Alt &&
+            ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false, Parent: not null })
+        {
+            GoToFolder_Click(sender, e);
+            e.Handled = true;
+            return;
+        }
+
         switch (e.Key)
         {
             case Key.F2:
@@ -16750,6 +16765,7 @@ public partial class MainWindow : Window
             var copyPathItem = FindTaggedMenuElement<MenuItem>(menu, "copyPath");
             var createShortcutItem = FindTaggedMenuElement<MenuItem>(menu, "createShortcut");
             var openWithCodeItem = FindTaggedMenuElement<MenuItem>(menu, "openWithCode");
+            var goToFolderItem = FindTaggedMenuElement<MenuItem>(menu, "goToFolder");
             var viewHereItem = FindTaggedMenuElement<MenuItem>(menu, "viewHere");
 
             // THE PANEL'S OWN ROW. Absent - not greyed - for anything the panel
@@ -16838,7 +16854,7 @@ public partial class MainWindow : Window
                 ("openWith", openWithItem), ("compress", compressItem),
                 ("extract", extractItem), ("rename", renameItem),
                 ("copyPath", copyPathItem), ("openWithCode", openWithCodeItem),
-                ("createShortcut", createShortcutItem),
+                ("createShortcut", createShortcutItem), ("goToFolder", goToFolderItem),
             }.Where(t => t.Item is null).Select(t => t.Name).ToArray();
             if (absent.Length > 0)
             {
@@ -16993,6 +17009,17 @@ public partial class MainWindow : Window
                         ? Strings.MenuCollapseFolder
                         : Strings.MenuExpandFolder)
                     : Strings.MenuOpen;
+            }
+
+            // 폴더로 이동 is ABSENT on a folder rather than greyed: a folder row
+            // has no folder to go to that is not itself, and a dead row naming
+            // an action is the defect the 열기 header above was rewritten for.
+            if (goToFolderItem is not null)
+            {
+                goToFolderItem.Visibility =
+                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false, Parent: not null }
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
             }
 
             // "Open with" only makes sense for files - folders don't have a
@@ -21525,6 +21552,35 @@ public partial class MainWindow : Window
         if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item)
         {
             ShellFileService.OpenWithCode(item.FullPath);
+        }
+    }
+
+    // The cell the thumbnail list's menu was opened on. A right-click there
+    // marks the cell without moving the tree's selection, so the tree's own
+    // handlers cannot know which picture was meant.
+    private FileSystemItem? _filmstripMenuTarget;
+
+    // 속성 on the thumbnail list (2026-09-14): the right-clicked picture, and
+    // the tree's selection only when the right-click landed between cells -
+    // which, for a list showing a folder's pictures, is that folder.
+    private void FilmstripProperties_Click(object sender, RoutedEventArgs e)
+    {
+        if ((_filmstripMenuTarget ?? ExplorerTree.SelectedItem as FileSystemItem)
+            is { IsPlaceholder: false } target)
+        {
+            ShellFileService.ShowProperties(target.FullPath);
+        }
+    }
+
+    // Selects the folder a file sits in and lands its row at the top - for a
+    // file deep inside a long expanded list. Through NavigateToPath with
+    // collapseOthers, the same as any other place the user picks: with
+    // 폴더 자동 접기 on, the rest of the tree closes, as it would for a bookmark.
+    private void GoToFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false, Parent: { } folder })
+        {
+            NavigateToPath(folder.FullPath, source: "go-to-folder", collapseOthers: true);
         }
     }
 
@@ -32189,6 +32245,13 @@ public partial class MainWindow : Window
     // them, which is the whole reason to have marked them.
     private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Recorded for FilmstripProperties_Click before anything below can
+        // return, and cleared by a right-click that lands on no cell - a
+        // stale target from the previous right-click would open the
+        // properties of a picture nobody pointed at.
+        _filmstripMenuTarget =
+            ((e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell)?.Item;
+
         if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()
             is not { Content: FilmstripCell cell })
         {

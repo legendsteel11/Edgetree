@@ -207,6 +207,9 @@ public static class Strings
     public static string MenuOpenTerminal = "터미널에서 열기";
     public static string MenuOpenWithCode = "Code로 열기";
     public static string MenuRevealInExplorer = "탐색기에서 위치 열기";
+    // A file row only: selects the folder the file sits in and brings that row
+    // up, for a file deep inside a long expanded list.
+    public static string MenuGoToFolder = "폴더로 이동";
     public static string MenuRevealInTree = "트리에서 보기";
     public static string GestureDoubleClick = "더블클릭";
     // 탐색기의 같은 줄과 글자까지 같게 둔다. 이 줄이 하는 일이 셸에게 그
@@ -1104,6 +1107,7 @@ public static class Strings
         MenuOpenTerminal = "Open in terminal";
         MenuOpenWithCode = "Open with Code";
         MenuRevealInExplorer = "Reveal in Explorer";
+        MenuGoToFolder = "Go to folder";
         MenuRevealInTree = "Show in tree";
         GestureDoubleClick = "Double-click";
         MenuCreateShortcut = "Create shortcut";
