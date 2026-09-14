@@ -180,8 +180,21 @@ public partial class App : Application
         }
     }
 
+    // True when Windows started the app at sign-in rather than a person
+    // launching it. The Run value carries the argument (see MainWindow's
+    // TrySetStartWithWindows), because until 2026-09-14 it held the bare exe
+    // path and nothing could tell the two apart.
+    //
+    // What it is for: a sign-in start is not the moment someone sat down to look
+    // at pictures, so a multimedia panel left open at the last exit should not
+    // unfold across the screen before they have asked for anything. Set before
+    // base.OnStartup, which is what constructs MainWindow through StartupUri.
+    public static bool StartedAtSignIn { get; private set; }
+
     protected override void OnStartup(StartupEventArgs e)
     {
+        StartedAtSignIn = e.Args.Any(arg => string.Equals(arg, "--autostart", StringComparison.OrdinalIgnoreCase));
+
         // Named (not per-version) so an old build and a freshly built one
         // still see each other as the same app - the whole point is blocking
         // duplicate launches regardless of which exe/version is running.

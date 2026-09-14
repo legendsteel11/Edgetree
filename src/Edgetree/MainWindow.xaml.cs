@@ -794,6 +794,23 @@ public partial class MainWindow : Window
         // the viewer is about to reopen on top of it (the split floor is the
         // smaller one) - clamping it to the window floor here would move the
         // tree share the user set with the middle divider.
+        // A SIGN-IN START OPENS WITHOUT THE MULTIMEDIA PANEL, when docked
+        // (2026-09-14). Windows starting the app is not someone sitting down to
+        // look at pictures, and a docked panel left open at the last exit unfolds
+        // across the desktop before anything has been asked for. A floating
+        // window is left alone: it sits where it was put and does not take the
+        // screen edge.
+        //
+        // Cleared in the SETTINGS rather than skipped for this session, and
+        // before the Width below reads it. Skipping OpenViewer alone would leave
+        // ViewerOpen saying true about a panel that is not there - the width
+        // clamp, a preset captured in this session and the next exit would all
+        // believe it. Opening the panel again sets it back, as it always has.
+        if (App.StartedAtSignIn && !_settings.IsFloating && _settings.ViewerOpen)
+        {
+            _settings.ViewerOpen = false;
+        }
+
         Width = _settings.IsAutoHidden ? CollapsedWidth
             : _settings.ViewerOpen ? Math.Clamp(_settings.ExpandedWidth, MinTreeSplitWidth, MaxExpandedWidth)
             : ClampExpandedWidth(_settings.ExpandedWidth);
@@ -14080,7 +14097,11 @@ public partial class MainWindow : Window
             string? exePath = Environment.ProcessPath;
             if (!string.IsNullOrEmpty(exePath))
             {
-                key.SetValue(RunValueName, $"\"{exePath}\"");
+                // --autostart is how the app knows Windows started it rather than
+                // a person (App.StartedAtSignIn). This is rewritten on every
+                // launch, so an installation registered before the argument
+                // existed picks it up the next time it is run by hand.
+                key.SetValue(RunValueName, $"\"{exePath}\" --autostart");
             }
         }
         else
