@@ -13897,17 +13897,23 @@ public partial class MainWindow : Window
     // host their items in a ScrollViewer - but a ScrollViewer given unbounded
     // height never scrolls, so this is the number that makes it work.
     //
-    // Deliberately NOT the full work area: a menu that fills the
-    // screen edge to edge reads as broken, and the gap left above and below is
-    // also the cue that the list continues past what is shown.
+    // A MENU SCROLLS ONLY WHEN THE SCREEN CANNOT HOLD IT (2026-09-14). Until then
+    // the cap was 90% of the work area, and a fraction is the wrong shape for
+    // the question: it takes the same share away from a tall screen as from a
+    // short one, so the folder menu scrolled on a 2160px screen with only 속성
+    // left off - cap 1910px against a work area of 2158px, with a quarter of a
+    // screen of room it was not allowed to use. The rule asked for instead is
+    // the one this now follows: on a tall screen everything shows, on a short
+    // one it scrolls.
     //
-    // The fraction is generous on purpose. Hitting the cap is not free - the
-    // scrollbar takes a lane of its own out of the content (see
-    // MinimalScrollViewerTemplate), so an ORDINARY right-click menu that only
-    // just crosses the line loses visible width for nothing, which is exactly
-    // what got reported at 0.8 as too great a loss of width (2026-08-02). The cap
-    // is here for the runaway list of 65 rows, not for menus that merely happen
-    // to be long.
+    // What the fraction was protecting still holds, at a fixed size. A gap is
+    // left above and below so a menu never runs edge to edge (which reads as
+    // broken, and the gap is the cue that a scrolled list continues), and a menu
+    // that does scroll still pays a scrollbar lane out of its width - which is
+    // why 0.8 was rejected on 2026-08-02. A fixed margin makes scrolling RARER
+    // than any fraction did, so that cost is paid less, not more.
+    private const double MenuScreenMargin = 24;
+
     private void ApplyMenuMaxHeight()
     {
         double workAreaHeight = GetCurrentMonitorWorkArea().Height;
@@ -13924,9 +13930,25 @@ public partial class MainWindow : Window
         // The floor matters on a short work area (a low-resolution laptop with
         // a large taskbar): a cap small enough to show two rows would be worse
         // than the clipping this replaces.
-        double cap = Math.Max(240.0, workAreaHeight * 0.9 - chrome);
-        Application.Current.Resources["MenuMaxHeight"] = cap;
-        LogScrollLine($"menu   cap {cap:F0}  (work area {workAreaHeight:F0}, chrome {chrome:F0})");
+        double cap = Math.Max(240.0, workAreaHeight - 2 * MenuScreenMargin - chrome);
+
+        // INTO THE WINDOW'S DICTIONARY, where the placeholder is (2026-09-14).
+        // This wrote Application.Current.Resources from the day it was added,
+        // and the menus never saw it: MenuScrollViewerStyle binds MaxHeight with
+        // DynamicResource, the lookup walks up from the menu through the window
+        // before it reaches the application, and the window's Resources hold a
+        // placeholder of 600 under the same key. So every menu here capped at
+        // 600px whatever this computed - on a 2158px work area the log said cap
+        // 2078 while a folder menu visibly scrolled at about 600. The 2026-08-26
+        // report of 속성 scrolling out of reach was this too, and was answered
+        // with Alt+Enter on the belief that the screen was short.
+        Resources["MenuMaxHeight"] = cap;
+
+        // The value a menu will RESOLVE, not the one written. The line this
+        // replaces printed what had just been assigned, and so reported 1910 and
+        // then 2078 while every menu was using 600 - an instrument logging its
+        // own intent cannot see the lookup standing between it and the outcome.
+        LogScrollLine($"menu   cap {cap:F0} resolves to {TryFindResource("MenuMaxHeight")}  (work area {workAreaHeight:F0}, chrome {chrome:F0})");
     }
 
     private void ColorSettingsMenuItem_Click(object sender, RoutedEventArgs e)
