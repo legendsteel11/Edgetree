@@ -3970,23 +3970,19 @@
              private Style until the row gained a play/pause beside the stop, and
              a hover contract that says "the strip brightens as ONE thing" cannot
              be stated once per button and stay true. -->
+        <!-- PAUSE AND STOP AT FULL INK (2026-09-14). The footer's other chips
+             rest at 0.65 (FooterActionChipStyle) because they are occasional
+             controls in a row of occasional controls, and these used to follow
+             that, stepping to 0.9 only while the pointer was over the row.
+             While a track plays they are the controls reached for most, from
+             anywhere in the app, and at 0.65 they read as greyed out beside the
+             file name. So they rest at 1; the pointer still shows itself through
+             the template's own hover background and hover colour. -->
         <Style x:Key="FooterNowPlayingChipStyle"
                 TargetType="Button"
                 BasedOn="{StaticResource FooterActionGlyphChipStyle}">
-            <Style.Triggers>
-                <MultiDataTrigger>
-                    <MultiDataTrigger.Conditions>
-                        <Condition Value="True"
-                                Binding="{Binding IsMouseOver,
-                                    ElementName=FooterNowPlayingRow}"/>
-                        <Condition Value="False"
-                                Binding="{Binding IsMouseOver,
-                                    RelativeSource={RelativeSource Self}}"/>
-                    </MultiDataTrigger.Conditions>
-                    <Setter Property="Opacity"
-                            Value="0.9"/>
-                </MultiDataTrigger>
-            </Style.Triggers>
+            <Setter Property="Opacity"
+                    Value="1"/>
         </Style>
 
         <!-- The little chevron that closes the viewer from the divider, so the
@@ -6573,26 +6569,36 @@
                              that means "playing" cannot appear over one that is
                              not (UpdateFooterNowPlaying hides it).
 
-                             Opacity here rather than in the template: this is
-                             the row's own resting ink and the row's own
-                             half-step under the pointer, so the whole strip
-                             brightens as ONE thing (2026-08-13). The viewer's copy sits in a different
-                             strip with a different contract. -->
+                             FULL STRENGTH AND IN THE ACCENT (2026-09-14). It
+                             used to rest at 0.65 in the row's text colour and
+                             step to 0.9 under the pointer, so the strip
+                             brightened as one quiet thing (2026-08-13). That
+                             made it the thing hardest to find: this row is how
+                             a playing track is reached again, and an indicator
+                             drawn in the same ink as the file name beside it
+                             does not stand out from a glance across the screen.
+                             The moving bars are the one mark that means
+                             "playing", so they are the one that gets the colour.
+
+                             The colour arrives by re-pointing ForegroundText
+                             HERE rather than by editing SoundPulseStyle: the
+                             bars take their Fill from that key inside the
+                             template, a DynamicResource lookup finds this
+                             element's own entry first, and the viewer's copy
+                             of the pulse sits in a different strip with a
+                             different contract and keeps its own ink. -->
                         <ContentControl x:Name="FooterNowPlayingPulse"
                                 Grid.Column="2"
                                 Margin="0,0,6,0"
                                 Visibility="Collapsed">
+                            <ContentControl.Resources>
+                                <StaticResource x:Key="ForegroundText"
+                                        ResourceKey="AccentForeground"/>
+                            </ContentControl.Resources>
                             <ContentControl.Style>
                                 <Style TargetType="ContentControl"
                                         BasedOn="{StaticResource SoundPulseStyle}">
-                                    <Setter Property="Opacity" Value="0.65"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Value="True"
-                                                Binding="{Binding IsMouseOver,
-                                                    ElementName=FooterNowPlayingRow}">
-                                            <Setter Property="Opacity" Value="0.9"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
+                                    <Setter Property="Opacity" Value="1"/>
                                 </Style>
                             </ContentControl.Style>
                         </ContentControl>
