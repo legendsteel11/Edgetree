@@ -9846,9 +9846,28 @@
                                             Fill="{Binding Foreground,
                                                 RelativeSource={RelativeSource AncestorType=Button}}"/>
                                 </Button>
+                                <!-- PLAY/PAUSE AT FULL INK, the only one in this
+                                     row (2026-09-14). The strip sits under a
+                                     picture, a caption, a counter and a zoom
+                                     row, and with every control resting at the
+                                     same 0.65 there was nowhere for the eye to
+                                     land first. The control reached for most
+                                     is the one that stands out; previous, next
+                                     and stop keep the quiet rest.
+                                     A style setter, NOT an Opacity attribute on
+                                     the button: a local value outranks the
+                                     template's own triggers, so it would also
+                                     have cancelled the 0.3 a disabled chip
+                                     shows. -->
                                 <Button x:Name="ViewerMediaPlayPause"
-                                        Style="{StaticResource FooterActionGlyphChipStyle}"
                                         Click="ViewerMediaPlayPause_Click">
+                                    <Button.Style>
+                                        <Style TargetType="Button"
+                                                BasedOn="{StaticResource FooterActionGlyphChipStyle}">
+                                            <Setter Property="Opacity"
+                                                    Value="1"/>
+                                        </Style>
+                                    </Button.Style>
                                     <Grid>
                                         <Path x:Name="ViewerMediaPlayIcon"
                                                 Data="M336-216v-528l408 264-408 264Zm73-265Zm-1 133 204-132-204-132v264Z"
