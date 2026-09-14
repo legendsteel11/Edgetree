@@ -3396,6 +3396,24 @@ public partial class MainWindow : Window
         // window, and RevealFromAutoHide adds the panel's width back on. If
         // hide/reveal misbehaves with the viewer open, this is the first
         // place to look (the fold was one CloseViewer() call right here).
+        //
+        // AND IT FOLDS AGAIN WHEN THERE IS NOTHING IN IT TO LOOK AT
+        // (2026-09-14). Riding along is right for a picture, a film or a track:
+        // the panel is the thing being used, and coming back to it open is the
+        // point. With a folder or a file the panel cannot show selected, what
+        // rides along is an empty panel - and a reveal then unfolds that whole
+        // width across the screen to show nothing.
+        //
+        // Judged by the SELECTION through IsViewerCarouselItem, the one place
+        // the panel's world is decided, not by whether a picture is still on
+        // screen: the last picture can outlive the selection that showed it.
+        // A track playing in the background is not cut by this - CloseViewer
+        // keeps background play, and without background play a track that is
+        // not the selection is not playing at all.
+        if (_viewerOpen && (ViewerItem is not { } shown || !IsViewerCarouselItem(shown)))
+        {
+            CloseViewer();
+        }
 
         _settings.IsAutoHidden = true;
         StopHoverReveal();
