@@ -229,7 +229,7 @@ const BRIT = /\b(colours?|coloured|behaviour\w*|favourite\w*|minimis\w+|maximis\
 // InputGestureText="Space" 가 Content=/Text= 로 걸리기 때문이다.
 {
   const KEY_NAME = /^(Space|Home|End|Insert|Tab|PgUp|PgDn|Backspace)$/
-  const ALLOWED = /한국어|English|Ctrl|Alt|Shift|Del|Enter|Esc|Edgetree|TabStick|SweepCap|DeskNoise|https?:|vercel|github/
+  const ALLOWED = /한국어|English|Ctrl|Alt|Shift|Del|Enter|Esc|Edgetree|TabStick|SweepCap|DeskNoise|MagicLoupe|https?:|vercel|github/
   const hits = []
   for (const f of ['src/Edgetree/MainWindow.xaml', 'src/Edgetree/AboutWindow.xaml',
                    'src/Edgetree/ColorSettingsWindow.xaml', 'src/Edgetree/HelpWindow.xaml',

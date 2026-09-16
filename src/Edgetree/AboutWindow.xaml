@@ -220,8 +220,8 @@
                      about Edgetree.
 
                      STACKED, a name per line, where the landing footer sets the
-                     same three side by side. The window is a fixed DialogWidth
-                     with ResizeMode="NoResize", so a row of three names has
+                     same four side by side. The window is a fixed DialogWidth
+                     with ResizeMode="NoResize", so a row of four names has
                      nowhere to go once DialogFontSize is scaled up and would be
                      clipped rather than wrapped. Height is the free direction
                      here - SizeToContent="Height" is already on the window.
@@ -249,6 +249,18 @@
                         MouseLeftButtonDown="OtherToolLink_MouseLeftButtonDown"/>
                 <TextBlock Text="DeskNoise"
                         Tag="https://desk-noise.vercel.app/"
+                        Foreground="{DynamicResource AccentForeground}"
+                        FontSize="{DynamicResource DialogFontSize}"
+                        Cursor="Hand"
+                        TextDecorations="Underline"
+                        Margin="0,0,0,2"
+                        MouseLeftButtonDown="OtherToolLink_MouseLeftButtonDown"/>
+                <!-- The fourth (2026-09-16), and the block the note above
+                     promised: one TextBlock, no code. The LAST row carries the
+                     10px gap before the licence rows, so the gap moved here from
+                     DeskNoise. -->
+                <TextBlock Text="MagicLoupe"
+                        Tag="https://magicloupe.vercel.app/"
                         Foreground="{DynamicResource AccentForeground}"
                         FontSize="{DynamicResource DialogFontSize}"
                         Cursor="Hand"

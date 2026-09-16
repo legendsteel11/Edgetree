@@ -692,6 +692,8 @@ pjh85336@gmail.com 으로 보내주세요.
 
 [DeskNoise](https://desk-noise.vercel.app/) — 다섯 가지 소리를 세 층으로 섞는 환경음 생성기.
 
+[MagicLoupe](https://magicloupe.vercel.app/) — 화면 확대, 컬러 피커, 실시간 크기 및 간격 측정 앱.
+
 ## 라이선스
 
 MIT — [LICENSE.md](LICENSE.md) 참고. 파일·폴더 아이콘은 Material Icon Theme

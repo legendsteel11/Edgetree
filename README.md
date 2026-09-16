@@ -702,6 +702,9 @@ on your clipboard and in your Pictures folder the moment you let go.
 [DeskNoise](https://desk-noise.vercel.app/) — a background sound generator,
 five sounds mixed across three layers.
 
+[MagicLoupe](https://magicloupe.vercel.app/) — a screen magnifier, color picker,
+and live size and spacing measurement app.
+
 ## License
 
 MIT — see [LICENSE.md](LICENSE.md). File and folder icons come from the Material
