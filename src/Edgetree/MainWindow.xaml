@@ -1507,6 +1507,7 @@
                  folder picker would mean browsing back to it. -->
             <MenuItem Header="{x:Static services:Strings.MenuSearchInFolder}"
                     Tag="searchInFolder"
+                    InputGestureText="Ctrl+Shift+F"
                     Click="SearchInFolder_Click"/>
             <MenuItem Header="{x:Static services:Strings.MenuCopyPath}"
                     Tag="copyPath"

@@ -370,6 +370,8 @@ public static class HelpContent
                 new Group(string.Empty, new[]
                 {
                     R("Ctrl+F", "검색 열기", "Ctrl+F", "Open search"),
+                    R("Ctrl+Shift+F", "선택한 폴더에서 검색 (파일은 그 파일이 있는 폴더)",
+                      "Ctrl+Shift+F", "Search the selected folder (for a file, the folder it is in)"),
                     R("제목 표시줄 돋보기", "검색 열기 · 닫기",
                       "The magnifier in the title bar", "Open · close search"),
                     R("폴더 아이콘", "검색 범위 선택", "The folder icon", "Choose where to look"),

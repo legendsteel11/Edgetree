@@ -2364,6 +2364,19 @@ public partial class MainWindow : Window
                 SetTreeFontSize(DefaultTreeFontSize);
                 e.Handled = true;
                 break;
+            // Ctrl+Shift+F: search the place the tree is on (2026-09-16).
+            // FIRST, and guarded, because the check above only asks whether
+            // Control is down - so until this case existed Ctrl+Shift+F fell
+            // into Key.F below and simply was Ctrl+F. It still is while the
+            // search view is open: the tree's selection sits behind the
+            // results there, and moving the scope to it from inside a search
+            // would change the folder under a query without being asked.
+            case Key.F when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)
+                            && !_isSearchViewActive
+                            && SearchFolderForSelection() is { } searchFolder:
+                SearchInFolder(searchFolder);
+                e.Handled = true;
+                break;
             // Opens, and opens only. Made a toggle for one round and put back:
             // the difficulty it was aimed at turned out to be DISTANCE - the
             // header's search button walks away from the hand as the viewer
@@ -35493,13 +35506,30 @@ public partial class MainWindow : Window
     // SetSearchViewActive's lazy first scan only fires when nothing is indexed
     // AND nothing is scanning, so starting the scan here means the switch
     // won't queue a second one for the scope we just replaced.
+    // The folder Ctrl+Shift+F searches: the selected folder, or the folder a
+    // selected file sits in. Wider than the menu row, which only shows on a
+    // folder - a key has no row to hide, and "search where I am" is the
+    // question from a file as much as from a folder.
+    private FileSystemItem? SearchFolderForSelection()
+        => ExplorerTree.SelectedItem switch
+        {
+            FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: true } folder => folder,
+            FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false, Parent: { } parent } => parent,
+            _ => null,
+        };
+
     private void SearchInFolder_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
+        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
         {
-            return;
+            SearchInFolder(item);
         }
+    }
 
+    // One body for the menu row and Ctrl+Shift+F, so the two cannot come to
+    // disagree about what searching a folder does.
+    private void SearchInFolder(FileSystemItem item)
+    {
         // Cleared before the scan starts, so the streaming filter doesn't
         // immediately answer the PREVIOUS query against this new folder - the
         // user came here from the tree with a new folder in mind, not to re-run
