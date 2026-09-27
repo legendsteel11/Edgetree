@@ -11504,6 +11504,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Going back or forward is the TREE being walked, whichever door asked -
+        // Ctrl+←→, the thumb buttons over the tree, the header's chevrons and
+        // list - so the list's claim on ↑↓ ends here (see PanelHoldsArrows).
+        // Left standing, back-then-forward to the same picture found it still
+        // in force: the folder check cannot tell a return from never leaving.
+        _arrowsInPanel = false;
+
         var entry = _treeHistory[target];
 
         // A drive that has since gone (an unplugged stick, a root the user
@@ -11935,20 +11942,10 @@ public partial class MainWindow : Window
     // while (2026-08-10).
     private void Window_PreviewMouseDownForPathBar(object sender, MouseButtonEventArgs e)
     {
-        if (!PathBarBox.IsKeyboardFocusWithin)
+        if (!PathBarBox.IsKeyboardFocusWithin ||
+            IsPressInside(e.OriginalSource, PathBarRow))
         {
             return;
-        }
-
-        for (var element = e.OriginalSource as DependencyObject; element is not null;)
-        {
-            if (ReferenceEquals(element, PathBarRow))
-            {
-                return;
-            }
-            element = element is Visual or System.Windows.Media.Media3D.Visual3D
-                ? VisualTreeHelper.GetParent(element)
-                : null;
         }
 
         _isPathBarDirty = false;
@@ -14604,8 +14601,15 @@ public partial class MainWindow : Window
         // so a key the list took never arrives here. Without this, PgDn out of
         // the folder and PgUp back into it would find the claim still waiting:
         // the folder check alone cannot tell a return from never having left.
-        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right
-            or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+        //
+        // Not from the rename box. It lives in the tree's item template, so
+        // its caret keys tunnel through here while the tree is not moving at
+        // all - F2 on a picture picked from the list, a caret moved with ← or
+        // End, and the list had lost its ↑↓ for a rename.
+        bool navigationKey = e.Key is Key.Up or Key.Down or Key.Left or Key.Right
+            or Key.PageUp or Key.PageDown or Key.Home or Key.End;
+        if (navigationKey &&
+            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
         {
             _arrowsInPanel = false;
         }
@@ -32892,35 +32896,48 @@ public partial class MainWindow : Window
     // of every step - it would take the focus straight back after each click.
     private bool _arrowsInPanel;
 
-    // The folder the panel was showing when it was pressed. The claim is on
-    // that folder's pictures; see PanelHoldsArrows for when it lapses.
+    // The folder the list was showing when the panel was pressed, taken from
+    // the answer a drop on the list already uses (FilmstripDropFolder), so the
+    // two cannot come to disagree about which folder that is. NULL while search
+    // results or a slideshow drive the panel: a press on those pictures says
+    // nothing about the tree's folders, and a null claim matches none of them -
+    // otherwise a press on a result would carry over to its folder the moment
+    // the tree landed there.
     private string? _arrowsInPanelFolder;
 
     private void Window_PreviewMouseDownForArrows(object sender, MouseButtonEventArgs e)
     {
-        for (var element = e.OriginalSource as DependencyObject; element is not null;)
+        if (IsPressInside(e.OriginalSource, ViewerPanel))
         {
-            if (ReferenceEquals(element, ViewerPanel))
-            {
-                _arrowsInPanel = true;
-                // A folder's strip lists the folder itself and a file's lists
-                // its parent - the split UpdateViewerCarousel makes.
-                _arrowsInPanelFolder = ViewerItem is { IsDirectory: true } folder
-                    ? folder.FullPath
-                    : ViewerItem?.Parent?.FullPath;
-                return;
-            }
-
-            if (ReferenceEquals(element, ExplorerTree))
-            {
-                _arrowsInPanel = false;
-                return;
-            }
-
-            element = element is Visual or System.Windows.Media.Media3D.Visual3D
-                ? VisualTreeHelper.GetParent(element)
-                : null;
+            _arrowsInPanel = true;
+            _arrowsInPanelFolder = FilmstripDropFolder()?.FullPath;
         }
+        else if (IsPressInside(e.OriginalSource, ExplorerTree))
+        {
+            _arrowsInPanel = false;
+        }
+    }
+
+    // Whether a press's source sits inside `container`. The visual tree is
+    // climbed as usual, and a ContentElement is climbed through its logical
+    // parent: a Run inside a TextBlock is a mouse target in its own right (the
+    // panel's now-playing line is built of them), and stopping at it counted a
+    // press there as landing nowhere.
+    private static bool IsPressInside(object? source, DependencyObject container)
+    {
+        for (var node = source as DependencyObject; node is not null;)
+        {
+            if (ReferenceEquals(node, container))
+            {
+                return true;
+            }
+
+            node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(node)
+                : LogicalTreeHelper.GetParent(node);
+        }
+
+        return false;
     }
 
     // Whether ↑↓ step a row of the list rather than a row of the tree, asked
@@ -32929,28 +32946,24 @@ public partial class MainWindow : Window
     // FULL SCREEN ALWAYS SAYS YES: the tree is not on screen to be the other
     // side, and the list is the only thing the keys could be walking.
     //
-    // Otherwise it is the panel's claim, which lapses for good the first time
-    // ↑↓ find the selection outside the folder the press was made in -
-    // something other than the list moved it there. Checked here, at the key,
-    // rather than on every selection change: a hook there would have to be
-    // right about every selection the tree makes on its own as well, and a
-    // claim dropped by one of those would read as the list giving up its keys
-    // for no reason anyone could see.
+    // Otherwise it is the panel's claim, and only inside the folder the press
+    // was made in: a selection somewhere else was put there by something other
+    // than the list. What ENDS the claim lives elsewhere - a press in the tree
+    // (Window_PreviewMouseDownForArrows), the tree answering a navigation key
+    // itself (ExplorerTree_PreviewKeyDown), a move through the tree's history
+    // (GoTreeHistoryTo) and the panel closing (CloseViewer).
+    //
+    // A PLAIN QUESTION, with nothing written. It sits at the end of a chain of
+    // && in the key handler, so a lapse written here would happen or not
+    // depending on which conditions before it passed. And the folder is
+    // checked here, at the key, rather than on every selection change: a hook
+    // there would have to be right about every selection the tree makes on
+    // its own as well, and a claim dropped by one of those would read as the
+    // list giving up its keys for no reason anyone could see.
     private bool PanelHoldsArrows(FileSystemItem current)
-    {
-        if (_viewerFullscreen)
-        {
-            return true;
-        }
-
-        if (_arrowsInPanel &&
-            !string.Equals(current.Parent?.FullPath, _arrowsInPanelFolder, StringComparison.OrdinalIgnoreCase))
-        {
-            _arrowsInPanel = false;
-        }
-
-        return _arrowsInPanel;
-    }
+        => _viewerFullscreen ||
+           (_arrowsInPanel &&
+            string.Equals(current.Parent?.FullPath, _arrowsInPanelFolder, StringComparison.OrdinalIgnoreCase));
 
     // ----- 슬라이드 쇼 (2026-08-14) ------------------------------------------
     //
