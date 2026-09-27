@@ -18001,16 +18001,61 @@ public partial class MainWindow : Window
         // two, each one a fresh 2,400-entry enumeration over SMB, and the reads
         // stacked until the folder took six seconds to answer.
         //
-        // A merge that changed nothing has nothing for the strip either, so the
-        // count is the whole test - and a file appearing or going, which is what
-        // this was written for, always moves it.
+        // A merge that changed nothing has nothing for the strip either. A file
+        // appearing or going, which is what this was written for, always moves
+        // the count. A RENAME DOES NOT - it takes one name away and adds another
+        // - so the strip is also asked whether it holds a cell for a file the
+        // folder no longer lists. That keeps the loop above closed: once the
+        // strip has merged, both questions answer no.
+        bool outOfStep = FilmstripOutOfStep(shown);
         int now = GetViewerCarouselItems(shown).Count;
-        if (now == _viewerCarouselCount)
+        if (now == _viewerCarouselCount && !outOfStep)
         {
             return;
         }
 
+        if (outOfStep)
+        {
+            _filmstripListingChanged = true;
+        }
+
         UpdateViewerCarousel();
+    }
+
+    // Whether the strip holds a cell for a file its folder no longer lists.
+    // The strip merges when its (folder, count) key moves, and a rename moves
+    // neither half: the cell kept the old name, a click on it went looking for
+    // a file that was no longer there and gave up, the highlight could not
+    // find the renamed file at all, and a refresh changed nothing because it
+    // asked the same question (2026-09-28, on report - recorded as a known
+    // limit on 2026-08-22). The same holds for a rename made in another program.
+    //
+    // Asked when the folder on show is merged, never per selection: it walks
+    // the whole list, and a merge has just walked the disk for it anyway.
+    private bool FilmstripOutOfStep(FileSystemItem shown)
+    {
+        if (_filmstripCells.Count == 0)
+        {
+            return false;
+        }
+
+        // The list the strip is built from for this selection - the split
+        // UpdateViewerCarousel makes between a folder and a file.
+        List<FileSystemItem>? listed = IsViewerFolderStripSource(shown)
+            ? GetViewerFolderItems(shown)
+            : IsViewerCarouselItem(shown) ? GetViewerCarouselItems(shown) : null;
+        if (listed is null)
+        {
+            return false;
+        }
+
+        var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var item in listed)
+        {
+            paths.Add(item.FullPath);
+        }
+
+        return _filmstripCells.Any(cell => !paths.Contains(cell.Path));
     }
 
     // What the counter last said, so a refresh that found the same folder it
@@ -21132,6 +21177,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Read before the rename touches anything: F2 and the row menu both act
+        // on the selected row, and only that case has a selection to keep.
+        bool renamingSelection = ReferenceEquals(ExplorerTree.SelectedItem, item);
+
         if (!FileOperationService.TryRename(item.FullPath, newName, out var error))
         {
             MessageBox.Show(this, error, Strings.RenameFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -21144,7 +21193,53 @@ public partial class MainWindow : Window
         if (item.Parent is { } renameParent)
         {
             RefreshFolderPreservingState(renameParent);
+
+            if (renamingSelection)
+            {
+                KeepRenamedRowSelected(renameParent, newName);
+            }
         }
+    }
+
+    // THE RENAMED ROW STAYS SELECTED (2026-09-28, on report). The merge reuses
+    // instances by NAME, so a renamed file arrives as a new instance and the old
+    // one leaves the tree - and when the selected row leaves, WPF hands the
+    // selection to its parent. So every rename selected the FOLDER: the panel
+    // swapped the picture for the folder's view, and the file just renamed was
+    // no longer the one anything pointed at.
+    //
+    // DEFERRED, AND ONLY OVER WHAT WPF PUT THERE (the parent, or nothing). A
+    // rename is also committed by clicking somewhere else - that is LostFocus -
+    // and the row that click lands on has to win; it is selected by the time
+    // this runs. A click on empty tree space selects nothing, so the renamed
+    // row comes back there too, which is where the selection was.
+    private void KeepRenamedRowSelected(FileSystemItem parent, string newName)
+    {
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            if (ExplorerTree.SelectedItem is not null &&
+                !ReferenceEquals(ExplorerTree.SelectedItem, parent))
+            {
+                return;
+            }
+
+            var renamed = parent.AllLoadedChildren.FirstOrDefault(c =>
+                !c.IsPlaceholder && !c.IsShowMore &&
+                string.Equals(c.Name, newName, StringComparison.OrdinalIgnoreCase));
+            if (renamed is null)
+            {
+                return;
+            }
+
+            // A new name can sort past the folder's 더 보기 cap; uncovered only
+            // as far as this row, the same reveal a click on the list performs.
+            if (!parent.Children.Contains(renamed))
+            {
+                parent.ShowChildrenUpTo(renamed);
+            }
+
+            SelectVisibleItem(renamed);
+        }));
     }
 
     // THE ONE QUESTION LEFT IN FRONT OF A DELETE, and it is asked only where
@@ -30014,6 +30109,12 @@ public partial class MainWindow : Window
     // the folder.
     private (string Folder, int Count) _filmstripBuiltFor;
 
+    // Set when a merge of the folder on show finds the cells out of step with
+    // it at the SAME count - see FilmstripOutOfStep - and taken by the next
+    // UpdateFilmstrip as a reason to merge. A flag rather than a fudged count:
+    // the count already does two jobs here, and a third is how this bug began.
+    private bool _filmstripListingChanged;
+
     private const double FilmstripMinCellHeight = 40;
     // Above this the strip is taking more from the picture than it gives back,
     // and the fetch size below is chosen to cover it.
@@ -30299,15 +30400,23 @@ public partial class MainWindow : Window
         // Same reasoning, and the same shape, as the tree's own
         // MergeChildrenFromDisk: rows that survive keep their instance and
         // everything hanging off it.
-        if (_filmstripBuiltFor.Item1 == builtFor && _filmstripBuiltFor.Item2 != items!.Count &&
+        //
+        // A RENAME IS A MERGE TOO, though it leaves the count alone - hence the
+        // flag beside it (see FilmstripOutOfStep).
+        if (_filmstripBuiltFor.Item1 == builtFor &&
+            (_filmstripBuiltFor.Item2 != items!.Count || _filmstripListingChanged) &&
             _filmstripCells.Count > 0)
         {
             rebuilt = true;
+            _filmstripListingChanged = false;
             _filmstripBuiltFor = (builtFor, items.Count);
             MergeFilmstripCells(items);
         }
         else if (_filmstripBuiltFor != (builtFor, items!.Count))
         {
+            // Every cell is new, so whatever the flag was about has gone with
+            // the old ones.
+            _filmstripListingChanged = false;
             // Set with the folder, not per request: it is a property of where
             // these files live. Results spread across folders are paced by the
             // search SCOPE - one answer for the whole set, and the right one
