@@ -8893,6 +8893,11 @@ public partial class MainWindow : Window
                 filmstripGrid.IsChecked = _settings.ViewerFilmstripGrid;
             }
 
+            if (FindMenuItem(imageViewer, "filmstripNames") is { } filmstripNames)
+            {
+                filmstripNames.IsChecked = _settings.ViewerFilmstripNames;
+            }
+
             if (FindMenuItem(imageViewer, "thumbnailSizeRow") is { } thumbnailSizeRow)
             {
                 UpdateStepperRow(thumbnailSizeRow, FilmstripMaxFetchSize,
@@ -13916,6 +13921,16 @@ public partial class MainWindow : Window
 
         // Padding just changed, and the cap subtracts it.
         ApplyMenuMaxHeight();
+
+        // The thumbnail names are set in MenuChipFontSize, written above, so
+        // their line - and with it every row of the list - follows the zoom.
+        // Nothing else re-sizes the cells on a font change: until the names,
+        // nothing in a cell was text.
+        if (_settings.ViewerFilmstripNames)
+        {
+            ApplyFilmstripCellSize();
+            ApplyFilmstripGridHeight();
+        }
     }
 
     // How tall a menu may grow before it scrolls instead. A menu lives in its
@@ -31743,12 +31758,15 @@ public partial class MainWindow : Window
     {
         double height = Math.Round(FilmstripCellHeight);
         double width = FitFilmstripCellWidth(Math.Round(height * FilmstripAspect));
+        double nameLine = _settings.ViewerFilmstripNames ? MeasureFilmstripNameLine() : 0;
 
         bool sameHeight = Resources["FilmstripCellHeight"] is double currentHeight &&
             Math.Abs(currentHeight - height) < 0.5;
         bool sameWidth = Resources["FilmstripCellWidth"] is double currentWidth &&
             Math.Abs(currentWidth - width) < 0.5;
-        if (sameHeight && sameWidth)
+        bool sameName = Resources["FilmstripNameLineHeight"] is double currentName &&
+            Math.Abs(currentName - nameLine) < 0.5;
+        if (sameHeight && sameWidth && sameName)
         {
             return;
         }
@@ -31756,13 +31774,25 @@ public partial class MainWindow : Window
         Resources["FilmstripCellHeight"] = height;
         Resources["FilmstripCellWidth"] = width;
 
+        // The name line under the frame (see the cell template). Its width is
+        // the frame's, border included, so a long name trims instead of pushing
+        // the cell wider.
+        Resources["FilmstripNameLineHeight"] = nameLine;
+        Resources["FilmstripNameVisibility"] = nameLine > 0 ? Visibility.Visible : Visibility.Collapsed;
+        Resources["FilmstripCellFrameWidth"] = width + FilmstripCellBorder;
+
         // What one cell OCCUPIES, which is what a layout has to place. The same
         // advance the fit above counts with - border plus the container's own
         // margin - so the two cannot disagree about how wide a frame really is.
         // Used vertically as well: the list needs a gap under each row, and the
         // bar has never needed one because it has a single row.
+        //
+        // The name line is added HERE and nowhere else. The list's height, its
+        // rows and its column count all read this footprint, so they all see
+        // the line or none of them do - a second place subtracting it would be
+        // two authorities agreeing only by luck.
         Resources["FilmstripCellFootprintWidth"] = width + FilmstripCellAdvance;
-        Resources["FilmstripCellFootprintHeight"] = height + FilmstripCellAdvance;
+        Resources["FilmstripCellFootprintHeight"] = height + FilmstripCellAdvance + nameLine;
 
         // The play badge's three keys were computed here as well, and went with
         // it on 2026-08-16 - see the cell template.
@@ -31781,6 +31811,22 @@ public partial class MainWindow : Window
         // The mark rides the cell the way the ribbon does and stops at the same
         // kind of ceiling: it is a badge on the frame, not a label of it.
         Resources["FilmstripMarkSize"] = Math.Clamp(Math.Round(height * 0.22), 12, 18);
+    }
+
+    // One line of the thumbnail names, measured rather than assumed. A line's
+    // height belongs to the font, the size follows Ctrl +/-, and a Hangul name
+    // is set in a fallback face whose line can be taller - so a probe with the
+    // family and size the template uses answers all three at once.
+    private double MeasureFilmstripNameLine()
+    {
+        var probe = new TextBlock
+        {
+            Text = "가Ag",
+            FontFamily = ViewerFilmstrip.FontFamily,
+            FontSize = TryFindResource("MenuChipFontSize") is double size ? size : 10.0,
+        };
+        probe.Measure(new System.Windows.Size(double.PositiveInfinity, double.PositiveInfinity));
+        return Math.Ceiling(probe.DesiredSize.Height);
     }
 
     // The layout swap, and the whole of it: one panel template, which axis
@@ -32084,6 +32130,21 @@ public partial class MainWindow : Window
         }
 
         _settings.ViewerFilmstripGrid = item.IsChecked;
+        _settingsService.Save(_settings);
+        ApplyFilmstripLayout();
+    }
+
+    // Through the same door as the shape: ApplyFilmstripLayout re-sizes the
+    // cells (which is where the name line is added or taken away) and then the
+    // list's height, and nothing about the panel itself changes.
+    private void FilmstripNamesMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item)
+        {
+            return;
+        }
+
+        _settings.ViewerFilmstripNames = item.IsChecked;
         _settingsService.Save(_settings);
         ApplyFilmstripLayout();
     }

@@ -60,6 +60,12 @@ public class AppSettings
     public double ViewerFilmstripGridCellSize { get; set; } = 96;
     public double ViewerFilmstripGridHeight { get; set; } = 240;
 
+    // A line under each thumbnail with the file's name, in the bar and the list
+    // alike (2026-09-28, on request). Off by default: the name is already one
+    // hover away in the cell's tooltip, and the line costs every row its height.
+    // Display only - renaming stays in the tree.
+    public bool ViewerFilmstripNames { get; set; }
+
     // 재생 볼륨. 0.6은 슬라이더가 XAML에 박고 있던 값 그대로이므로, 이 설정이
     // 없던 사람에게는 지금까지와 같다.
     //

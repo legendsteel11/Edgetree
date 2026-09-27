@@ -2106,6 +2106,13 @@
                         IsCheckable="True"
                         AutomationProperties.AutomationId="filmstripGrid"
                         Click="FilmstripGridMenuItem_Click"/>
+                <!-- Beside the shape because it is the same kind of answer -
+                     how the cells are laid out, for both shapes - and not one
+                     about fetching, which is what the rows below it are. -->
+                <MenuItem Header="{x:Static services:Strings.MenuFilmstripNames}"
+                        IsCheckable="True"
+                        AutomationProperties.AutomationId="filmstripNames"
+                        Click="FilmstripNamesMenuItem_Click"/>
                 <MenuItem Header="{x:Static services:Strings.MenuPrecacheThumbnails}"
                         IsCheckable="True"
                         AutomationProperties.AutomationId="precacheThumbnails"
@@ -8742,6 +8749,26 @@
                                                      hover that only some cells
                                                      can show is worse than the
                                                      borders were. -->
+                                                <!-- THE NAME GOES UNDER THE FRAME,
+                                                     not inside it (2026-09-28, on
+                                                     request). The frame and its two
+                                                     hairlines are drawn against the
+                                                     picture's own edge, and a name
+                                                     inside would put the selection
+                                                     ring round a line of text too.
+                                                     Its width is the frame's, set
+                                                     rather than left to the text: in
+                                                     the bar nothing else limits a
+                                                     cell's width, and a long name
+                                                     would have widened its cell.
+                                                     Height and visibility come from
+                                                     ApplyFilmstripCellSize, which
+                                                     also adds the line to the
+                                                     footprint every row is laid out
+                                                     from - one place, so the list's
+                                                     height and the rows cannot
+                                                     disagree about it. -->
+                                                <StackPanel>
                                                 <Border x:Name="Frame"
                                                         BorderThickness="2"
                                                         BorderBrush="Transparent"
@@ -8818,6 +8845,20 @@
                                                                 IsHitTestVisible="False"/>
                                                     </Grid>
                                                 </Border>
+                                                <!-- The tree's file-name ink, one
+                                                     size step down (smaller, never
+                                                     dimmer). The full name stays in
+                                                     the container's tooltip. -->
+                                                <TextBlock x:Name="CellName"
+                                                        Text="{Binding Name}"
+                                                        Width="{DynamicResource FilmstripCellFrameWidth}"
+                                                        Height="{DynamicResource FilmstripNameLineHeight}"
+                                                        Visibility="{DynamicResource FilmstripNameVisibility}"
+                                                        FontSize="{DynamicResource MenuChipFontSize}"
+                                                        Foreground="{DynamicResource FileNameForeground}"
+                                                        TextTrimming="CharacterEllipsis"
+                                                        TextAlignment="Center"/>
+                                                </StackPanel>
                                                 <ControlTemplate.Triggers>
                                                     <!-- Hover is TWO faint things
                                                          rather than one strong
@@ -8929,6 +8970,29 @@
                                                         <Setter TargetName="RingOuter"
                                                                 Property="BorderBrush"
                                                                 Value="#D9FFFFFF"/>
+                                                        <!-- THE NAME AS THE TREE
+                                                             DRAWS A SELECTED FILE
+                                                             (2026-09-28, on
+                                                             request): its selection
+                                                             ground under its
+                                                             highlight ink. The pair,
+                                                             not the ink alone - the
+                                                             highlight colour is
+                                                             chosen against that
+                                                             ground, and on the
+                                                             panel's own it can all
+                                                             but vanish in a light
+                                                             palette. Across the whole
+                                                             line, so it meets the
+                                                             frame's bottom edge in
+                                                             the same colour and the
+                                                             two read as one mark. -->
+                                                        <Setter TargetName="CellName"
+                                                                Property="Background"
+                                                                Value="{DynamicResource TreeRowSelectedActiveBackground}"/>
+                                                        <Setter TargetName="CellName"
+                                                                Property="Foreground"
+                                                                Value="{DynamicResource FileNameHighlightForeground}"/>
                                                     </Trigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>

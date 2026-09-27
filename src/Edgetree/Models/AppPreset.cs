@@ -117,6 +117,7 @@ public class AppPreset
         nameof(AppSettings.ViewerFilmstripGrid),
         nameof(AppSettings.ViewerFilmstripGridCellSize),
         nameof(AppSettings.ViewerFilmstripGridHeight),
+        nameof(AppSettings.ViewerFilmstripNames),
         nameof(AppSettings.ViewerNavigator),
         nameof(AppSettings.ViewerSideSwapped),
 

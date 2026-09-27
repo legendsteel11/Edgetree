@@ -693,6 +693,9 @@ public static class HelpContent
                     R("옵션 → 멀티미디어 패널 → 썸네일 목록으로 보기", "여러 줄 목록(기본)과 한 줄 바 중 선택",
                       "Options → Multimedia panel → Thumbnail grid",
                       "The multi-row list (the default) or the single-row bar"),
+                    R("옵션 → 멀티미디어 패널 → 썸네일 아래 파일 이름 표시", "각 썸네일 아래에 한 줄로 표시, 긴 이름은 뒷부분 생략",
+                      "Options → Multimedia panel → File names under thumbnails",
+                      "One line under each thumbnail; long names are shortened at the end"),
                     // ONE ROW FOR THE TWO GRIPS. The same edge does different
                     // work per shape, and two rows would read as two edges.
                     R("바 위쪽 가장자리 드래그", "목록은 표시되는 줄 수, 바는 칸 크기 조정",
