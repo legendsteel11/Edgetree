@@ -14927,7 +14927,18 @@ public partial class MainWindow : Window
         {
             treeViewItem.IsSelected = true;
             treeViewItem.BringIntoView();
-            treeViewItem.Focus();
+
+            // NOT OUT FROM UNDER AN OPEN MENU (2026-09-28). A menu closes when
+            // focus leaves it, and this step can run on a background pass well
+            // after the press that asked for it - which is how a right-click on
+            // the thumbnail list opened its menu and lost it a moment later
+            // (2026-08-22). The row is selected either way; only the focus
+            // waits, and it stays with the menu while the menu is up.
+            if (!IsCapturingUiOpen)
+            {
+                treeViewItem.Focus();
+            }
+
             return;
         }
 
@@ -15243,7 +15254,8 @@ public partial class MainWindow : Window
     }
 
     // The rows an operation should apply to: the multi-selection when one is
-    // active, else the native single selection. Paths that stopped existing
+    // active, the right-clicked cell while the thumbnail list's menu is up,
+    // else the native single selection. Paths that stopped existing
     // (deleted/renamed behind a stale set entry) are dropped rather than
     // handed to an operation that would only fail on them.
     private List<FileSystemItem> GetEffectiveSelection()
@@ -15254,6 +15266,16 @@ public partial class MainWindow : Window
                 .Where(i => File.Exists(i.FullPath) || Directory.Exists(i.FullPath))
                 .ToList();
         }
+
+        // A command from the thumbnail list's menu: the right-clicked cell, even
+        // before the tree has landed on it.
+        if (FilmstripMenuItem is { } cellItem)
+        {
+            return File.Exists(cellItem.FullPath) || Directory.Exists(cellItem.FullPath)
+                ? new List<FileSystemItem> { cellItem }
+                : new List<FileSystemItem>();
+        }
+
         return ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false } single
             ? new List<FileSystemItem> { single }
             : new List<FileSystemItem>();
@@ -16803,9 +16825,11 @@ public partial class MainWindow : Window
         SchedulePathBarSync();
     }
 
+    // Shared with the thumbnail list's menu, whose right-clicked cell is the
+    // answer there - see FilmstripMenuItem.
     private void RevealInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item)
+        if ((FilmstripMenuItem ?? ExplorerTree.SelectedItem as FileSystemItem) is { IsPlaceholder: false } item)
         {
             ShellFileService.RevealInExplorer(item.FullPath);
         }
@@ -21729,8 +21753,9 @@ public partial class MainWindow : Window
     }
 
     // The cell the thumbnail list's menu was opened on. A right-click there
-    // marks the cell without moving the tree's selection, so the tree's own
-    // handlers cannot know which picture was meant.
+    // moves the tree to that picture too (2026-09-28), but the tree's walk can
+    // land after the menu is up or not at all, so the tree's selection is not
+    // an answer the menu can wait for - this is.
     private FileSystemItem? _filmstripMenuTarget;
 
     // 속성 on the thumbnail list (2026-09-14): the right-clicked picture, and
@@ -32513,9 +32538,10 @@ public partial class MainWindow : Window
     }
 
     // The strip's right-click behaves like a plain press when it lands outside
-    // the set: what is under the pointer becomes the one thing, and the menu is
-    // then about it. Inside the set nothing moves - the menu is about all of
-    // them, which is the whole reason to have marked them.
+    // the set: what is under the pointer becomes the one thing - on the panel
+    // and in the tree - and the menu is then about it. Inside the set nothing
+    // moves - the menu is about all of them, which is the whole reason to have
+    // marked them.
     private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         // Recorded for FilmstripProperties_Click before anything below can
@@ -32536,20 +32562,86 @@ public partial class MainWindow : Window
             return;
         }
 
-        // NARROWED THROUGH THE SET, NOT THROUGH THE TREE. Moving the tree here
-        // was what closed the menu on its own a moment after it opened
-        // (reported 2026-08-22): the selection walk focuses the row it lands on,
-        // and it retries on background passes, so the focus can arrive AFTER the
-        // menu is up and take it away - which is why it looked worse while the
-        // folder was busy caching.
+        // THE SAME AS A PLAIN PRESS (2026-09-28, on request): the marks go, and
+        // the panel and the tree move to the cell. Until then a right-click only
+        // MARKED the cell, which left two rows reading as selected in the tree -
+        // the picture on show and the file the menu was about - and after the
+        // menu closed, Del and Ctrl+C went to one of them while F2 and Enter
+        // went to the other.
         //
-        // The set answers the same question without moving anything:
-        // GetEffectiveSelection prefers it, so the menu is about this one file,
-        // and the badge says so on screen. The picture stays where it was, which
-        // is also what a right-click should do.
+        // The move was here before and was taken out on 2026-08-22, because it
+        // closed the menu a moment after it opened: the selection walk focuses
+        // the row it lands on, and when the row is not ready it retries on
+        // background passes, so the focus could arrive AFTER the menu was up
+        // and take it away. The walk no longer focuses while a menu is open
+        // (see SelectVisibleItemStep), which is what lets the move come back.
+        //
+        // NO MARK. The first version of the move kept marking the cell too, so
+        // the menu's commands were sure of it before the tree landed - and the
+        // badge that comes with a mark blinked on and off at every right-click
+        // from one picture to the next. What the mark was for is kept without
+        // the badge: while this menu is up, its cell stands in for the tree's
+        // selection (see FilmstripMenuItem).
         ClearMultiSelection();
-        AddToMultiSelection(cell.Item);
         _filmstripMarkAnchor = _filmstripCells.IndexOf(cell);
+        MoveViewerTo(cell.Item);
+    }
+
+    // True from the moment the thumbnail list's menu opens until the command
+    // chosen from it has run, and the one span in which FilmstripMenuItem
+    // answers. The generation keeps a late reset from ending a menu opened
+    // after the one it belonged to.
+    private bool _filmstripMenuInPlay;
+    private int _filmstripMenuGeneration;
+
+    private void FilmstripContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        AnyMenu_Opened(sender, e);
+        _filmstripMenuInPlay = true;
+        _filmstripMenuGeneration++;
+    }
+
+    private void FilmstripContextMenu_Closed(object sender, RoutedEventArgs e)
+    {
+        AnyMenu_Closed(sender, e);
+
+        // AFTER THE COMMAND. WPF closes a menu first and raises the row's Click
+        // afterwards, queued at Render priority (MenuItem.InvokeClickAfterRender,
+        // read from the IL on 2026-09-28), so ending the span here and now would
+        // hand 삭제 or 복사 the tree's selection instead of the cell. Background
+        // runs after Render.
+        int generation = _filmstripMenuGeneration;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            if (generation == _filmstripMenuGeneration)
+            {
+                _filmstripMenuInPlay = false;
+            }
+        }));
+    }
+
+    // The file a command from the thumbnail list's menu is about: the cell the
+    // menu was opened on. The tree has usually landed on it by then, and its
+    // instance is the live one, so that is preferred; until it lands, the
+    // cell's own. Null outside that menu, and for a right-click between cells.
+    //
+    // Why the tree's selection is not simply trusted: its walk can land after
+    // the menu is up, or give up, and a 삭제 answered from the wrong row
+    // deletes the picture that was on show before the right-click.
+    private FileSystemItem? FilmstripMenuItem
+    {
+        get
+        {
+            if (!_filmstripMenuInPlay || _filmstripMenuTarget is not { } cellItem)
+            {
+                return null;
+            }
+
+            return ExplorerTree.SelectedItem is FileSystemItem native &&
+                   string.Equals(native.FullPath, cellItem.FullPath, StringComparison.OrdinalIgnoreCase)
+                ? native
+                : cellItem;
+        }
     }
 
     // Where a drop on the list lands: the folder the panel is showing, which is

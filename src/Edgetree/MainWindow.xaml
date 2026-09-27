@@ -8637,9 +8637,13 @@
                                      2026-08-22). The style comes with the same
                                      package - a menu that skips it does not
                                      match the app's own. -->
+                                <!-- Both through handlers of their own, which
+                                     pass to AnyMenu_Opened/AnyMenu_Closed and
+                                     mark the span in which the right-clicked
+                                     cell stands in for the tree's selection. -->
                                 <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
-                                        Opened="AnyMenu_Opened"
-                                        Closed="AnyMenu_Closed">
+                                        Opened="FilmstripContextMenu_Opened"
+                                        Closed="FilmstripContextMenu_Closed">
                                     <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
                                             InputGestureText="Ctrl+A"
                                             Click="FilmstripSelectAll_Click"/>
@@ -8661,12 +8665,12 @@
                                     <MenuItem Header="{x:Static services:Strings.MenuRevealInExplorer}"
                                             Click="RevealInExplorer_Click"/>
                                     <!-- LAST, where the tree menu keeps it. Its own
-                                         handler rather than the tree's: a right-click
-                                         here marks a cell without moving the tree's
-                                         selection, so the tree's handler would open
-                                         the properties of whatever the TREE is on -
-                                         the folder, when the list is showing a
-                                         folder's pictures. -->
+                                         handler rather than the tree's: the tree does
+                                         move to the right-clicked cell now, but its
+                                         walk can land after the menu opens or not at
+                                         all, and a right-click between cells is about
+                                         the folder - the cell is the one answer that
+                                         is always right. -->
                                     <MenuItem Header="{x:Static services:Strings.MenuProperties}"
                                             Click="FilmstripProperties_Click"/>
                                 </ContextMenu>
