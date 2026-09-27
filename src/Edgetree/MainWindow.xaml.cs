@@ -950,6 +950,10 @@ public partial class MainWindow : Window
         StartStuckCaptureWatchdog();
         StartNetworkRootStatusWatch();
 
+        // 속성 comes up on a shell thread with nothing tying it to this
+        // window - see the class for where and in which band it would open.
+        _shellDialogPlacement = new ShellDialogPlacement(this);
+
         // Resuming from sleep and changing the display layout both make Windows
         // rebuild the surfaces WPF renders onto. The reported symptom is rows
         // vanishing from the middle of the tree after the app has been up a
@@ -2551,6 +2555,8 @@ public partial class MainWindow : Window
         Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
         Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
 
+        _shellDialogPlacement?.Dispose();
+
         foreach (var watcher in _driveWatchers)
         {
             watcher.Dispose();
@@ -3469,6 +3475,8 @@ public partial class MainWindow : Window
         ApplyTopmostState("enter");
     }
 
+    private ShellDialogPlacement? _shellDialogPlacement;
+
     // The single place that decides whether this window belongs on top, and
     // the only one that can be trusted to make it so.
     //
@@ -3486,6 +3494,10 @@ public partial class MainWindow : Window
     //
     // So: recompute what the state should be, keep WPF's own belief in step
     // with it, then state it to the window manager directly either way.
+    //
+    // ShellDialogPlacement reads that belief to decide whether the shell's
+    // dialogs need lifting above this window, so the property must keep meaning
+    // what the app WANTS even while the real window disagrees.
     private void ApplyTopmostState(string reason)
     {
         bool shouldBeTopmost = _settings.AlwaysOnTop || (_isDocked && _settings.IsAutoHidden);
@@ -4380,6 +4392,10 @@ public partial class MainWindow : Window
             ApplyMenuCheckColumn(menu);
             _openMenus.Add(menu);
             LogClick("menu opened", null);
+
+            // Where the right-click landed, for 속성 - see PropertiesAnchor.
+            var cursor = System.Windows.Forms.Cursor.Position;
+            _menuOpenedAt = (cursor.X, cursor.Y);
 
             // The rows for this opening are all in place by now, so what the
             // menu comes to is finally answerable - see the note there.
@@ -21725,7 +21741,7 @@ public partial class MainWindow : Window
         if ((_filmstripMenuTarget ?? ExplorerTree.SelectedItem as FileSystemItem)
             is { IsPlaceholder: false } target)
         {
-            ShellFileService.ShowProperties(target.FullPath);
+            OpenPropertiesSheet(target.FullPath, sender);
         }
     }
 
@@ -21745,8 +21761,45 @@ public partial class MainWindow : Window
     {
         if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item)
         {
-            ShellFileService.ShowProperties(item.FullPath);
+            OpenPropertiesSheet(item.FullPath, sender);
         }
+    }
+
+    // The screen point the last context menu was opened at, in the pixels the
+    // shell works in. Written by AnyMenu_Opened, which every menu here passes
+    // through.
+    private (int X, int Y)? _menuOpenedAt;
+
+    // Where a 속성 sheet should open, 2026-09-28. Left to itself the shell puts
+    // it at the cursor, and from a menu that is the 속성 row - the LAST row of
+    // a long menu - so it came up near the bottom of the screen whichever item
+    // had been right-clicked. From a menu, the point the menu was opened at;
+    // from Alt+Enter, the focused row's corner; null leaves the cursor.
+    private (int X, int Y)? PropertiesAnchor(object sender)
+    {
+        if (sender is MenuItem or System.Windows.Controls.ContextMenu)
+        {
+            return _menuOpenedAt;
+        }
+
+        if (Keyboard.FocusedElement is FrameworkElement focused &&
+            PresentationSource.FromVisual(focused) is not null)
+        {
+            System.Windows.Point corner = focused.PointToScreen(new System.Windows.Point(0, 0));
+            return ((int)Math.Round(corner.X), (int)Math.Round(corner.Y));
+        }
+
+        return null;
+    }
+
+    private void OpenPropertiesSheet(string path, object sender)
+    {
+        if (PropertiesAnchor(sender) is { } anchor)
+        {
+            _shellDialogPlacement?.PlaceNextSheetAt(anchor.X, anchor.Y);
+        }
+
+        ShellFileService.ShowProperties(path);
     }
 
     private void ResizeThumb_DragDelta(object sender, DragDeltaEventArgs e)
@@ -37183,7 +37236,7 @@ public partial class MainWindow : Window
     {
         if (SelectedSearchResult is { } entry)
         {
-            ShellFileService.ShowProperties(entry.FullPath);
+            OpenPropertiesSheet(entry.FullPath, sender);
         }
     }
 
