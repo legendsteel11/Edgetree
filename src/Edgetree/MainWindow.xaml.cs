@@ -790,6 +790,12 @@ public partial class MainWindow : Window
             new MouseButtonEventHandler(Window_PreviewMouseDownForPathBar),
             handledEventsToo: true);
 
+        // handledEventsToo here as well: which side a press landed on is true
+        // of every press, whichever handler ends up answering it.
+        AddHandler(PreviewMouseDownEvent,
+            new MouseButtonEventHandler(Window_PreviewMouseDownForArrows),
+            handledEventsToo: true);
+
         // A stored tree width below the window floor is legal exactly when
         // the viewer is about to reopen on top of it (the split floor is the
         // smaller one) - clamping it to the window floor here would move the
@@ -2253,11 +2259,21 @@ public partial class MainWindow : Window
             }
         }
 
-        // ↑↓ ARE A ROW IN THE LIST, and the rule licensing that is the one ←→
-        // already run on: the strip being on screen is a visible reason for the
-        // keys to mean something else. Only ever in the LIST layout, because
-        // only there is there such a thing as a row - in the bar, ↑↓ stay the
-        // tree's, where one press is one file and that is already the carousel.
+        // ↑↓ ARE A ROW IN THE LIST once the hand is in the panel. Two things
+        // license it. The strip being on screen is the visible reason the ←→
+        // branch above already runs on; the last press having landed in the
+        // panel says the hand is there rather than in the tree (see
+        // PanelHoldsArrows). Only ever in the LIST layout, because only there is
+        // there such a thing as a row - in the bar, ↑↓ stay the tree's, where
+        // one press is one file and that is already the carousel.
+        //
+        // THE SECOND HALF IS NEWER (2026-09-28, on request). The strip being on
+        // screen was the whole licence until then, so ↓ pressed in the TREE
+        // jumped a row of pictures too, and the tree's own one-row step was gone
+        // for as long as the list was open. The app could not tell the two hands
+        // apart: the list takes no keyboard focus, and a click on a cell hands
+        // focus to the tree row, so the focus says "tree" whichever side was
+        // touched. Where the last press landed is what tells them apart.
         //
         // Guarded exactly like the ←→ branch above: a row the carousel walks.
         // With the selection on a FOLDER the tree keeps its keys, so walking the
@@ -2274,7 +2290,8 @@ public partial class MainWindow : Window
             ViewerFilmstripHost.Visibility == Visibility.Visible &&
             (e.Key == Key.Up || e.Key == Key.Down) &&
             Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
-            ViewerItem is { } gridRow && IsViewerCarouselItem(gridRow))
+            ViewerItem is { } gridRow && IsViewerCarouselItem(gridRow) &&
+            PanelHoldsArrows(gridRow))
         {
             // CLAMPED, unlike a chevron. A step of one either exists or it does
             // not, but a row lands past the end whenever the last row is short -
@@ -2288,8 +2305,9 @@ public partial class MainWindow : Window
 
         // Ctrl+A MARKS THE WHOLE STRIP - the key the strip's own menu was
         // already advertising beside 전체 선택, wired here where every other key
-        // the strip licenses lives. Same visible reason as ←→ and ↑↓ above: the
-        // strip being on screen is what says the key is about the pictures.
+        // the strip licenses lives. Same visible reason as ←→ above: the strip
+        // being on screen is what says the key is about the pictures. Unlike
+        // ↑↓ it needs no side of its own - the tree has no Ctrl+A to lose.
         // Both layouts, because the menu row it belongs to is in both. Never
         // from a text box - a rename or a search field owns its own Ctrl+A.
         if (Keyboard.Modifiers == ModifierKeys.Control &&
@@ -14580,6 +14598,18 @@ public partial class MainWindow : Window
             _lastTreeInputSource = $"key:{e.Key}";
         }
 
+        // THE TREE IS ANSWERING A NAVIGATION KEY ITSELF, so the hand is in the
+        // tree and the list's claim on ↑↓ goes back (see PanelHoldsArrows).
+        // This handler only sees what MainWindow_PreviewKeyDown let through,
+        // so a key the list took never arrives here. Without this, PgDn out of
+        // the folder and PgUp back into it would find the claim still waiting:
+        // the folder check alone cannot tell a return from never having left.
+        if (e.Key is Key.Up or Key.Down or Key.Left or Key.Right
+            or Key.PageUp or Key.PageDown or Key.Home or Key.End)
+        {
+            _arrowsInPanel = false;
+        }
+
         switch (e.Key)
         {
             case Key.PageDown:
@@ -22747,6 +22777,9 @@ public partial class MainWindow : Window
         // starts from the tree again, which is where the eye button lives.
         _viewerListOverride = null;
         _searchViewerItem = null;
+        // The arrows with it: a panel that is not there cannot be where the
+        // hand is, and the reopened one has not been pressed yet.
+        _arrowsInPanel = false;
 
         // Back to the closed shape: tree star, both panel columns 0.
         SetViewerColumns(null);
@@ -32836,6 +32869,87 @@ public partial class MainWindow : Window
         // row would and keeps going - stopping at the cap would make the total
         // a lie.
         MoveViewerTo(images[next]);
+    }
+
+    // ----- Which side the arrows belong to (2026-09-28) -----------------------
+    //
+    // The tree and the list share one keyboard focus, the tree's. The list
+    // takes none, and a click on a cell selects the tree row and focuses it -
+    // which is also what keeps Del, Ctrl+C and F2 working on the pictures for
+    // free, since the tree's own key handler reads the shared selection. So
+    // focus cannot say which side the hand is in, and ↑↓ need that answer: a
+    // row of pictures in the list, one row in the tree.
+    //
+    // THE LAST PRESS ANSWERS IT, the rule two-pane file managers use. A press
+    // in the panel gives the arrows to the list, a press in the tree gives them
+    // back. A press anywhere else (the header, the footer, the bookmark panel,
+    // the divider) leaves the answer where it was: it is neither side.
+    //
+    // Real keyboard focus for the list was the other way, and not the one
+    // taken. The tree's keys (Del, the clipboard, F2, Enter, F5, F7) live in
+    // the TreeView's own handler and would each have needed wiring a second
+    // time for the list, and the selection walk focuses the tree row at the end
+    // of every step - it would take the focus straight back after each click.
+    private bool _arrowsInPanel;
+
+    // The folder the panel was showing when it was pressed. The claim is on
+    // that folder's pictures; see PanelHoldsArrows for when it lapses.
+    private string? _arrowsInPanelFolder;
+
+    private void Window_PreviewMouseDownForArrows(object sender, MouseButtonEventArgs e)
+    {
+        for (var element = e.OriginalSource as DependencyObject; element is not null;)
+        {
+            if (ReferenceEquals(element, ViewerPanel))
+            {
+                _arrowsInPanel = true;
+                // A folder's strip lists the folder itself and a file's lists
+                // its parent - the split UpdateViewerCarousel makes.
+                _arrowsInPanelFolder = ViewerItem is { IsDirectory: true } folder
+                    ? folder.FullPath
+                    : ViewerItem?.Parent?.FullPath;
+                return;
+            }
+
+            if (ReferenceEquals(element, ExplorerTree))
+            {
+                _arrowsInPanel = false;
+                return;
+            }
+
+            element = element is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(element)
+                : null;
+        }
+    }
+
+    // Whether ↑↓ step a row of the list rather than a row of the tree, asked
+    // with the file the list is on.
+    //
+    // FULL SCREEN ALWAYS SAYS YES: the tree is not on screen to be the other
+    // side, and the list is the only thing the keys could be walking.
+    //
+    // Otherwise it is the panel's claim, which lapses for good the first time
+    // ↑↓ find the selection outside the folder the press was made in -
+    // something other than the list moved it there. Checked here, at the key,
+    // rather than on every selection change: a hook there would have to be
+    // right about every selection the tree makes on its own as well, and a
+    // claim dropped by one of those would read as the list giving up its keys
+    // for no reason anyone could see.
+    private bool PanelHoldsArrows(FileSystemItem current)
+    {
+        if (_viewerFullscreen)
+        {
+            return true;
+        }
+
+        if (_arrowsInPanel &&
+            !string.Equals(current.Parent?.FullPath, _arrowsInPanelFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            _arrowsInPanel = false;
+        }
+
+        return _arrowsInPanel;
     }
 
     // ----- 슬라이드 쇼 (2026-08-14) ------------------------------------------
