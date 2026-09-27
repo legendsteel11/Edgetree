@@ -192,18 +192,50 @@ public static class ShellFileService
     public static void RevealInExplorer(string path)
     {
         NativeMethods.AllowNextWindowToActivate();
-        try
-        {
-            // /select opens the *parent* folder with the item highlighted -
-            // which is what "show me where this is" means for a file, but for a
-            // folder it lands on the parent instead of opening the folder
-            // itself. Passing a folder's own path plainly opens its contents.
-            string arguments = Directory.Exists(path)
-                ? $"\"{path}\""
-                : $"/select,\"{path}\"";
 
-            Process.Start(new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
-        }
-        catch (Win32Exception) { }
+        // A FILE GOES THROUGH SHOpenFolderAndSelectItems, NOT explorer /select
+        // (2026-09-28). Both select it; only this one shows it. Measured on a
+        // 131-picture folder, three files, the selected item read back through
+        // UI Automation: /select left it on or just past the bottom edge of the
+        // file list every time (its top at 1995, 1995 and 1980 against a list
+        // ending at 1991), while this call put it inside the view (1859, 1859,
+        // 1844) - "selected, but you have to scroll to find it", as reported.
+        // /select stays as the fallback.
+        //
+        // On an STA thread of its own: this call parses the path in THIS
+        // process, where /select left that to explorer.exe, and a path on a
+        // sleeping NAS can take seconds to parse. The folder test moved over
+        // with it for the same reason.
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                // /select opens the *parent* folder with the item highlighted -
+                // which is what "show me where this is" means for a file, but
+                // for a folder it lands on the parent instead of opening the
+                // folder itself. Passing a folder's own path plainly opens its
+                // contents.
+                if (Directory.Exists(path))
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"\"{path}\"") { UseShellExecute = true });
+                }
+                else if (!NativeMethods.TryOpenFolderAndSelect(path))
+                {
+                    Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                }
+            }
+            // Wider than the UI-thread version's Win32Exception alone: nothing
+            // catches for this thread, and an exception leaving it ends the app.
+            catch (Exception ex) when (ex is Win32Exception or InvalidOperationException
+                                           or ArgumentException or IOException or UnauthorizedAccessException)
+            {
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "Reveal in Explorer"
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
     }
 }

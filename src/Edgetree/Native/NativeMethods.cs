@@ -617,6 +617,48 @@ internal static class NativeMethods
         return ShellExecuteEx(ref info);
     }
 
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern int SHParseDisplayName(
+        string name, IntPtr bindingContext, out IntPtr pidl, uint sfgaoIn, out uint sfgaoOut);
+
+    [DllImport("shell32.dll")]
+    private static extern int SHOpenFolderAndSelectItems(IntPtr pidlFolder, uint count, IntPtr[] items, uint flags);
+
+    // The folder a file is in, in an Explorer window, with the file selected
+    // AND scrolled into view - ShellFileService.RevealInExplorer has the
+    // measurement that put this in front of explorer.exe /select. Both PIDLs
+    // absolute, which the call accepts. COM must be initialized on the calling
+    // thread; false sends the caller to its fallback.
+    public static bool TryOpenFolderAndSelect(string file)
+    {
+        string? folder = Path.GetDirectoryName(file);
+        if (string.IsNullOrEmpty(folder))
+        {
+            return false;
+        }
+
+        IntPtr folderPidl = IntPtr.Zero;
+        IntPtr filePidl = IntPtr.Zero;
+        try
+        {
+            return SHParseDisplayName(folder, IntPtr.Zero, out folderPidl, 0, out _) == 0 &&
+                   SHParseDisplayName(file, IntPtr.Zero, out filePidl, 0, out _) == 0 &&
+                   SHOpenFolderAndSelectItems(folderPidl, 1, new[] { filePidl }, 0) == 0;
+        }
+        finally
+        {
+            if (filePidl != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(filePidl);
+            }
+
+            if (folderPidl != IntPtr.Zero)
+            {
+                Marshal.FreeCoTaskMem(folderPidl);
+            }
+        }
+    }
+
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
