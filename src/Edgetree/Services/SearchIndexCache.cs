@@ -13,11 +13,14 @@ namespace SidebarExplorer.App.Services;
 // at ~6 minutes per scan. Since the walk can't be made faster, the only
 // way to remove the wait is to not walk at all.
 //
-// Deliberately NOT paired with an automatic background re-scan. Re-scanning
-// silently on every launch would spend those 6 minutes of network traffic on a
-// share the user may not even search that session. Instead the cache is used as
-// it is, its age is shown (see Strings.SearchStatusCached), and refreshing is
-// a deliberate act. A stale hit is a failure mode people already know from
+// NOT re-scanned on every launch. Doing that silently would spend those 6
+// minutes of network traffic on a share the user may not even search that
+// session. The cache is used as it is and its age is shown (see
+// Strings.SearchStatusCached). Since 2026-09-16 opening a search on the folder
+// may refresh it behind the results - always for a local folder, on a network
+// drive only once the index is a day old or a change was seen - which is the
+// moment the traffic is asked for; see MainWindow.RefreshSearchIndexIfDue. The
+// button still refreshes on demand. A stale hit is a failure mode people already know from
 // Explorer - the file opens and Windows says it's gone. A stale MISS is the
 // dangerous one (a file created since the last scan simply doesn't appear, with
 // nothing to explain why), which is exactly why showing the age is not optional.
