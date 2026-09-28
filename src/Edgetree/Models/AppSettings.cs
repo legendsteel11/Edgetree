@@ -67,7 +67,9 @@ public class AppSettings
     // height. The option had not shipped when the default moved, so no settings
     // file anyone else holds carries the old one.
     //
-    // Display only - renaming stays in the tree.
+    // No longer display only: a slow second click on the name renames the file
+    // (see BeginFilmstripRename). With the line switched off there is no name
+    // to click, and renaming is the tree's again.
     public bool ViewerFilmstripNames { get; set; } = true;
 
     // 재생 볼륨. 0.6은 슬라이더가 XAML에 박고 있던 값 그대로이므로, 이 설정이

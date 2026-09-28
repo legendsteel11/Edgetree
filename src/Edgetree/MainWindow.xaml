@@ -8633,7 +8633,13 @@
                                  the folder the panel is showing.
                                  Rename and Open are deliberately absent: they
                                  are one-file actions, and the surface this menu
-                                 opens over is the one built for several. -->
+                                 opens over is the one built for several.
+                                 Renaming from the list itself arrived on
+                                 2026-09-28 as a slow second click on the name
+                                 under the picture on show, the way Explorer's
+                                 icon views do it, and as F2 once the list has
+                                 been pressed - a gesture and a key, not a row
+                                 here. -->
                             <ListBox.ContextMenu>
                                 <!-- REGISTERED, LIKE EVERY OTHER MENU HERE.
                                      Without the two handlers this menu is not
@@ -8878,6 +8884,7 @@
                                                                 IsHitTestVisible="False"/>
                                                     </Grid>
                                                 </Border>
+                                                <Grid>
                                                 <!-- The tree's file-name ink, one
                                                      size step down (smaller, never
                                                      dimmer). The full name stays in
@@ -8891,6 +8898,46 @@
                                                         Foreground="{DynamicResource FileNameForeground}"
                                                         TextTrimming="CharacterEllipsis"
                                                         TextAlignment="Center"/>
+                                                <!-- THE RENAME BOX (2026-09-28), laid
+                                                     over the name line while
+                                                     FilmstripCell.IsEditing. In a
+                                                     Canvas so it can be WIDER than the
+                                                     cell: at the list's default size a
+                                                     cell is about 130px, which cuts an
+                                                     ordinary camera file name in two.
+                                                     The Canvas measures as nothing, so
+                                                     the line's height and every row
+                                                     laid out from it stay as they are;
+                                                     the width and the offset that keep
+                                                     the box inside the list are set
+                                                     when it opens
+                                                     (PlaceFilmstripNameEditBox), and
+                                                     the container is lifted above its
+                                                     neighbours while it is open (the
+                                                     style trigger below) so the next
+                                                     cell does not draw over it.
+                                                     The tree's rename box's colours,
+                                                     for the same reasons given there,
+                                                     and the name line's size, so the
+                                                     text does not jump when the box
+                                                     replaces the label. -->
+                                                <Canvas>
+                                                    <TextBox x:Name="CellNameEditBox"
+                                                            Text="{Binding EditingName, UpdateSourceTrigger=PropertyChanged}"
+                                                            Visibility="Collapsed"
+                                                            FontSize="{DynamicResource MenuChipFontSize}"
+                                                            Background="{DynamicResource ControlBackground}"
+                                                            Foreground="{DynamicResource DialogForeground}"
+                                                            CaretBrush="{DynamicResource ForegroundText}"
+                                                            BorderBrush="{DynamicResource PanelBorder}"
+                                                            BorderThickness="1"
+                                                            Padding="2,0"
+                                                            IsVisibleChanged="FilmstripNameEditBox_IsVisibleChanged"
+                                                            KeyDown="FilmstripNameEditBox_KeyDown"
+                                                            LostFocus="FilmstripNameEditBox_LostFocus"
+                                                            Loaded="RenameTextBox_Loaded"/>
+                                                </Canvas>
+                                                </Grid>
                                                 </StackPanel>
                                                 <ControlTemplate.Triggers>
                                                     <!-- Hover is TWO faint things
@@ -9027,10 +9074,37 @@
                                                                 Property="Foreground"
                                                                 Value="{DynamicResource FileNameHighlightForeground}"/>
                                                     </Trigger>
+                                                    <!-- The label steps aside for the
+                                                         box but keeps its place:
+                                                         Hidden, not Collapsed, since the
+                                                         line's height is part of the
+                                                         footprint every row is laid out
+                                                         from. -->
+                                                    <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                                        <Setter TargetName="CellName"
+                                                                Property="Visibility"
+                                                                Value="Hidden"/>
+                                                        <Setter TargetName="CellNameEditBox"
+                                                                Property="Visibility"
+                                                                Value="Visible"/>
+                                                    </DataTrigger>
                                                 </ControlTemplate.Triggers>
                                             </ControlTemplate>
                                         </Setter.Value>
                                     </Setter>
+                                    <!-- WHILE THE RENAME BOX IS OPEN the cell
+                                         draws above its neighbours - a later
+                                         sibling is otherwise drawn over the part
+                                         of the box that reaches past its own cell
+                                         - and its tooltip stays away, since it
+                                         would only repeat the old name over the
+                                         box being typed in. -->
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsEditing}" Value="True">
+                                            <Setter Property="Panel.ZIndex" Value="1"/>
+                                            <Setter Property="ToolTipService.IsEnabled" Value="False"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
                                 </Style>
                             </ListBox.ItemContainerStyle>
                             <ListBox.ItemTemplate>

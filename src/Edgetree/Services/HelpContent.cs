@@ -697,6 +697,14 @@ public static class HelpContent
                     R("옵션 → 멀티미디어 패널 → 썸네일 파일명 표시", "각 썸네일 아래에 한 줄로 표시, 긴 이름은 뒷부분 생략",
                       "Options → Multimedia panel → File names under thumbnails",
                       "One line under each thumbnail; long names are shortened at the end"),
+                    // Right under the option it needs: with the name line off
+                    // there is nothing to click. "보고 있는" is the picture on
+                    // show, which is not the same as the picked cells two rows
+                    // down (선택한 칸). F2 needs no condition in the row for the
+                    // reason Ctrl+A below needs none: this section is about the
+                    // list, and it is the list's key once the list is pressed.
+                    R("보고 있는 썸네일의 파일명 다시 클릭 · F2", "이름 바꾸기",
+                      "Click the name of the thumbnail on show again · F2", "Rename"),
                     // ONE ROW FOR THE TWO GRIPS. The same edge does different
                     // work per shape, and two rows would read as two edges.
                     R("바 위쪽 가장자리 드래그", "목록은 표시되는 줄 수, 바는 칸 크기 조정",

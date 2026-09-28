@@ -210,6 +210,9 @@ public partial class MainWindow : Window
     // only - see the scheduling call in TreeViewItem_PreviewMouseLeftButtonDown.
     private System.Windows.Threading.DispatcherTimer? _pendingRenameTimer;
     private FileSystemItem? _pendingRenameItem;
+    // The same wait, armed by the thumbnail list instead of the tree - never
+    // both at once (see ScheduleFilmstripRename).
+    private FilmstripCell? _pendingFilmstripRenameCell;
 
     // Set the moment the user changes the path bar's text themselves, and
     // cleared by every route back out of that edit (Enter, Esc, focus loss).
@@ -794,6 +797,12 @@ public partial class MainWindow : Window
         // of every press, whichever handler ends up answering it.
         AddHandler(PreviewMouseDownEvent,
             new MouseButtonEventHandler(Window_PreviewMouseDownForArrows),
+            handledEventsToo: true);
+
+        // And for the thumbnail's rename box, for the path bar's reason: most
+        // of what a click away lands on here takes no keyboard focus.
+        AddHandler(PreviewMouseDownEvent,
+            new MouseButtonEventHandler(Window_PreviewMouseDownForFilmstripRename),
             handledEventsToo: true);
 
         // A stored tree width below the window floor is legal exactly when
@@ -2324,6 +2333,24 @@ public partial class MainWindow : Window
             !TreeHoldsSelectAll)
         {
             FilmstripSelectAll_Click(sender, e);
+            e.Handled = true;
+            return;
+        }
+
+        // F2 TOO GOES TO THE SIDE LAST PRESSED (2026-09-28, on request): after a
+        // press in the panel it opens the thumbnail's box on the picture on show,
+        // and everywhere else the key goes on to the tree's own row
+        // (ExplorerTree_KeyDown). See FilmstripCellForRenameKey for when the list
+        // can take it at all.
+        if (e.Key == Key.F2 &&
+            Keyboard.Modifiers == ModifierKeys.None &&
+            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            FilmstripCellForRenameKey() is { } renameCell)
+        {
+            // Brought into view first, as Explorer does for F2 on an item that
+            // has been scrolled away; the box opens as its cell comes on screen.
+            ScrollFilmstripTo(renameCell);
+            BeginFilmstripRename(renameCell);
             e.Handled = true;
             return;
         }
@@ -21136,6 +21163,13 @@ public partial class MainWindow : Window
         }
         _inlineRenameItem = null;
 
+        // The thumbnail's box reverts the same way, for the same reason.
+        if (_filmstripRenameCell is { IsEditing: true } stripEditing)
+        {
+            stripEditing.IsEditing = false;
+        }
+        _filmstripRenameCell = null;
+
         // One hop late on purpose - see UpdateSelectionBrushForActivation.
         Dispatcher.BeginInvoke(() => UpdateSelectionBrushForActivation(),
             System.Windows.Threading.DispatcherPriority.Input);
@@ -21157,6 +21191,13 @@ public partial class MainWindow : Window
         {
             CommitInlineRename(open);
         }
+
+        // One box at a time across the tree and the thumbnail list too, by the
+        // same rule: whichever opens second commits the other first.
+        if (_filmstripRenameCell is { IsEditing: true } strip)
+        {
+            CommitFilmstripRename(strip);
+        }
     }
 
     private void BeginInlineRename(FileSystemItem item)
@@ -21171,7 +21212,22 @@ public partial class MainWindow : Window
     private void SchedulePendingRename(FileSystemItem item)
     {
         _pendingRenameItem = item;
+        _pendingFilmstripRenameCell = null;
+        ArmPendingRenameTimer();
+    }
 
+    // The same gesture on the thumbnail list, on the same timer: one wait for
+    // one gesture whichever surface it lands on, and a second rename queued
+    // replaces the first rather than racing it.
+    private void ScheduleFilmstripRename(FilmstripCell cell)
+    {
+        _pendingFilmstripRenameCell = cell;
+        _pendingRenameItem = null;
+        ArmPendingRenameTimer();
+    }
+
+    private void ArmPendingRenameTimer()
+    {
         if (_pendingRenameTimer is null)
         {
             _pendingRenameTimer = new System.Windows.Threading.DispatcherTimer();
@@ -21200,11 +21256,32 @@ public partial class MainWindow : Window
     {
         _pendingRenameTimer?.Stop();
         _pendingRenameItem = null;
+        _pendingFilmstripRenameCell = null;
     }
 
     private void PendingRenameTimer_Tick(object? sender, EventArgs e)
     {
         _pendingRenameTimer?.Stop();
+
+        if (_pendingFilmstripRenameCell is { } cell)
+        {
+            _pendingFilmstripRenameCell = null;
+
+            // The tree's bail-outs below, asked of the list: the picture on
+            // show moved on, the box is already open, the button is still held,
+            // the window is no longer active. And two of the list's own: a menu
+            // opened over it in the meantime, or something took the panel away
+            // from the tree or the name line off the cells.
+            if (!ReferenceEquals(ViewerFilmstrip.SelectedItem, cell) || cell.IsEditing ||
+                Mouse.LeftButton == MouseButtonState.Pressed || !IsActive ||
+                IsCapturingUiOpen || !FilmstripRenameAllowed)
+            {
+                return;
+            }
+
+            BeginFilmstripRename(cell);
+            return;
+        }
 
         if (_pendingRenameItem is not { } item)
         {
@@ -21339,6 +21416,17 @@ public partial class MainWindow : Window
             focused is not Window &&
             !IsPressInside(focused, ExplorerTree);
 
+        RenameKeepingSelection(item, newName,
+            reselect: renamingSelection && !parentPressed,
+            focus: !keyboardLeftTree);
+    }
+
+    // What a rename does once a box has handed over the new name. Shared by
+    // the tree's row and the thumbnail's (CommitFilmstripRename), which differ
+    // only in what they read beforehand: whether the renamed file was the
+    // selection, and where the keyboard went.
+    private void RenameKeepingSelection(FileSystemItem item, string newName, bool reselect, bool focus)
+    {
         if (!FileOperationService.TryRename(item.FullPath, newName, out var error))
         {
             MessageBox.Show(this, error, Strings.RenameFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -21352,9 +21440,9 @@ public partial class MainWindow : Window
         {
             RefreshFolderPreservingState(renameParent);
 
-            if (renamingSelection && !parentPressed)
+            if (reselect)
             {
-                KeepRenamedRowSelected(renameParent, newName, focus: !keyboardLeftTree);
+                KeepRenamedRowSelected(renameParent, newName, focus);
             }
         }
     }
@@ -21384,7 +21472,7 @@ public partial class MainWindow : Window
     // the new folder's name box in one keystroke, without selecting the new
     // folder - so by the time this runs the parent is still what is selected,
     // and reselecting would take the keyboard out of that box, which closes
-    // it before anything has been typed.
+    // it before anything has been typed. The thumbnail list's box counts too.
     private void KeepRenamedRowSelected(FileSystemItem parent, string newName, bool focus)
     {
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
@@ -21395,7 +21483,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            if (_inlineRenameItem is { IsEditing: true })
+            if (_inlineRenameItem is { IsEditing: true } || _filmstripRenameCell is { IsEditing: true })
             {
                 return;
             }
@@ -21417,6 +21505,328 @@ public partial class MainWindow : Window
 
             SelectVisibleItem(renamed, focus);
         }));
+    }
+
+    // ----- Renaming from the thumbnail list (2026-09-28) ---------------------
+    //
+    // A slow second click on the NAME under the picture on show opens a box over
+    // that name: the tree's gesture (SchedulePendingRename), and the one
+    // Explorer's icon views use, brought to the list, because a folder of
+    // pictures is easier to name with each picture in front of you.
+    //
+    // THE NAME, NOT THE PICTURE. The picture on show gets clicked again all the
+    // time without asking for anything - a press in the panel is what hands it
+    // the arrow keys (PanelHoldsArrows), and a hand coming back to the list
+    // lands on it - so a picture that answered with a rename box would open one
+    // on clicks that never meant it. Explorer draws the same line: its label
+    // renames, its icon does not. With the name line switched off there is
+    // nothing to click, and renaming is F2 in the tree.
+    //
+    // ONLY WHILE THE TREE DRIVES THE PANEL. The results list has no rename of
+    // its own, and pictures shown by a search or the slideshow belong to
+    // folders the tree is not standing in.
+    //
+    // THE RENAME ITSELF IS THE TREE'S (RenameKeepingSelection), done on the
+    // tree's live instance of the file - so the merge, the renamed row staying
+    // selected, the picture staying on the panel and the cell following the new
+    // name are exactly what a rename in the tree already gets.
+    //
+    // F2 OPENS THE SAME BOX when the panel was pressed last (the ↑↓ rule, see
+    // FilmstripCellForRenameKey), added the same day on request.
+
+    private FilmstripCell? _filmstripRenameCell;
+
+    private bool FilmstripRenameAllowed =>
+        _viewerListOverride is null && _settings.ViewerFilmstripNames;
+
+    // The cell F2 renames, or null when the key is the tree's. The list takes it
+    // on the ↑↓ rule - a press in the panel, in the folder on show, or full
+    // screen (PanelHoldsArrows) - and only where its box can open: the list on
+    // screen, the name line on, the tree driving the panel. And for one file:
+    // with several marked the key goes on to the tree, which refuses it there
+    // the way it always has (RenameItem_Click).
+    private FilmstripCell? FilmstripCellForRenameKey()
+    {
+        if (!_viewerOpen ||
+            ViewerFilmstripHost.Visibility != Visibility.Visible ||
+            !FilmstripRenameAllowed ||
+            _multiSelection.Count > 1 ||
+            ViewerItem is not { } shown ||
+            !PanelHoldsArrows(shown) ||
+            ViewerFilmstrip.SelectedItem is not FilmstripCell cell ||
+            !string.Equals(cell.Path, shown.FullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            return null;
+        }
+
+        return cell;
+    }
+
+    // Whether a press landed on a cell's name line. Climbed through the logical
+    // parent as well, the way IsPressInside does, so a text element inside the
+    // line counts as the line.
+    private static bool IsFilmstripNamePress(object? source)
+    {
+        for (var node = source as DependencyObject; node is not null and not ListBoxItem;)
+        {
+            if (node is FrameworkElement { Name: "CellName" })
+            {
+                return true;
+            }
+
+            node = node is Visual or System.Windows.Media.Media3D.Visual3D
+                ? VisualTreeHelper.GetParent(node)
+                : LogicalTreeHelper.GetParent(node);
+        }
+
+        return false;
+    }
+
+    private static bool IsInFilmstripNameEditBox(object? source)
+        => (source as DependencyObject)?.FindAncestor<TextBox>() is { Name: "CellNameEditBox" };
+
+    private void BeginFilmstripRename(FilmstripCell cell)
+    {
+        FinishOpenInlineRename();
+
+        cell.EditingName = cell.Name;
+        cell.IsEditing = true;
+        _filmstripRenameCell = cell;
+    }
+
+    // Placed, focused and selected as it becomes visible - which is also what
+    // happens when a cell scrolled away mid-edit comes back as a new container.
+    private void FilmstripNameEditBox_IsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: FilmstripCell cell } box || !box.IsVisible)
+        {
+            return;
+        }
+
+        PlaceFilmstripNameEditBox(box, cell);
+        box.Focus();
+
+        // The name without its extension, as the tree's box and Explorer have it.
+        int dot = box.Text.LastIndexOf('.');
+        if (dot > 0)
+        {
+            box.Select(0, dot);
+        }
+        else
+        {
+            box.SelectAll();
+        }
+
+        // AND AGAIN ONCE LAYOUT HAS RUN. A box that turns visible with a
+        // container just realized - F2 on a cell the list had to scroll to, an
+        // edit coming back into view - reads its cell's place before that cell
+        // has been arranged. Placing it now as well keeps the ordinary case from
+        // showing one frame of an unplaced box.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (box.IsVisible && cell.IsEditing)
+            {
+                PlaceFilmstripNameEditBox(box, cell);
+            }
+        }));
+    }
+
+    // WIDE ENOUGH FOR THE NAME, not only for the cell. Centred under the picture
+    // like the label it covers and never narrower than it, but held inside the
+    // list's visible width, so a cell at either edge does not push half the box
+    // out of sight. Worked out once, as it opens: a box that re-centred itself
+    // on every keystroke would move the text under the caret.
+    private void PlaceFilmstripNameEditBox(TextBox box, FilmstripCell cell)
+    {
+        if (VisualTreeHelper.GetParent(box) is not Canvas host)
+        {
+            return;
+        }
+
+        double label = Resources["FilmstripCellFrameWidth"] is double frame ? frame : host.ActualWidth;
+        double line = Resources["FilmstripNameLineHeight"] is double lineHeight ? lineHeight : host.ActualHeight;
+
+        var name = new FormattedText(
+            cell.EditingName,
+            System.Globalization.CultureInfo.CurrentUICulture,
+            System.Windows.FlowDirection.LeftToRight,
+            new Typeface(box.FontFamily, box.FontStyle, box.FontWeight, box.FontStretch),
+            box.FontSize,
+            System.Windows.Media.Brushes.Black,
+            VisualTreeHelper.GetDpi(box).PixelsPerDip);
+
+        // The border and padding, a few pixels for the text box's own inner
+        // margin, and three characters' room so that adding to the end of the
+        // name does not start scrolling it straight away.
+        double chrome = box.BorderThickness.Left + box.BorderThickness.Right +
+                        box.Padding.Left + box.Padding.Right + 6;
+        double wanted = Math.Ceiling(name.WidthIncludingTrailingWhitespace + chrome + (box.FontSize * 3));
+
+        double visible = Math.Max(label, ViewerFilmstrip.ActualWidth - ViewerFilmstrip.Padding.Right);
+        double width = Math.Clamp(wanted, label, visible);
+
+        double cellLeft = host.TranslatePoint(new System.Windows.Point(0, 0), ViewerFilmstrip).X;
+        double left = Math.Clamp(cellLeft + ((label - width) / 2), 0, Math.Max(0, visible - width));
+
+        box.Width = width;
+        Canvas.SetLeft(box, Math.Round(left - cellLeft));
+
+        box.Measure(new System.Windows.Size(width, double.PositiveInfinity));
+        Canvas.SetTop(box, Math.Round((line - box.DesiredSize.Height) / 2));
+    }
+
+    private void FilmstripNameEditBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (sender is not TextBox { DataContext: FilmstripCell { IsEditing: true } cell })
+        {
+            return;
+        }
+
+        if (e.Key == Key.Enter)
+        {
+            e.Handled = true;
+            CommitFilmstripRename(cell);
+        }
+        else if (e.Key == Key.Escape)
+        {
+            e.Handled = true;
+            EndFilmstripRename(cell);
+            ReturnKeyboardToTree();
+        }
+        else if (e.Key is Key.Up or Key.Down or Key.PageUp or Key.PageDown)
+        {
+            // A one-line box leaves these unhandled, and the ListBox around it
+            // takes them as its own navigation - moving its highlight off the
+            // cell being named while the panel stays where it is. There is
+            // nothing for them to do inside a name.
+            e.Handled = true;
+        }
+    }
+
+    // Deferred until whatever took the keyboard has finished taking it, for
+    // the reason the click-away below gives. Only the box of the edit that is
+    // open: a box already on its way out must not end the next one.
+    private void FilmstripNameEditBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is TextBox { DataContext: FilmstripCell { IsEditing: true } cell } &&
+            ReferenceEquals(cell, _filmstripRenameCell))
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                new Action(() => CommitFilmstripRename(cell)));
+        }
+    }
+
+    // A PRESS ANYWHERE BUT THE BOX CONFIRMS WHAT IS IN IT, which is what a click
+    // away does to the tree's box and to Explorer's. Needed on top of LostFocus
+    // because the list, the picture and most of the panel take no keyboard
+    // focus, so a click on them never takes it from the box.
+    //
+    // AFTER THE PRESS HAS DONE ITS OWN WORK. Committing first would rename the
+    // file and merge its folder UNDER the press, and a click on the renamed
+    // picture's own cell would then be resolved against a name that no longer
+    // exists. Afterwards the rename meets a selection that already says where
+    // the click went, and the renamed file is reselected only if nothing else
+    // took the selection (KeepRenamedRowSelected).
+    //
+    // A rename still waiting on its timer dies with any press outside the list;
+    // the list's own presses cancel it themselves.
+    private void Window_PreviewMouseDownForFilmstripRename(object sender, MouseButtonEventArgs e)
+    {
+        if (IsInFilmstripNameEditBox(e.OriginalSource))
+        {
+            return;
+        }
+
+        if (_pendingFilmstripRenameCell is not null && !IsPressInside(e.OriginalSource, ViewerFilmstrip))
+        {
+            CancelPendingRename();
+        }
+
+        if (_filmstripRenameCell is { IsEditing: true } cell)
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                new Action(() => CommitFilmstripRename(cell)));
+        }
+    }
+
+    private void CommitFilmstripRename(FilmstripCell cell)
+    {
+        // Enter, a click away, the keyboard leaving, another box opening - and
+        // some of those arrive twice for one ending, so only the first acts.
+        if (!cell.IsEditing)
+        {
+            return;
+        }
+
+        // Where the keyboard went, read before anything moves. Still in this
+        // box - Enter, or a click on something that takes no focus - means it
+        // goes back to the tree row, where a click on a cell leaves it; the
+        // window itself is only where WPF parks it. Anywhere else (a tree row,
+        // the search box, the path bar) it stays where it went.
+        bool keyboardStayed = Keyboard.FocusedElement is not DependencyObject focused ||
+                              focused is Window ||
+                              IsPressInside(focused, ViewerFilmstrip);
+
+        EndFilmstripRename(cell);
+
+        // A cell that left the list while its box was open went with its
+        // folder; its name is not renamed from a box nobody can see any more.
+        string newName = cell.EditingName;
+        if (!string.IsNullOrWhiteSpace(newName) && newName != cell.Name && _filmstripCells.Contains(cell))
+        {
+            var item = ResolveCurrentChain(cell.Item);
+            RenameKeepingSelection(item, newName,
+                reselect: ReferenceEquals(ExplorerTree.SelectedItem, item),
+                focus: keyboardStayed);
+        }
+
+        // Queued after KeepRenamedRowSelected, at its priority, so the row this
+        // lands on is the renamed one when there is one. Queued only now: a
+        // failed rename shows a message box, and anything queued before it
+        // would run inside the box's own message loop.
+        if (keyboardStayed)
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,
+                new Action(ReturnKeyboardToTree));
+        }
+    }
+
+    private void EndFilmstripRename(FilmstripCell cell)
+    {
+        cell.IsEditing = false;
+        if (ReferenceEquals(_filmstripRenameCell, cell))
+        {
+            _filmstripRenameCell = null;
+        }
+    }
+
+    // THE KEYBOARD BACK WHERE A CLICK ON A CELL LEAVES IT: on the tree's
+    // selected row, which is where Del, F2, the clipboard and the bar's ↑↓ are
+    // read from. Without this it stays on the window once the box is gone and
+    // those keys do nothing. Only a row already on screen: focusing one outside
+    // the viewport would scroll the tree to it, and the tree does not move on
+    // its own.
+    private void ReturnKeyboardToTree()
+    {
+        if (_inlineRenameItem is { IsEditing: true } || _filmstripRenameCell is { IsEditing: true })
+        {
+            return;
+        }
+
+        if (ExplorerTree.SelectedItem is not FileSystemItem selected ||
+            FindRealizedContainer(selected) is not { } row ||
+            FindTreeScrollViewer() is not { } scrollViewer)
+        {
+            return;
+        }
+
+        double top = MeasuredRowTop(row);
+        if (double.IsNaN(top) || top < 0 || top + row.ActualHeight > scrollViewer.ActualHeight)
+        {
+            return;
+        }
+
+        row.Focus();
     }
 
     // THE ONE QUESTION LEFT IN FRONT OF A DELETE, and it is asked only where
@@ -32499,6 +32909,17 @@ public partial class MainWindow : Window
     // dragging what you just selected is also what Explorer does.
     private void ViewerFilmstrip_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // A press inside the rename box is the box's own - the caret, a
+        // selection, a drag across the text - and nothing for the list to act on.
+        if (IsInFilmstripNameEditBox(e.OriginalSource))
+        {
+            return;
+        }
+
+        // Any fresh press supersedes a rename an earlier click had queued up,
+        // including the second press of a real double-click - the tree's rule.
+        CancelPendingRename();
+
         _filmstripDragStart = null;
         _filmstripDragCandidate = null;
 
@@ -32658,13 +33079,35 @@ public partial class MainWindow : Window
             return;
         }
 
+        // THE SLOW SECOND CLICK (see BeginFilmstripRename), read before the
+        // press moves anything: the name line of the picture already on show,
+        // one click rather than the second half of a double-click, and not the
+        // click that brought the window back (_lastActivatedTicks).
+        bool renameGesture =
+            e.ClickCount == 1 &&
+            ReferenceEquals(ViewerFilmstrip.SelectedItem, cell) &&
+            IsFilmstripNamePress(e.OriginalSource) &&
+            Environment.TickCount64 - _lastActivatedTicks > ActivationClickGraceMs &&
+            FilmstripRenameAllowed;
+
         ClearMultiSelection();
         _filmstripMarkAnchor = _filmstripCells.IndexOf(cell);
         MoveViewerTo(cell.Item);
+
+        if (renameGesture)
+        {
+            ScheduleFilmstripRename(cell);
+        }
     }
 
     private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // The rename box's right-click is its own editing menu, not the list's.
+        if (IsInFilmstripNameEditBox(e.OriginalSource))
+        {
+            return;
+        }
+
         _filmstripRightPressPending = true;
         PressFilmstripForMenu(
             (e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell);
@@ -33006,6 +33449,9 @@ public partial class MainWindow : Window
         // The press that starts a drag inside the marked set is not a click, so
         // nothing collapses.
         _filmstripCollapseMarksOnUp = false;
+
+        // Dragging the file out, not renaming it.
+        CancelPendingRename();
 
         // FileDrop + Copy-only, exactly like the tree's and the search list's:
         // any app that takes an Explorer file drop takes this, and Copy (never

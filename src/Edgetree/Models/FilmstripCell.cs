@@ -78,6 +78,27 @@ public class FilmstripCell : INotifyPropertyChanged
 
     public string Name => Item.Name;
 
+    // THE THUMBNAIL'S OWN RENAME BOX (2026-09-28), opened by a slow second click
+    // on the name under the picture on show. It lives on the cell rather than
+    // on the FileSystemItem, whose IsEditing and EditingName already drive the
+    // TREE row's box: raising that flag would open a second box in the tree,
+    // and whichever became visible last would take the keyboard.
+    private bool _isEditing;
+
+    public bool IsEditing
+    {
+        get => _isEditing;
+        set => SetField(ref _isEditing, value);
+    }
+
+    private string _editingName = string.Empty;
+
+    public string EditingName
+    {
+        get => _editingName;
+        set => SetField(ref _editingName, value);
+    }
+
     // Drives the little play mark in the template. A strip of stills gives no
     // other clue which of them will play - a film's thumbnail is just a frame,
     // and a track's is its album art, which says even less about what it is.
