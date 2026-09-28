@@ -16543,9 +16543,10 @@ public partial class MainWindow : Window
 
     // Everything a tree row's context menu needs set up BEFORE it opens -
     // selection, Shift-range anchor, placement, thumbnail slot. Split out of
-    // the right-button-down handler above so the menu-covered-row pass-through
-    // (ExplorerItemContextMenu_PreviewMouseRightButtonDown) can run the exact
-    // same sequence for the row it uncovers and then open the menu itself.
+    // the right-button-down handler above for the menu-covered-row
+    // pass-through, which ran the same sequence for the row it uncovered; that
+    // went on 2026-09-28 (see ContextMenu_PreviewMouseRightButtonUp) and this
+    // stays the one place the sequence is written.
     private void PrepareTreeRowContextMenu(TreeViewItem treeViewItem)
     {
         treeViewItem.IsSelected = true;
@@ -16596,136 +16597,26 @@ public partial class MainWindow : Window
     // - which invoked whatever item was under the cursor, most visibly "just
     // opening" the file via the thumbnail. Wired to every ContextMenu in the
     // XAML: a right-click release inside a menu never invokes anything.
+    //
+    // AND SO A RIGHT-CLICK ON AN OPEN MENU DOES NOTHING AT ALL (2026-09-28, on
+    // request). The press is left to WPF: a row acts on the release, not the
+    // press, and the release ends here. From 2026-07-22 the tree, search-results
+    // and thumbnail menus took the press instead, as "the menu for what is under
+    // my cursor" - close, and right-click whatever the menu was covering - so
+    // right-clicking down a folder of pictures went on working where the menu
+    // hid the next row. In use it read the other way round: the row that was
+    // right-clicked did not answer, something behind it was selected, and the
+    // menu that opened for that covered it almost entirely (a menu too tall for
+    // either side of its row is pushed back onto the screen over it). Greyed-out
+    // rows were made to ignore the press first, then every row was. What a menu
+    // covers is reached by closing it first - Esc, or any click outside it.
+    //
+    // A right-press OUTSIDE an open menu was never answered here: WPF
+    // closes the menu on the way down and the press goes to what is under the
+    // pointer (click.log, 2026-09-28: the thumbnail list's own handler took it
+    // before the menu reported closing).
     private void ContextMenu_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         => e.Handled = true;
-
-    // A DISABLED ROW IGNORES THE RIGHT BUTTON the way it ignores the left
-    // (2026-09-28, on request). The three menus that hand a right-press through
-    // to the row behind them (tree, search results, thumbnail list) did it from
-    // anywhere on the menu, a greyed-out row included - so right-clicking a
-    // dead row kept the menu up and selected whatever sat underneath it, which
-    // read as the row having done something. Each of them now asks this first
-    // and swallows the press when it lands on a disabled row.
-    //
-    // Asked by GEOMETRY, not by the event: input hit testing passes over a
-    // disabled element, so its press arrives from the menu behind it and its
-    // IsMouseOver never turns on - neither the event's source nor the row can
-    // say the pointer is there. Open submenus are searched too.
-    private static MenuItem? MenuRowUnderPointer(ItemsControl menu)
-    {
-        foreach (var row in menu.Items.OfType<MenuItem>())
-        {
-            if (!row.IsVisible)
-            {
-                continue;
-            }
-
-            if (row.IsSubmenuOpen && MenuRowUnderPointer(row) is { } inner)
-            {
-                return inner;
-            }
-
-            var at = Mouse.GetPosition(row);
-            if (at.X >= 0 && at.Y >= 0 && at.X < row.ActualWidth && at.Y < row.ActualHeight)
-            {
-                return row;
-            }
-        }
-
-        return null;
-    }
-
-    // The companion press half of the same gesture: a right-click PRESS on an
-    // open tree menu means "I want the menu for the row under my cursor" (the
-    // menu is covering the rows below the one it belongs to - exactly where
-    // the next image sits while peeking through a folder of pictures). Close
-    // this menu, find the tree row at that spot, and reopen the menu there -
-    // the same one-right-click flow as when no menu was open. A press over a
-    // part of the menu with no tree row beneath it just closes the menu.
-    private void ExplorerItemContextMenu_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        if (sender is not ContextMenu menu)
-        {
-            return;
-        }
-
-        // Not through a greyed-out row - see MenuRowUnderPointer.
-        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
-        {
-            return;
-        }
-
-        menu.IsOpen = false;
-
-        var position = Mouse.GetPosition(ExplorerTree);
-        if (position.X < 0 || position.Y < 0 ||
-            position.X >= ExplorerTree.ActualWidth || position.Y >= ExplorerTree.ActualHeight)
-        {
-            return;
-        }
-        if (ExplorerTree.InputHitTest(position) is not DependencyObject hit ||
-            hit.FindAncestor<TreeViewItem>() is not
-                { DataContext: FileSystemItem { IsPlaceholder: false, IsShowMore: false } } row)
-        {
-            return;
-        }
-
-        // Deferred one dispatcher hop: the old menu's close (capture release,
-        // popup teardown) is still in flight during this handler, and
-        // reopening the same shared ContextMenu instance synchronously from
-        // inside its own event would race that teardown.
-        Dispatcher.BeginInvoke(() =>
-        {
-            PrepareTreeRowContextMenu(row);
-            if (row.ContextMenu is { } rowMenu)
-            {
-                rowMenu.IsOpen = true;
-            }
-        });
-    }
-
-    // Same pass-through for the search results list's menu.
-    private void SearchResultContextMenu_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        if (sender is not ContextMenu menu)
-        {
-            return;
-        }
-
-        // Not through a greyed-out row - see MenuRowUnderPointer.
-        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
-        {
-            return;
-        }
-
-        menu.IsOpen = false;
-
-        var position = Mouse.GetPosition(SearchResultsList);
-        if (position.X < 0 || position.Y < 0 ||
-            position.X >= SearchResultsList.ActualWidth || position.Y >= SearchResultsList.ActualHeight)
-        {
-            return;
-        }
-        if (SearchResultsList.InputHitTest(position) is not DependencyObject hit ||
-            ItemsControl.ContainerFromElement(SearchResultsList, hit) is not ListBoxItem row)
-        {
-            return;
-        }
-
-        Dispatcher.BeginInvoke(() =>
-        {
-            PrepareSearchRowContextMenu(row);
-            if (row.ContextMenu is { } rowMenu)
-            {
-                // Programmatic opens don't get ContextMenuService's automatic
-                // PlacementTarget; without one the menu has no anchor visual.
-                rowMenu.PlacementTarget = row;
-                rowMenu.IsOpen = true;
-            }
-        });
-    }
 
     private void ExplorerTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -32597,11 +32488,6 @@ public partial class MainWindow : Window
     // moves - the menu is about all of them, which is the whole reason to have
     // marked them. Null is a press between cells, which leaves the menu about
     // the folder.
-    //
-    // Shared with the menu's own press handler (see
-    // FilmstripContextMenu_PreviewMouseRightButtonDown): while the menu is up
-    // it holds the mouse, so a right-press on another picture reaches the menu
-    // and never the strip, and both have to mean the same thing.
     private void PressFilmstripForMenu(FilmstripCell? cell)
     {
         // Recorded for FilmstripProperties_Click before anything below can
@@ -32643,62 +32529,6 @@ public partial class MainWindow : Window
         ClearMultiSelection();
         _filmstripMarkAnchor = _filmstripCells.IndexOf(cell);
         MoveViewerTo(cell.Item);
-    }
-
-    // The press half of the right-button pair on the thumbnail list's menu
-    // (2026-09-28), answered the way ExplorerItemContextMenu_PreviewMouseRightButtonDown
-    // answers it for the tree. The menu was added on 2026-08-22 without either
-    // half, and a right-click through the pictures with the menu up went wrong
-    // both ways: over the menu the release ran whatever row it landed on (a
-    // release over 전체 선택 marked every cell, tested), and off the menu the
-    // menu reopened still about the picture right-clicked before, because the
-    // press never reached the strip to say otherwise.
-    //
-    // So a right-press anywhere while this menu is open closes it, and one that
-    // lands inside the strip is taken as a fresh right-click on whatever is
-    // under the pointer - a cell, or the gap between cells for the folder. The
-    // menu is NOT reopened from here: the release that follows reaches the
-    // strip, the menu being closed by then, and ContextMenuService opens it at
-    // the pointer - the path a right-click on a picture the menu was not
-    // covering already takes, and the one that lands in the right place.
-    // Reopening it from here, one hop after the close as the tree's handler
-    // does, put this menu at the window's top-left corner instead (2026-09-28,
-    // tested; click.log showed the reopen raise Opened before the close had
-    // raised Closed). Outside the strip it only closes, and the release opens
-    // whatever menu is under it.
-    private void FilmstripContextMenu_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        e.Handled = true;
-        if (sender is not ContextMenu menu)
-        {
-            return;
-        }
-
-        // Not through a greyed-out row - see MenuRowUnderPointer.
-        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
-        {
-            return;
-        }
-
-        menu.IsOpen = false;
-
-        var position = Mouse.GetPosition(ViewerFilmstrip);
-        if (position.X < 0 || position.Y < 0 ||
-            position.X >= ViewerFilmstrip.ActualWidth || position.Y >= ViewerFilmstrip.ActualHeight)
-        {
-            return;
-        }
-
-        var cell = (ViewerFilmstrip.InputHitTest(position) as DependencyObject)
-            ?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell;
-
-        // One dispatcher hop, as the tree's handler waits one: the close is
-        // still in flight here. Normal priority still runs well ahead of the
-        // release, so the target and the move are in place by the time
-        // ContextMenuService opens the menu. A release fast enough to land on
-        // the closing menu is swallowed there by
-        // ContextMenu_PreviewMouseRightButtonUp: no menu, nothing run.
-        Dispatcher.BeginInvoke(() => PressFilmstripForMenu(cell));
     }
 
     // True from the moment the thumbnail list's menu opens until the command
@@ -37317,9 +37147,8 @@ public partial class MainWindow : Window
         }
     }
 
-    // Split out for the same reason as PrepareTreeRowContextMenu: the
-    // menu-covered-row pass-through reopens the menu itself and needs the
-    // identical pre-open setup.
+    // Split out for the same reason as PrepareTreeRowContextMenu, and kept
+    // apart for the same reason since the pass-through went (2026-09-28).
     private void PrepareSearchRowContextMenu(ListBoxItem item)
     {
         item.IsSelected = true;

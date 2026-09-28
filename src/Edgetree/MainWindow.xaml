@@ -1212,8 +1212,7 @@
                 Opened="ExplorerItemContextMenu_Opened"
                 Closed="AnyMenu_Closed"
                 PreviewKeyDown="ExplorerItemContextMenu_PreviewKeyDown"
-                PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp"
-                PreviewMouseRightButtonDown="ExplorerItemContextMenu_PreviewMouseRightButtonDown">
+                PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
             <!-- Image thumbnail (single image file only): the slot is reserved
                  at its fixed size the moment the menu opens - we already know
                  from the extension whether this row gets one - so the async
@@ -1745,8 +1744,7 @@
                 Style="{StaticResource DarkContextMenuStyle}"
                 Opened="SearchResultContextMenu_Opened"
                 Closed="AnyMenu_Closed"
-                PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp"
-                PreviewMouseRightButtonDown="SearchResultContextMenu_PreviewMouseRightButtonDown">
+                PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
             <!-- Same image-thumbnail slot as the tree menu's (same reserved-
                  before-open rules; configured by
                  SearchResultsList_PreviewMouseRightButtonDown, positional
@@ -8641,22 +8639,21 @@
                                      pass to AnyMenu_Opened/AnyMenu_Closed and
                                      mark the span in which the right-clicked
                                      cell stands in for the tree's selection. -->
-                                <!-- AND THE RIGHT-BUTTON PAIR every other menu
-                                     in this file carries (2026-09-28). This one
-                                     was built on 2026-08-22 without it, so a
-                                     right-button release over one of its rows
-                                     ran that row: a release over 전체 선택
-                                     marked every cell (tested), and one over
+                                <!-- AND THE RIGHT-BUTTON RELEASE GUARD every
+                                     other menu in this file carries (2026-09-28).
+                                     This one was built on 2026-08-22 without
+                                     it, so a right-button release over one of
+                                     its rows ran that row: a release over 전체
+                                     선택 marked every cell (tested), and one over
                                      삭제 would have deleted the picture
                                      right-clicked BEFORE - the one the menu was
-                                     still about. The press half hands the
-                                     right-click to the cell under the pointer,
-                                     and the release then opens the menu there
-                                     the ordinary way. -->
+                                     still about. With the release swallowed, a
+                                     right-click on this menu does nothing, as on
+                                     every other (see
+                                     ContextMenu_PreviewMouseRightButtonUp). -->
                                 <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
                                         Opened="FilmstripContextMenu_Opened"
                                         Closed="FilmstripContextMenu_Closed"
-                                        PreviewMouseRightButtonDown="FilmstripContextMenu_PreviewMouseRightButtonDown"
                                         PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
                                     <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
                                             InputGestureText="Ctrl+A"
