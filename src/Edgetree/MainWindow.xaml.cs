@@ -32537,22 +32537,30 @@ public partial class MainWindow : Window
         MoveViewerTo(cell.Item);
     }
 
+    private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        => PressFilmstripForMenu(
+            (e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell);
+
     // The strip's right-click behaves like a plain press when it lands outside
     // the set: what is under the pointer becomes the one thing - on the panel
     // and in the tree - and the menu is then about it. Inside the set nothing
     // moves - the menu is about all of them, which is the whole reason to have
-    // marked them.
-    private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    // marked them. Null is a press between cells, which leaves the menu about
+    // the folder.
+    //
+    // Shared with the menu's own press handler (see
+    // FilmstripContextMenu_PreviewMouseRightButtonDown): while the menu is up
+    // it holds the mouse, so a right-press on another picture reaches the menu
+    // and never the strip, and both have to mean the same thing.
+    private void PressFilmstripForMenu(FilmstripCell? cell)
     {
         // Recorded for FilmstripProperties_Click before anything below can
         // return, and cleared by a right-click that lands on no cell - a
         // stale target from the previous right-click would open the
         // properties of a picture nobody pointed at.
-        _filmstripMenuTarget =
-            ((e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell)?.Item;
+        _filmstripMenuTarget = cell?.Item;
 
-        if ((e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()
-            is not { Content: FilmstripCell cell })
+        if (cell is null)
         {
             return;
         }
@@ -32585,6 +32593,55 @@ public partial class MainWindow : Window
         ClearMultiSelection();
         _filmstripMarkAnchor = _filmstripCells.IndexOf(cell);
         MoveViewerTo(cell.Item);
+    }
+
+    // The press half of the right-button pair on the thumbnail list's menu
+    // (2026-09-28), answered the way ExplorerItemContextMenu_PreviewMouseRightButtonDown
+    // answers it for the tree. The menu was added on 2026-08-22 without either
+    // half, and a right-click through the pictures with the menu up went wrong
+    // both ways: over the menu the release ran whatever row it landed on (a
+    // release over 전체 선택 marked every cell, tested), and off the menu the
+    // menu reopened still about the picture right-clicked before, because the
+    // press never reached the strip to say otherwise.
+    //
+    // So a right-press anywhere while this menu is open closes it, and one that
+    // lands inside the strip is taken as a fresh right-click on whatever is
+    // under the pointer - a cell, or the gap between cells for the folder. The
+    // menu is NOT reopened from here: the release that follows reaches the
+    // strip, the menu being closed by then, and ContextMenuService opens it at
+    // the pointer - the path a right-click on a picture the menu was not
+    // covering already takes, and the one that lands in the right place.
+    // Reopening it from here, one hop after the close as the tree's handler
+    // does, put this menu at the window's top-left corner instead (2026-09-28,
+    // tested; click.log showed the reopen raise Opened before the close had
+    // raised Closed). Outside the strip it only closes, and the release opens
+    // whatever menu is under it.
+    private void FilmstripContextMenu_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is not ContextMenu menu)
+        {
+            return;
+        }
+        menu.IsOpen = false;
+
+        var position = Mouse.GetPosition(ViewerFilmstrip);
+        if (position.X < 0 || position.Y < 0 ||
+            position.X >= ViewerFilmstrip.ActualWidth || position.Y >= ViewerFilmstrip.ActualHeight)
+        {
+            return;
+        }
+
+        var cell = (ViewerFilmstrip.InputHitTest(position) as DependencyObject)
+            ?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell;
+
+        // One dispatcher hop, as the tree's handler waits one: the close is
+        // still in flight here. Normal priority still runs well ahead of the
+        // release, so the target and the move are in place by the time
+        // ContextMenuService opens the menu. A release fast enough to land on
+        // the closing menu is swallowed there by
+        // ContextMenu_PreviewMouseRightButtonUp: no menu, nothing run.
+        Dispatcher.BeginInvoke(() => PressFilmstripForMenu(cell));
     }
 
     // True from the moment the thumbnail list's menu opens until the command

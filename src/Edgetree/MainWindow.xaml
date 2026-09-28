@@ -8641,9 +8641,23 @@
                                      pass to AnyMenu_Opened/AnyMenu_Closed and
                                      mark the span in which the right-clicked
                                      cell stands in for the tree's selection. -->
+                                <!-- AND THE RIGHT-BUTTON PAIR every other menu
+                                     in this file carries (2026-09-28). This one
+                                     was built on 2026-08-22 without it, so a
+                                     right-button release over one of its rows
+                                     ran that row: a release over 전체 선택
+                                     marked every cell (tested), and one over
+                                     삭제 would have deleted the picture
+                                     right-clicked BEFORE - the one the menu was
+                                     still about. The press half hands the
+                                     right-click to the cell under the pointer,
+                                     and the release then opens the menu there
+                                     the ordinary way. -->
                                 <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
                                         Opened="FilmstripContextMenu_Opened"
-                                        Closed="FilmstripContextMenu_Closed">
+                                        Closed="FilmstripContextMenu_Closed"
+                                        PreviewMouseRightButtonDown="FilmstripContextMenu_PreviewMouseRightButtonDown"
+                                        PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
                                     <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
                                             InputGestureText="Ctrl+A"
                                             Click="FilmstripSelectAll_Click"/>
