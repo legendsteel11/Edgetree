@@ -14834,17 +14834,21 @@ public partial class MainWindow : Window
         return -1;
     }
 
-    private void SelectVisibleItem(FileSystemItem target)
+    // focus: false selects the row and brings it into view but leaves the
+    // keyboard where it is - for a caller whose user has already moved the
+    // keyboard somewhere else (see KeepRenamedRowSelected).
+    private void SelectVisibleItem(FileSystemItem target, bool focus = true)
     {
         var chain = new List<FileSystemItem>();
         for (FileSystemItem? item = target; item is not null; item = item.Parent)
         {
             chain.Insert(0, item);
         }
-        SelectVisibleItemStep(chain, 0, ExplorerTree);
+        SelectVisibleItemStep(chain, 0, ExplorerTree, focus: focus);
     }
 
-    private void SelectVisibleItemStep(List<FileSystemItem> chain, int index, ItemsControl container, int attempt = 0)
+    private void SelectVisibleItemStep(List<FileSystemItem> chain, int index, ItemsControl container, int attempt = 0,
+        bool focus = true)
     {
         if (index >= chain.Count)
         {
@@ -14888,7 +14892,7 @@ public partial class MainWindow : Window
                     $"select re-resolved: {item.Name} " +
                     $"(stale instance, now at={liveAt} of {container.Items.Count})");
                 chain[index] = (FileSystemItem)container.Items[liveAt]!;
-                SelectVisibleItemStep(chain, index, container, attempt);
+                SelectVisibleItemStep(chain, index, container, attempt, focus);
                 return;
             }
 
@@ -14933,7 +14937,7 @@ public partial class MainWindow : Window
             }
 
             Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background,
-                new Action(() => SelectVisibleItemStep(chain, index, container, attempt + 1)));
+                new Action(() => SelectVisibleItemStep(chain, index, container, attempt + 1, focus)));
             return;
         }
 
@@ -14948,7 +14952,7 @@ public partial class MainWindow : Window
             // the thumbnail list opened its menu and lost it a moment later
             // (2026-08-22). The row is selected either way; only the focus
             // waits, and it stays with the menu while the menu is up.
-            if (!IsCapturingUiOpen)
+            if (focus && !IsCapturingUiOpen)
             {
                 treeViewItem.Focus();
             }
@@ -14973,7 +14977,7 @@ public partial class MainWindow : Window
             treeViewItem.BringIntoView();
             container.UpdateLayout();
         }
-        SelectVisibleItemStep(chain, index + 1, treeViewItem);
+        SelectVisibleItemStep(chain, index + 1, treeViewItem, focus: focus);
     }
 
     // The context menu advertises these shortcuts via InputGestureText, but an
@@ -21191,6 +21195,34 @@ public partial class MainWindow : Window
         // on the selected row, and only that case has a selection to keep.
         bool renamingSelection = ReferenceEquals(ExplorerTree.SelectedItem, item);
 
+        // Also read now, while whatever is committing the name is still in
+        // progress - both for KeepRenamedRowSelected, which runs later.
+        //
+        // A LEFT PRESS ON THE PARENT'S ROW is the one click the deferred
+        // reselect cannot tell from WPF's own move: either way the parent ends
+        // up selected. The press has not selected it yet (the row selects on
+        // GotFocus, after this LostFocus), so it is read from what is under
+        // the pointer.
+        bool parentPressed =
+            Mouse.LeftButton == MouseButtonState.Pressed &&
+            item.Parent is { } renamedFrom &&
+            (Mouse.DirectlyOver as DependencyObject)?.FindAncestor<TreeViewItem>()?.DataContext
+                is FileSystemItem pressedRow &&
+            string.Equals(pressedRow.FullPath, renamedFrom.FullPath, StringComparison.OrdinalIgnoreCase);
+
+        // WHERE THE KEYBOARD WENT. Committed by LostFocus, the keyboard is
+        // already on its new owner: the search box (Ctrl+F, Ctrl+Shift+F), the
+        // path bar, a menu. Committed by Enter or by F7, it is still in the
+        // rename box. Read here and not when the reselect runs: by then the box
+        // may have been taken out of the tree with its row, and a box outside
+        // the tree would read as the keyboard having left it. The window itself
+        // is not a new owner - it is where WPF parks the keyboard when the
+        // element holding it goes away.
+        bool keyboardLeftTree =
+            Keyboard.FocusedElement is DependencyObject focused &&
+            focused is not Window &&
+            !IsPressInside(focused, ExplorerTree);
+
         if (!FileOperationService.TryRename(item.FullPath, newName, out var error))
         {
             MessageBox.Show(this, error, Strings.RenameFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -21204,9 +21236,9 @@ public partial class MainWindow : Window
         {
             RefreshFolderPreservingState(renameParent);
 
-            if (renamingSelection)
+            if (renamingSelection && !parentPressed)
             {
-                KeepRenamedRowSelected(renameParent, newName);
+                KeepRenamedRowSelected(renameParent, newName, focus: !keyboardLeftTree);
             }
         }
     }
@@ -21222,13 +21254,32 @@ public partial class MainWindow : Window
     // rename is also committed by clicking somewhere else - that is LostFocus -
     // and the row that click lands on has to win; it is selected by the time
     // this runs. A click on empty tree space selects nothing, so the renamed
-    // row comes back there too, which is where the selection was.
-    private void KeepRenamedRowSelected(FileSystemItem parent, string newName)
+    // row comes back there too, which is where the selection was. A click on
+    // the PARENT's row looks exactly like WPF's move from here, so the commit
+    // reads that one itself and does not ask for this.
+    //
+    // NOT THE KEYBOARD, WHEN IT HAS GONE SOMEWHERE ELSE (focus: false). A name
+    // committed because the keyboard moved - Ctrl+F or Ctrl+Shift+F into the
+    // search box, a click into the path bar - still gets its row back, but the
+    // keyboard stays where it went. Taken back into the tree, what is being
+    // typed into the search box would go to the tree's type-ahead instead.
+    //
+    // AND NOT OVER ANOTHER NAME BEING TYPED. F7 commits this rename and opens
+    // the new folder's name box in one keystroke, without selecting the new
+    // folder - so by the time this runs the parent is still what is selected,
+    // and reselecting would take the keyboard out of that box, which closes
+    // it before anything has been typed.
+    private void KeepRenamedRowSelected(FileSystemItem parent, string newName, bool focus)
     {
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
         {
             if (ExplorerTree.SelectedItem is not null &&
                 !ReferenceEquals(ExplorerTree.SelectedItem, parent))
+            {
+                return;
+            }
+
+            if (_inlineRenameItem is { IsEditing: true })
             {
                 return;
             }
@@ -21248,7 +21299,7 @@ public partial class MainWindow : Window
                 parent.ShowChildrenUpTo(renamed);
             }
 
-            SelectVisibleItem(renamed);
+            SelectVisibleItem(renamed, focus);
         }));
     }
 
