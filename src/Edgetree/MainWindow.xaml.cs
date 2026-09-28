@@ -20873,23 +20873,67 @@ public partial class MainWindow : Window
         // dropped straight into inline rename, matching Explorer/VS Code's
         // "type the name right away" new-folder flow.
         string createdName = Path.GetFileName(createdPath!);
-        var newItem = target.Children.FirstOrDefault(c =>
-            !c.IsPlaceholder && string.Equals(c.Name, createdName, StringComparison.OrdinalIgnoreCase));
+        var newItem = target.AllLoadedChildren.FirstOrDefault(c =>
+            !c.IsPlaceholder && !c.IsShowMore &&
+            string.Equals(c.Name, createdName, StringComparison.OrdinalIgnoreCase));
         if (newItem is null)
         {
             return;
         }
 
-        if (ExplorerTree.ItemContainerGenerator.ContainerFromItem(target) is TreeViewItem targetContainer)
+        // A folder with more subfolders than the 더 보기 cap can sort the new
+        // one past it, where it had no row and F7 seemed to do nothing. Uncovered
+        // only as far as this row, as KeepRenamedRowSelected does.
+        if (!target.Children.Contains(newItem))
         {
-            targetContainer.UpdateLayout();
-            if (targetContainer.ItemContainerGenerator.ContainerFromItem(newItem) is TreeViewItem newContainer)
-            {
-                newContainer.BringIntoView();
-            }
+            target.ShowChildrenUpTo(newItem);
         }
 
+        // THE NEW FOLDER COMES TO THE TOP OF THE VIEW, SELECTED (2026-09-28, on
+        // request). The view used to be left where it was: this looked the
+        // parent's row up among the tree's TOP-LEVEL rows only, so below a drive
+        // root it found nothing, and F7 at the foot of a long file list opened
+        // the name box a long way up, under the parent, off screen. It lands the
+        // way a jump does now, and is selected as Explorer does, so the keyboard
+        // carries on from the new folder once it is named.
+        NoteNavigationForScrollWatch("newfolder", newItem.FullPath);
+        LandRowAtTopNow(newItem);
+
+        // focus: false - the name box takes the keyboard when it appears, and
+        // the walk can finish a pass later; focusing the row then would close
+        // the box before anything had been typed.
+        SelectVisibleItem(newItem, focus: false);
+
         BeginInlineRename(newItem);
+    }
+
+    // A row the model already holds, landed at the top of the tree in one move
+    // and without a walk - for one that has just appeared (F7's new folder).
+    // PinRowToTop measures against the row's container, and a row far outside
+    // the viewport has none, so the view is first put where the model counts
+    // the row: that realizes it at the top, and the pin then only confirms by
+    // measuring. Left to a walk, the realization would scroll twice - once to
+    // bring an ancestor in, once more to lift the row - which is the double
+    // move FinishRevealCore describes.
+    private void LandRowAtTopNow(FileSystemItem item)
+    {
+        if (FindTreeScrollViewer() is not { } scrollViewer)
+        {
+            return;
+        }
+
+        scrollViewer.UpdateLayout();
+        if (VisibleRowIndexOf(item) is not { } index)
+        {
+            return;
+        }
+
+        scrollViewer.ScrollToVerticalOffset(Math.Min(index, scrollViewer.ScrollableHeight));
+        scrollViewer.UpdateLayout();
+        if (FindRealizedContainer(item) is { } row)
+        {
+            PinRowToTop(row, scrollViewer);
+        }
     }
 
     // VS Code-style inline rename: swaps the row's name TextBlock for a
