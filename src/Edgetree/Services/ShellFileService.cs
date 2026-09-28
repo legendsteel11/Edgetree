@@ -199,8 +199,7 @@ public static class ShellFileService
         // UI Automation: /select left it on or just past the bottom edge of the
         // file list every time (its top at 1995, 1995 and 1980 against a list
         // ending at 1991), while this call put it inside the view (1859, 1859,
-        // 1844) - "selected, but you have to scroll to find it", as reported.
-        // /select stays as the fallback.
+        // 1844). /select stays as the fallback.
         //
         // On an STA thread of its own: this call parses the path in THIS
         // process, where /select left that to explorer.exe, and a path on a

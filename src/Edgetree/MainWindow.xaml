@@ -8611,12 +8611,15 @@
                                 Drop="ViewerFilmstrip_Drop"
                                 PreviewMouseMove="ViewerFilmstrip_PreviewMouseMove"
                                 PreviewMouseLeftButtonUp="ViewerFilmstrip_PreviewMouseLeftButtonUp">
-                            <!-- THE SAME OPERATIONS, THE SAME HANDLERS. Every
-                                 row here goes to the tree's own click handler:
-                                 they all work off the app's multi-selection
-                                 (GetEffectiveSelection), which the strip's marks
-                                 now ARE, so nothing had to be taught about a
-                                 second kind of selection.
+                            <!-- THE SAME OPERATIONS, THE SAME HANDLERS. The
+                                 file rows go to the tree's own click handlers,
+                                 which all work off GetEffectiveSelection: the
+                                 strip's marks when there are any - they ARE the
+                                 app's multi-selection - and otherwise the cell
+                                 the menu was opened on, which stands in for the
+                                 tree's selection while this menu is up
+                                 (FilmstripMenuItem, 2026-09-28). 전체 선택 and
+                                 속성 have handlers of their own.
                                  Paste is on the list because that is where a
                                  folder of pictures is being looked at when
                                  something arrives from elsewhere; it lands in
@@ -8710,10 +8713,12 @@
                                          it is not an aside: every other list
                                          draws the name and the tooltip only adds
                                          the path, so a slow reveal costs nothing.
-                                         THIS strip draws no name at all, so the
-                                         tooltip IS the name, and a cell has
-                                         nothing to say about itself until the
-                                         tooltip arrives (2026-08-26, on report).
+                                         THIS strip draws no name unless 썸네일
+                                         아래 파일 이름 표시 is on, and it is off
+                                         by default, so the tooltip IS the name,
+                                         and a cell has nothing to say about
+                                         itself until the tooltip arrives
+                                         (2026-08-26, on report).
                                          Its own literal on purpose: it is not a
                                          fraction of the shared number and must
                                          not follow it when that one is tuned.

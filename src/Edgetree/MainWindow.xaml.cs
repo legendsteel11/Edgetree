@@ -30453,16 +30453,17 @@ public partial class MainWindow : Window
             FilmstripMaxGridHeight, panel - caption - FilmstripPictureFloor));
     }
 
-    // The list's own height range. Two rows at the smallest cell is the floor -
-    // anything less is a bar with a vertical scrollbar, which is worse than the
-    // bar at being one.
+    // The list's own height range. The floor is two rows at the smallest cell
+    // WITHOUT names - anything less is a bar with a vertical scrollbar, which is
+    // worse than the bar at being one. With 썸네일 아래 파일 이름 표시 on, each
+    // row is a name line taller and this floor can show less than two of them;
+    // the number was not changed with that option (2026-09-28).
     //
     // The ceiling is deliberately far past any panel: what actually stops the
-    // grip is the floor kept for the picture below, and the author asked for
-    // that to be small (2026-08-22, "보던 그림의 크기가 훨씬 더 작아져도 될거
-    // 같습니다"). Someone browsing a folder wants the browsing surface, and the
-    // picture at the top is there to say which one is selected - a job it can
-    // do small.
+    // grip is the floor kept for the picture below, which was kept small on
+    // request (2026-08-22). Someone browsing a folder wants the browsing
+    // surface, and the picture at the top is there to say which one is
+    // selected - a job it can do small.
     private const double FilmstripMinGridHeight = 96;
     private const double FilmstripMaxGridHeight = 2000;
 
@@ -32226,9 +32227,11 @@ public partial class MainWindow : Window
     // is a local read of the same pixels and only what did goes to the shell.
     //
     // Wired to the EXPLICIT refresh gestures (F5, 새로고침) and nothing else:
-    // the rename/delete/paste refreshes already reach the strip through the
-    // count-keyed merge, and re-asking a NAS folder's window of cells is a cost
-    // that should only follow a hand actually asking for it.
+    // the rename/delete/paste refreshes already reach the strip through its
+    // merge - a delete or a paste by moving the count, a rename by leaving a
+    // cell for a name the folder no longer lists (see FilmstripOutOfStep) - and
+    // re-asking a NAS folder's window of cells is a cost that should only
+    // follow a hand actually asking for it.
     private void RefreshFilmstripPictures()
     {
         if (ViewerFilmstripHost.Visibility != Visibility.Visible)
@@ -35739,9 +35742,12 @@ public partial class MainWindow : Window
             _searchHistoryNavIndex = -1;
 
             // Lazy first index: a remembered scope isn't touched at startup,
-            // only when search is actually opened, and only once per session
-            // unless the user hits refresh (or changes scope). Usually costs a
-            // file read rather than a full walk now - see LoadCachedIndexOrScan.
+            // only when search is actually opened. Usually costs a file read
+            // rather than a full walk now - see LoadCachedIndexOrScan. After
+            // that, opening the view walks the folder again only when
+            // RefreshSearchIndexIfDue finds the index due, and then behind the
+            // results already on screen; the refresh button and a new scope
+            // still walk it on demand.
             if (HasSearchScope && _searchEntries.Count == 0 && !_searchScanning)
             {
                 LoadCachedIndexOrScan();
@@ -36125,10 +36131,6 @@ public partial class MainWindow : Window
         return string.Format(Strings.SearchAgeDays, (int)age.TotalDays);
     }
 
-    // Tree folder right-click -> "이 폴더에서 검색". Scope first, then switch:
-    // SetSearchViewActive's lazy first scan only fires when nothing is indexed
-    // AND nothing is scanning, so starting the scan here means the switch
-    // won't queue a second one for the scope we just replaced.
     // The folder Ctrl+Shift+F searches: the selected folder, or the folder a
     // selected file sits in. Wider than the menu row, which only shows on a
     // folder - a key has no row to hide, and "search where I am" is the
@@ -36141,6 +36143,7 @@ public partial class MainWindow : Window
             _ => null,
         };
 
+    // Tree folder right-click -> "이 폴더에서 검색".
     private void SearchInFolder_Click(object sender, RoutedEventArgs e)
     {
         if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
@@ -36150,7 +36153,10 @@ public partial class MainWindow : Window
     }
 
     // One body for the menu row and Ctrl+Shift+F, so the two cannot come to
-    // disagree about what searching a folder does.
+    // disagree about what searching a folder does. Scope first, then switch:
+    // SetSearchViewActive's lazy first scan only fires when nothing is indexed
+    // AND nothing is scanning, so starting the scan here means the switch
+    // won't queue a second one for the scope we just replaced.
     private void SearchInFolder(FileSystemItem item)
     {
         // Cleared before the scan starts, so the streaming filter doesn't
