@@ -2310,16 +2310,18 @@ public partial class MainWindow : Window
         // Ctrl+A MARKS THE WHOLE STRIP - the key the strip's own menu was
         // already advertising beside 전체 선택, wired here where every other key
         // the strip licenses lives. Same visible reason as ←→ above: the strip
-        // being on screen is what says the key is about the pictures. Unlike
-        // ↑↓ it needs no side of its own - the tree has no Ctrl+A to lose.
-        // Both layouts, because the menu row it belongs to is in both. Never
-        // from a text box - a rename or a search field owns its own Ctrl+A.
+        // being on screen is what says the key is about the pictures. Both
+        // layouts, because the menu row it belongs to is in both. Never from a
+        // text box - a rename or a search field owns its own Ctrl+A.
+        //
+        // AND NOW A SIDE, LIKE ↑↓ (2026-09-28) - see TreeHoldsSelectAll.
         if (Keyboard.Modifiers == ModifierKeys.Control &&
             e.Key == Key.A &&
             _viewerOpen &&
             ViewerFilmstripHost.Visibility == Visibility.Visible &&
             _filmstripCells.Count > 0 &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            !TreeHoldsSelectAll)
         {
             FilmstripSelectAll_Click(sender, e);
             e.Handled = true;
@@ -14569,6 +14571,13 @@ public partial class MainWindow : Window
                 CutItem_Click(sender, e);
                 e.Handled = true;
                 break;
+            // Reached only while the tree has the hand - with the thumbnail list
+            // up and the last press in it, the window's own Ctrl+A marks the
+            // list instead and this never sees the key.
+            case Key.A when Keyboard.Modifiers == ModifierKeys.Control:
+                TreeSelectAll_Click(sender, e);
+                e.Handled = true;
+                break;
             // Esc calls off a pending cut as well as the multi-selection -
             // Explorer's own way out of "I didn't mean to cut that".
             case Key.Escape when _multiSelection.Count > 0 || FileSystemService.CutPaths.Count > 0:
@@ -15011,6 +15020,7 @@ public partial class MainWindow : Window
             Key.F5 => () => RefreshFolder_Click(sender, e),
             Key.F7 => () => NewFolder_Click(sender, e),
             Key.Enter when !menuItemHighlighted => () => OpenItem_Click(sender, e),
+            Key.A when Keyboard.Modifiers == ModifierKeys.Control => () => TreeSelectAll_Click(sender, e),
             Key.X when Keyboard.Modifiers == ModifierKeys.Control => () => CutItem_Click(sender, e),
             Key.C when Keyboard.Modifiers == ModifierKeys.Control => () => CopyItem_Click(sender, e),
             Key.C when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) => () => CopyPath_Click(sender, e),
@@ -15278,6 +15288,37 @@ public partial class MainWindow : Window
         for (int i = low; i <= high; i++)
         {
             AddToMultiSelection(visible[i]);
+        }
+    }
+
+    // 전체 선택 in the tree (2026-09-28, on request - the thumbnail list's menu
+    // had one and this menu did not): everything in the folder the selected row
+    // stands in, the row and every row beside it, files and folders alike, the
+    // way Ctrl+A takes a folder's listing in Explorer.
+    //
+    // BESIDE IT, NOT BELOW. Unlike a Shift range, which sweeps through expanded
+    // folders, this leaves their contents out: a folder already carries what is
+    // in it into a copy or a delete, and marking the children as well would
+    // hand the same files over twice.
+    //
+    // AND ONLY THE ROWS ON SHOW. What 더 보기 is holding back stays out, so
+    // nothing that was never on screen rides along into a delete. A drive root
+    // has no folder around it and takes nothing - the menu greys the row there.
+    private void TreeSelectAll_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExplorerTree.SelectedItem is not FileSystemItem
+            { IsPlaceholder: false, IsShowMore: false, Parent: { } folder })
+        {
+            return;
+        }
+
+        ClearMultiSelection();
+        foreach (var row in folder.Children)
+        {
+            if (!row.IsPlaceholder && !row.IsShowMore)
+            {
+                AddToMultiSelection(row);
+            }
         }
     }
 
@@ -16838,6 +16879,7 @@ public partial class MainWindow : Window
             var openWithCodeItem = FindTaggedMenuElement<MenuItem>(menu, "openWithCode");
             var goToFolderItem = FindTaggedMenuElement<MenuItem>(menu, "goToFolder");
             var viewHereItem = FindTaggedMenuElement<MenuItem>(menu, "viewHere");
+            var selectAllItem = FindTaggedMenuElement<MenuItem>(menu, "selectAll");
 
             // THE PANEL'S OWN ROW. Absent - not greyed - for anything the panel
             // cannot show: a folder, a text file, an archive. A disabled row here
@@ -16926,6 +16968,7 @@ public partial class MainWindow : Window
                 ("extract", extractItem), ("rename", renameItem),
                 ("copyPath", copyPathItem), ("openWithCode", openWithCodeItem),
                 ("createShortcut", createShortcutItem), ("goToFolder", goToFolderItem),
+                ("selectAll", selectAllItem),
             }.Where(t => t.Item is null).Select(t => t.Name).ToArray();
             if (absent.Length > 0)
             {
@@ -16989,6 +17032,15 @@ public partial class MainWindow : Window
             if (createShortcutItem is not null)
             {
                 createShortcutItem.IsEnabled =
+                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, Parent: not null };
+            }
+
+            // 전체 선택 takes the folder around the row (see TreeSelectAll_Click),
+            // and a drive root has none - the one case 바로 가기 만들기 above and
+            // 압축 below grey out on too.
+            if (selectAllItem is not null)
+            {
+                selectAllItem.IsEnabled =
                     ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, Parent: not null };
             }
 
@@ -33406,6 +33458,16 @@ public partial class MainWindow : Window
         => _viewerFullscreen ||
            (_arrowsInPanel &&
             string.Equals(current.Parent?.FullPath, _arrowsInPanelFolder, StringComparison.OrdinalIgnoreCase));
+
+    // Whether Ctrl+A is the tree's 전체 선택 rather than the thumbnail list's
+    // (2026-09-28). The list's used to need no side - the tree had no Ctrl+A to
+    // lose - and since the tree's menu gained 전체 선택 on the same key, the key
+    // goes where the arrows go: to the tree while it holds the keyboard and the
+    // last press landed in it, to the list after a press in the panel or in
+    // full screen.
+    private bool TreeHoldsSelectAll =>
+        ExplorerTree.IsKeyboardFocusWithin &&
+        !(ViewerItem is { } shown && PanelHoldsArrows(shown));
 
     // ----- 슬라이드 쇼 (2026-08-14) ------------------------------------------
     //

@@ -262,6 +262,7 @@ public static class HelpContent
                     R("F7", "새 폴더", "F7", "New folder"),
                     R("Del", "휴지통으로 삭제", "Del", "Delete to the Recycle Bin"),
                     R("Shift+Del", "완전 삭제", "Shift+Del", "Delete permanently"),
+                    R("Ctrl+A", "같은 폴더의 항목 전체 선택", "Ctrl+A", "Select all in the same folder"),
                     R("Ctrl+C · Ctrl+X · Ctrl+V", "복사 · 잘라내기 · 붙여넣기",
                       "Ctrl+C · Ctrl+X · Ctrl+V", "Copy · cut · paste"),
                     R("Ctrl+Shift+C", "경로 복사", "Ctrl+Shift+C", "Copy path"),

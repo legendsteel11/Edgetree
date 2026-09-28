@@ -1445,6 +1445,13 @@
                     Tag="openWith"
                     Click="OpenWithPicker_Click"/>
             <Separator/>
+            <!-- Above 잘라내기 on its own, as on the thumbnail list's menu
+                 (2026-09-28). What "all" means here is at TreeSelectAll_Click. -->
+            <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
+                    Tag="selectAll"
+                    InputGestureText="Ctrl+A"
+                    Click="TreeSelectAll_Click"/>
+            <Separator/>
             <MenuItem Header="{x:Static services:Strings.MenuCut}"
                     InputGestureText="Ctrl+X"
                     Click="CutItem_Click"/>
