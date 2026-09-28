@@ -4393,6 +4393,20 @@ public partial class MainWindow : Window
             _openMenus.Add(menu);
             LogClick("menu opened", null);
 
+            // Whatever this menu runs is about its own row. The thumbnail
+            // list's menu is closed by now and its command, if one was chosen,
+            // has already run (a row's Click is queued at Render priority, ahead
+            // of the input that opens anything else) - see _filmstripMenuInPlay.
+            if (!ReferenceEquals(menu, ViewerFilmstrip.ContextMenu))
+            {
+                _filmstripMenuInPlay = false;
+            }
+
+            // Whichever menu this is, a right-press on the thumbnail list from
+            // before it has had its answer - see _filmstripRightPressPending.
+            // (The list's own menu consumed it in ContextMenuOpening already.)
+            _filmstripRightPressPending = false;
+
             // Where the right-click landed, for 속성 - see PropertiesAnchor.
             var cursor = System.Windows.Forms.Cursor.Position;
             _menuOpenedAt = (cursor.X, cursor.Y);
@@ -32479,8 +32493,11 @@ public partial class MainWindow : Window
     }
 
     private void ViewerFilmstrip_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
-        => PressFilmstripForMenu(
+    {
+        _filmstripRightPressPending = true;
+        PressFilmstripForMenu(
             (e.OriginalSource as DependencyObject)?.FindAncestor<ListBoxItem>()?.Content as FilmstripCell);
+    }
 
     // The strip's right-click behaves like a plain press when it lands outside
     // the set: what is under the pointer becomes the one thing - on the panel
@@ -32488,6 +32505,10 @@ public partial class MainWindow : Window
     // moves - the menu is about all of them, which is the whole reason to have
     // marked them. Null is a press between cells, which leaves the menu about
     // the folder.
+    //
+    // Shared with the moment the menu opens (see
+    // ViewerFilmstrip_ContextMenuOpening), which catches a release that arrived
+    // without a press of its own on the list.
     private void PressFilmstripForMenu(FilmstripCell? cell)
     {
         // Recorded for FilmstripProperties_Click before anything below can
@@ -32531,10 +32552,54 @@ public partial class MainWindow : Window
         MoveViewerTo(cell.Item);
     }
 
+    // A right-press on the thumbnail list whose menu has not opened yet. Set by
+    // the list's own press, answered by the opening below, and cleared by
+    // anything that starts another gesture: a right-press elsewhere in the
+    // window, or any menu opening (see AnyMenu_Opened) - the second because a
+    // press ON an open menu is a popup's, and the window never sees it.
+    private bool _filmstripRightPressPending;
+
+    protected override void OnPreviewMouseRightButtonDown(MouseButtonEventArgs e)
+    {
+        base.OnPreviewMouseRightButtonDown(e);
+
+        // The window is the first stop of the tunnel, so for a press that is on
+        // the list, the list's own handler further down sets this again.
+        _filmstripRightPressPending = false;
+    }
+
+    // THE MENU IS ABOUT WHAT WAS RIGHT-CLICKED, EVEN WHEN THE PRESS NEVER
+    // REACHED THE LIST (2026-09-28). The target is set by the right-PRESS
+    // (PressFilmstripForMenu), but the menu opens on the release, and a release
+    // can arrive without that press - one that started somewhere else and slid
+    // onto a picture. Nothing then moved the target, so the menu was about
+    // whatever had been right-clicked last, some time before, and 삭제 went to
+    // that picture while the menu stood over another. So an opening with no
+    // press of its own is taken as the right-click itself, on the cell under
+    // the pointer. With a press, the press decides, as Explorer has it: a
+    // right-click that slides off its picture is still about that picture, and
+    // one pressed inside the marked set keeps the set.
+    private void ViewerFilmstrip_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+    {
+        bool pressed = _filmstripRightPressPending;
+        _filmstripRightPressPending = false;
+        if (pressed)
+        {
+            return;
+        }
+
+        PressFilmstripForMenu(e.OriginalSource is DependencyObject source
+            ? (ItemsControl.ContainerFromElement(ViewerFilmstrip, source) as ListBoxItem)?.Content as FilmstripCell
+            : null);
+    }
+
     // True from the moment the thumbnail list's menu opens until the command
     // chosen from it has run, and the one span in which FilmstripMenuItem
     // answers. The generation keeps a late reset from ending a menu opened
-    // after the one it belonged to.
+    // after the one it belonged to. Any OTHER menu opening ends it at once
+    // (see AnyMenu_Opened): the reset waits for Background priority, and a
+    // click queued behind a busy moment runs ahead of that - it would have
+    // handed a row of the tree's menu this menu's picture.
     private bool _filmstripMenuInPlay;
     private int _filmstripMenuGeneration;
 

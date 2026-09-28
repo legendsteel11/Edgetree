@@ -8605,6 +8605,7 @@
                                 PreviewMouseWheel="ViewerFilmstrip_PreviewMouseWheel"
                                 PreviewMouseLeftButtonDown="ViewerFilmstrip_PreviewMouseLeftButtonDown"
                                 PreviewMouseRightButtonDown="ViewerFilmstrip_PreviewMouseRightButtonDown"
+                                ContextMenuOpening="ViewerFilmstrip_ContextMenuOpening"
                                 AllowDrop="True"
                                 DragOver="ViewerFilmstrip_DragOver"
                                 Drop="ViewerFilmstrip_Drop"
