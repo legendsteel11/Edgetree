@@ -16599,6 +16599,42 @@ public partial class MainWindow : Window
     private void ContextMenu_PreviewMouseRightButtonUp(object sender, MouseButtonEventArgs e)
         => e.Handled = true;
 
+    // A DISABLED ROW IGNORES THE RIGHT BUTTON the way it ignores the left
+    // (2026-09-28, on request). The three menus that hand a right-press through
+    // to the row behind them (tree, search results, thumbnail list) did it from
+    // anywhere on the menu, a greyed-out row included - so right-clicking a
+    // dead row kept the menu up and selected whatever sat underneath it, which
+    // read as the row having done something. Each of them now asks this first
+    // and swallows the press when it lands on a disabled row.
+    //
+    // Asked by GEOMETRY, not by the event: input hit testing passes over a
+    // disabled element, so its press arrives from the menu behind it and its
+    // IsMouseOver never turns on - neither the event's source nor the row can
+    // say the pointer is there. Open submenus are searched too.
+    private static MenuItem? MenuRowUnderPointer(ItemsControl menu)
+    {
+        foreach (var row in menu.Items.OfType<MenuItem>())
+        {
+            if (!row.IsVisible)
+            {
+                continue;
+            }
+
+            if (row.IsSubmenuOpen && MenuRowUnderPointer(row) is { } inner)
+            {
+                return inner;
+            }
+
+            var at = Mouse.GetPosition(row);
+            if (at.X >= 0 && at.Y >= 0 && at.X < row.ActualWidth && at.Y < row.ActualHeight)
+            {
+                return row;
+            }
+        }
+
+        return null;
+    }
+
     // The companion press half of the same gesture: a right-click PRESS on an
     // open tree menu means "I want the menu for the row under my cursor" (the
     // menu is covering the rows below the one it belongs to - exactly where
@@ -16613,6 +16649,13 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // Not through a greyed-out row - see MenuRowUnderPointer.
+        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
+        {
+            return;
+        }
+
         menu.IsOpen = false;
 
         var position = Mouse.GetPosition(ExplorerTree);
@@ -16650,6 +16693,13 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // Not through a greyed-out row - see MenuRowUnderPointer.
+        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
+        {
+            return;
+        }
+
         menu.IsOpen = false;
 
         var position = Mouse.GetPosition(SearchResultsList);
@@ -32623,6 +32673,13 @@ public partial class MainWindow : Window
         {
             return;
         }
+
+        // Not through a greyed-out row - see MenuRowUnderPointer.
+        if (MenuRowUnderPointer(menu) is { IsEnabled: false })
+        {
+            return;
+        }
+
         menu.IsOpen = false;
 
         var position = Mouse.GetPosition(ViewerFilmstrip);
