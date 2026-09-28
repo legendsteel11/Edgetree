@@ -35979,6 +35979,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // DEBUG: the exact path the blue dot compares changes against - see
+        // LogSearchDot.
+        LogClickLine($"search scope: {folder}");
+
         // A cache for a folder that has since been removed (or a share that
         // isn't mounted right now) would hand back results that can't lead
         // anywhere - fall through to the scan, which reports it properly.
@@ -36110,8 +36114,7 @@ public partial class MainWindow : Window
     // and the listing that replaced the results was missing it.
     private void NoteSearchScopeChanged(string changedFolderPath)
     {
-        if (_searchIndexStale || (!_searchIndexReady && !_searchScanning) ||
-            _searchScopeFolder is not { Length: > 0 } scope)
+        if (_searchIndexStale || _searchScopeFolder is not { Length: > 0 } scope)
         {
             return;
         }
@@ -36126,10 +36129,18 @@ public partial class MainWindow : Window
             return;
         }
 
+        // After the scope test, so the log below speaks only of changes inside
+        // the searched folder - the watchers report every change on every drive.
+        if (!_searchIndexReady && !_searchScanning)
+        {
+            LogSearchDot($"change in {changed} ignored: no index for the scope yet");
+            return;
+        }
+
         MarkSearchIndexStale();
     }
 
-    private void MarkSearchIndexStale()
+    private void MarkSearchIndexStale([System.Runtime.CompilerServices.CallerMemberName] string by = "")
     {
         if (_searchIndexStale)
         {
@@ -36137,9 +36148,10 @@ public partial class MainWindow : Window
         }
         _searchIndexStale = true;
         UpdateSearchRefreshIndicator();
+        LogSearchDot($"marked by {by}");
     }
 
-    private void ClearSearchIndexStale()
+    private void ClearSearchIndexStale([System.Runtime.CompilerServices.CallerMemberName] string by = "")
     {
         if (!_searchIndexStale)
         {
@@ -36147,7 +36159,21 @@ public partial class MainWindow : Window
         }
         _searchIndexStale = false;
         UpdateSearchRefreshIndicator();
+        LogSearchDot($"cleared by {by}");
     }
+
+    // DEBUG only (2026-09-28). The dot was reported as never appearing, and
+    // three different things would each look like that: the watcher sending
+    // nothing for the drive, a change outside what the search is scoped to,
+    // and a mark cleared again before anyone could see it - indexing starts
+    // when a search opens on a due index, and starting clears the mark. These
+    // lines, with the "search scope:" one, tell them apart. That report was
+    // the third: made with the search view open, a change on a mapped NAS
+    // drive showed the dot at once, and the log read "marked by
+    // NoteSearchScopeChanged". Kept for the first, which a network drive's
+    // watcher can still do.
+    [System.Diagnostics.Conditional("DEBUG")]
+    private void LogSearchDot(string line) => LogClickLine($"search dot: {line}");
 
     // The glyph keeps the row's own colour either way; only the dot appears.
     // A whole glyph turning blue reads as a state the button is IN, while a dot
