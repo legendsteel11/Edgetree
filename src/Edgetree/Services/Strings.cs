@@ -522,8 +522,10 @@ public static class Strings
     // 주어를 받을 윗줄이 없으므로 `썸네일`을 적는다.
     public static string MenuFilmstripGrid = "썸네일 목록으로 보기";
     // A name line under each thumbnail, in both shapes. `썸네일` for the same
-    // reason as the row above: nothing in the menu supplies the subject.
-    public static string MenuFilmstripNames = "썸네일 아래 파일 이름 표시";
+    // reason as the row above: nothing in the menu supplies the subject. Was
+    // `썸네일 아래 파일 이름 표시` until the author shortened it (2026-09-28);
+    // the English was left as it was.
+    public static string MenuFilmstripNames = "썸네일 파일명 표시";
     // 앱 전체화면이 창 모드에서 어디까지 가는지. 사용자가 고른 말이고, "화면 전체"
     // 대신 `바탕화면`인 것이 요점 - 앱 전체화면 자체가 이미 "화면"을 쓰고 있어서
     // 그 말로는 둘이 구분되지 않는다.

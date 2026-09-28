@@ -30517,9 +30517,10 @@ public partial class MainWindow : Window
 
     // The list's own height range. The floor is two rows at the smallest cell
     // WITHOUT names - anything less is a bar with a vertical scrollbar, which is
-    // worse than the bar at being one. With 썸네일 아래 파일 이름 표시 on, each
-    // row is a name line taller and this floor can show less than two of them;
-    // the number was not changed with that option (2026-09-28).
+    // worse than the bar at being one. With 썸네일 파일명 표시 on - the default
+    // since 2026-09-28 - each row is a name line taller and this floor can show
+    // less than two of them at the smallest cell; the number was not changed
+    // with that option.
     //
     // The ceiling is deliberately far past any panel: what actually stops the
     // grip is the floor kept for the picture below, which was kept small on

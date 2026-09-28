@@ -8720,12 +8720,17 @@
                                          it is not an aside: every other list
                                          draws the name and the tooltip only adds
                                          the path, so a slow reveal costs nothing.
-                                         THIS strip draws no name unless 썸네일
-                                         아래 파일 이름 표시 is on, and it is off
-                                         by default, so the tooltip IS the name,
-                                         and a cell has nothing to say about
-                                         itself until the tooltip arrives
-                                         (2026-08-26, on report).
+                                         THIS strip drew no name at all when the
+                                         delay was set, so the tooltip WAS the
+                                         name, and a cell had nothing to say
+                                         about itself until the tooltip arrived
+                                         (2026-08-26, on report). The name line
+                                         (썸네일 파일명 표시) has been on by
+                                         default since 2026-09-28; the delay was
+                                         kept, because the line cuts a long name
+                                         short and can be switched off, and in
+                                         both cases the tooltip is still where
+                                         any cell's whole name can be read.
                                          Its own literal on purpose: it is not a
                                          fraction of the shared number and must
                                          not follow it when that one is tuned.

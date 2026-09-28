@@ -35,6 +35,9 @@ const report = (name, hits, note) => {
 //
 // 이름을 바꿀 때 여기 한 줄 추가하는 것이 이 스크립트를 쓰는 방법이다.
 const RETIRED = [
+  // Shortened before it ever shipped; listed so the long form cannot linger in
+  // the help or the docs.
+  ['썸네일 아래 파일 이름 표시', '썸네일 파일명 표시', '2026-09-28'],
   // 라벨이 주어를 맞히려다 계속 틀렸다. 폴더 하나 · 드라이브 · 여러 줄 세 가지에
   // 걸리는 동작인데 이름은 하나만 말할 수 있어서, 화면에 뜬 쪽이 나머지 둘에는
   // 거짓이 됐다. 복수형 문자열까지 따로 두고도 안 맞았다. 옆의 잘라내기·삭제처럼
