@@ -45,6 +45,50 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // TEN LINES, kept at ten on the author's reading of the draft. The four
+    // additions lead - two of them the thumbnail list's own, the names under
+    // the cells and renaming from them - then the four changes someone will
+    // notice in use, then the two fixes. The notes carry
+    // three more changes than the card: the F7 folder landing at the top of
+    // the view, a right-click on an open menu doing nothing, and the tree
+    // menu's shortcuts working while it is open.
+    //
+    // Off the card and the notes both: the About window's MagicLoupe link (the
+    // v2.5.9 SweepCap precedent), the search index's integrity fix (it repaired
+    // this release's own background re-index), and the thumbnail menu's
+    // right-button handling - its symptom reads as alarming, and what a reader
+    // can see of the change is the notes' line about an open menu.
+    //
+    // The ↑↓ half of the side-last-clicked line is scoped to the thumbnail
+    // list (썸네일 목록) because that is the only shape it applies to: in the
+    // bar the arrows stay the tree's.
+    version: 'v2.6.2',
+    ko: [
+      '썸네일 아래에 파일명이 표시됩니다. `옵션 → 멀티미디어 패널 → 썸네일 파일명 표시`에서 비활성화할 수 있습니다.',
+      '보고 있는 썸네일의 파일명을 한 번 더 클릭하거나 `F2`를 누르면 썸네일에서 바로 이름을 변경할 수 있습니다.',
+      '`Ctrl+Shift+F`로 트리에서 선택한 폴더를 바로 검색할 수 있습니다.',
+      '트리 우클릭 메뉴에 `전체 선택`이 추가되었습니다. 단축키는 `Ctrl+A`입니다.',
+      '`Ctrl+A`, `F2`와 썸네일 목록의 `↑` `↓`는 트리와 썸네일 중 마지막으로 클릭한 쪽에서 동작합니다.',
+      '썸네일을 우클릭하면 멀티미디어 패널과 트리도 그 파일로 이동합니다.',
+      '검색을 열면 저장된 결과를 먼저 표시하고, 필요하면 자동으로 다시 인덱싱해 결과를 갱신합니다.',
+      '`속성` 창이 우클릭한 위치에 열리고, 자동 숨김이나 `항상 위에 표시` 상태에서도 앱 뒤에 가려지지 않습니다.',
+      '파일 이름을 변경하면 상위 폴더가 선택되던 문제를 수정했습니다.',
+      '`탐색기에서 위치 열기`로 열린 탐색기 창에서 파일이 아래 끝에 걸쳐 보이던 문제를 수정했습니다.',
+    ],
+    en: [
+      'File names now show under the thumbnails. Options → Multimedia panel → File names under thumbnails turns them off.',
+      'Rename a file from the thumbnails: click the name of the one on show again, or press F2.',
+      'Ctrl+Shift+F searches the folder selected in the tree.',
+      "Select all is now on the tree's right-click menu. Ctrl+A does the same.",
+      'Ctrl+A, F2 and, in the thumbnail grid, ↑↓ act on whichever of the tree and the thumbnails was clicked last.',
+      'Right-clicking a thumbnail now moves the multimedia panel and the tree to that file.',
+      'Opening a search shows the saved results first, then re-indexes when needed and updates them.',
+      'The Properties window opens where you right-clicked, and no longer hides behind the app when it stays on top.',
+      'Fixed the parent folder getting selected after renaming a file.',
+      'Fixed Reveal in Explorer leaving the file half-hidden at the bottom of the Explorer window.',
+    ],
+  },
+  {
     // SIX LINES, the longest card in a while, kept at six on the author's
     // reading of the draft. The two additions lead, then the three changes
     // someone will notice in use, then the one fix.

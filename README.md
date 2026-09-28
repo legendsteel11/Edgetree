@@ -1,4 +1,4 @@
-# Edgetree v2.6.1
+# Edgetree v2.6.2
 
 [한국어 안내](README-ko.md)
 
@@ -216,6 +216,19 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.6.2 (2026-09-28)
+
+- File names now show under the thumbnails. Options → Multimedia panel → File names under thumbnails turns them off.
+- Rename a file from the thumbnails: click the name of the one on show again, or press F2.
+- Ctrl+Shift+F searches the folder selected in the tree.
+- Select all is now on the tree's right-click menu. Ctrl+A does the same.
+- Ctrl+A, F2 and, in the thumbnail grid, ↑↓ act on whichever of the tree and the thumbnails was clicked last.
+- Right-clicking a thumbnail now moves the multimedia panel and the tree to that file.
+- Opening a search shows the saved results first, then re-indexes when needed and updates them.
+- The Properties window opens where you right-clicked, and no longer hides behind the app when it stays on top.
+- Fixed the parent folder getting selected after renaming a file.
+- Fixed Reveal in Explorer leaving the file half-hidden at the bottom of the Explorer window.
 
 ### v2.6.1 (2026-09-14)
 

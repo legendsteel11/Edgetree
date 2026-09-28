@@ -16,7 +16,7 @@
          this instead, which is correct for a WPF-entry app. -->
     <NoWarn>$(NoWarn);WFAC010</NoWarn>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
-    <Version>2.6.1</Version>
+    <Version>2.6.2</Version>
     <!-- Explicit rather than left to default from the .csproj filename, so a
          future file rename can't silently change the shipped exe/dll name
          again - the C# namespace stays SidebarExplorer.App throughout the
