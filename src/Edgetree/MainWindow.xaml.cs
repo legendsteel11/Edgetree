@@ -15011,9 +15011,19 @@ public partial class MainWindow : Window
             Key.F5 => () => RefreshFolder_Click(sender, e),
             Key.F7 => () => NewFolder_Click(sender, e),
             Key.Enter when !menuItemHighlighted => () => OpenItem_Click(sender, e),
+            Key.X when Keyboard.Modifiers == ModifierKeys.Control => () => CutItem_Click(sender, e),
             Key.C when Keyboard.Modifiers == ModifierKeys.Control => () => CopyItem_Click(sender, e),
             Key.C when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) => () => CopyPath_Click(sender, e),
             Key.V when Keyboard.Modifiers == ModifierKeys.Control => () => PasteItem_Click(sender, e),
+            // As the window answers it: a file counts as the folder it is in.
+            Key.F when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) &&
+                       SearchFolderForSelection() is { } searchFolder => () => SearchInFolder(searchFolder),
+            // 폴더로 이동, file rows only - the test ExplorerTree_KeyDown makes,
+            // and the same Alt trap: the real key is in SystemKey.
+            Key.System when e.SystemKey == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt &&
+                            ExplorerTree.SelectedItem is FileSystemItem
+                                { IsPlaceholder: false, IsDirectory: false, Parent: not null }
+                => () => GoToFolder_Click(sender, e),
             _ => null
         };
 
