@@ -20743,7 +20743,7 @@ public partial class MainWindow : Window
     // outside the searched scope entirely.
     private void DropMovedSearchEntries(IReadOnlyList<string> movedPaths)
     {
-        if (_searchEntries.Count == 0 || movedPaths.Count == 0)
+        if (movedPaths.Count == 0 || (_searchEntries.Count == 0 && _searchRefreshDrops is null))
         {
             return;
         }
@@ -20752,7 +20752,7 @@ public partial class MainWindow : Window
             .Select(p => p.TrimEnd(Path.DirectorySeparatorChar))
             .ToList();
 
-        int removed = _searchEntries.RemoveAll(entry =>
+        int removed = RemoveSearchEntries(entry =>
             moved.Any(m =>
                 string.Equals(entry.FullPath, m, StringComparison.OrdinalIgnoreCase) ||
                 entry.FullPath.StartsWith(m + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)));
@@ -20761,6 +20761,16 @@ public partial class MainWindow : Window
         {
             RunSearchFilter();
         }
+    }
+
+    // Takes entries out of the results AND out of a refresh walking behind
+    // them (see _searchRefreshDrops) - the one way the three places that drop
+    // a result (a move, a delete, a click on a file that has gone) do it, so
+    // none of them can come back when the refresh replaces the results.
+    private int RemoveSearchEntries(Predicate<FileSearchService.SearchEntry> gone)
+    {
+        _searchRefreshDrops?.Add(gone);
+        return _searchEntries.RemoveAll(gone);
     }
 
     private void PasteItem_Click(object sender, RoutedEventArgs e)
@@ -35748,7 +35758,7 @@ public partial class MainWindow : Window
             // RefreshSearchIndexIfDue finds the index due, and then behind the
             // results already on screen; the refresh button and a new scope
             // still walk it on demand.
-            if (HasSearchScope && _searchEntries.Count == 0 && !_searchScanning)
+            if (HasSearchScope && !_searchIndexReady && !_searchScanning)
             {
                 LoadCachedIndexOrScan();
             }
@@ -35979,6 +35989,8 @@ public partial class MainWindow : Window
             _searchEntries.Clear();
             _searchEntries.AddRange(cached.Entries);
             _searchIndexSavedAtUtc = cached.SavedAtUtc;
+            _searchIndexReady = true;
+            _searchIndexPartial = false;
             // Nothing has been observed changing since this listing arrived -
             // whatever happened while the app was closed is what the age says.
             ClearSearchIndexStale();
@@ -36001,6 +36013,27 @@ public partial class MainWindow : Window
     // searchable until this one is complete; it replaces them in one step.
     private List<FileSearchService.SearchEntry>? _searchRefreshFresh;
 
+    // What was taken out of the results while that refresh walked - deleted,
+    // moved, or found missing on a click - applied to its listing when it
+    // replaces them (2026-09-28). The walk may already have listed those files
+    // before they went, and without this they came back at the swap and were
+    // saved with it. Null when no refresh is running.
+    private List<Predicate<FileSearchService.SearchEntry>>? _searchRefreshDrops;
+
+    // An index of the current scope is in _searchEntries - loaded from disk or
+    // walked to the end - so a refresh has something to stand behind and a
+    // change inside the folder has something to mark. Asked instead of
+    // _searchEntries.Count, which cannot tell an empty folder's index from no
+    // index at all: an empty one was never refreshed, and no change was ever
+    // marked on it, however many files then arrived (2026-09-28).
+    private bool _searchIndexReady;
+
+    // The index on screen came from a walk the storage broke off part way (see
+    // FileSearchService.ScanResult). Shown, because it is all there is, but not
+    // saved, and due for a refresh the next time a search opens. Not the blue
+    // dot: that one says the folder has changed, and this folder need not have.
+    private bool _searchIndexPartial;
+
     // How old a saved index on a NETWORK drive may be before opening a search
     // on it refreshes it. A day, because a share is re-walked at around 1,700
     // files a second (a 610k-file share took about six minutes), and paying
@@ -36013,19 +36046,20 @@ public partial class MainWindow : Window
     //   - it came from disk and the folder is LOCAL - a local walk is quick,
     //     and a saved listing may predate anything done while the app was shut;
     //   - it came from disk, the folder is on a NETWORK drive, and it is older
-    //     than NetworkSearchIndexMaxAge.
+    //     than NetworkSearchIndexMaxAge;
+    //   - the walk that made it was broken off part way (2026-09-28).
     // An index walked THIS session with no change seen is left alone: the
     // drive watchers would have marked it, and re-walking it on every return to
     // the search view would spend a scan to learn nothing.
     private void RefreshSearchIndexIfDue()
     {
-        if (_searchScanning || _searchEntries.Count == 0 ||
+        if (_searchScanning || !_searchIndexReady ||
             _searchScopeFolder is not { Length: > 0 } folder)
         {
             return;
         }
 
-        bool due = _searchIndexStale ||
+        bool due = _searchIndexStale || _searchIndexPartial ||
             (_searchIndexSavedAtUtc is { } savedAt &&
              (!IsNetworkSearchScope(folder) || DateTime.UtcNow - savedAt > NetworkSearchIndexMaxAge));
         if (due)
@@ -36068,9 +36102,15 @@ public partial class MainWindow : Window
     // have changed", not "the only time refreshing is worth it".
     private bool _searchIndexStale;
 
+    // DURING A WALK TOO (2026-09-28). A walk in progress used to make this
+    // return at once, while StartScopeScan clears the mark as a walk STARTS so
+    // that a change landing mid-walk can set it again - the two said opposite
+    // things, and the guard won. A refresh on a share runs for minutes, and a
+    // change in that time, one the walk may already have passed, went unmarked
+    // and the listing that replaced the results was missing it.
     private void NoteSearchScopeChanged(string changedFolderPath)
     {
-        if (_searchIndexStale || _searchScanning || _searchEntries.Count == 0 ||
+        if (_searchIndexStale || (!_searchIndexReady && !_searchScanning) ||
             _searchScopeFolder is not { Length: > 0 } scope)
         {
             return;
@@ -36086,6 +36126,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        MarkSearchIndexStale();
+    }
+
+    private void MarkSearchIndexStale()
+    {
+        if (_searchIndexStale)
+        {
+            return;
+        }
         _searchIndexStale = true;
         UpdateSearchRefreshIndicator();
     }
@@ -36184,10 +36233,10 @@ public partial class MainWindow : Window
     // the UI thread where the current query is (re-)applied as they arrive.
     // keepCurrent: a REFRESH. The current results stay on screen and
     // searchable, the walk fills a list of its own, and that list replaces
-    // them in one step when it completes. A refresh that is cancelled or fails
-    // leaves the current results exactly as they were. Without it, a refresh
-    // would blank the list and refill it, which on a share is minutes of
-    // half a result set.
+    // them in one step when it completes. A refresh that is cancelled or does
+    // not complete leaves the current results exactly as they were. Without
+    // it, a refresh would blank the list and refill it, which on a share is
+    // minutes of half a result set.
     private async void StartScopeScan(IReadOnlyList<string> roots, bool keepCurrent = false)
     {
         // Supersede any in-flight scan, but don't dispose its CTS here - the
@@ -36197,15 +36246,22 @@ public partial class MainWindow : Window
 
         List<FileSearchService.SearchEntry>? fresh = keepCurrent ? new() : null;
         _searchRefreshFresh = fresh;
+        var drops = keepCurrent ? new List<Predicate<FileSearchService.SearchEntry>>() : null;
+        _searchRefreshDrops = drops;
         if (fresh is null)
         {
             _searchEntries.Clear();
+            _searchIndexReady = false;
+            _searchIndexPartial = false;
             _searchDisplayLimit = SearchResultDisplayCap;
             SetSearchRows(new List<SearchRow>());
         }
         // Cleared as the scan starts rather than when it ends: a change that
         // lands mid-scan may well be one the walk has already passed, and
-        // re-marking is the honest answer to that.
+        // re-marking is the honest answer to that - NoteSearchScopeChanged
+        // marks during a walk. A refresh that does not complete puts the mark
+        // back as it found it.
+        bool staleBefore = _searchIndexStale;
         ClearSearchIndexStale();
         // Whatever was loaded from disk is gone along with the entries above, so
         // the age must go too - otherwise a scan cancelled halfway would leave
@@ -36217,23 +36273,11 @@ public partial class MainWindow : Window
             _searchIndexSavedAtUtc = null;
         }
 
-        var existingRoots = roots.Where(Directory.Exists).ToList();
-        if (existingRoots.Count == 0)
-        {
-            SetSearchScanning(false);
-            _searchScanCts = null;
-            _searchRefreshFresh = null;
-            if (fresh is null)
-            {
-                SearchStatusText.Text = Strings.SearchStatusScopeMissing;
-            }
-            else
-            {
-                UpdateSearchStatus();
-            }
-            return;
-        }
-
+        // Whether the folder is there at all is no longer asked here, on the UI
+        // thread: the walk asks on its own thread and says so in its result
+        // (ScanResult.RootMissing). Asked here, a share that had stopped
+        // answering held the window for as long as the question took - and
+        // since 2026-09-16 opening a search could be what asked it.
         var cts = new CancellationTokenSource();
         _searchScanCts = cts;
         // Checked (not the source) in the closures/continuation below - a token
@@ -36291,55 +36335,94 @@ public partial class MainWindow : Window
 
         try
         {
-            await FileSearchService.ScanAsync(existingRoots, progress, token);
+            var result = await FileSearchService.ScanAsync(roots, progress, token);
+            if (token.IsCancellationRequested)
+            {
+                return;
+            }
 
-            if (!token.IsCancellationRequested)
+            // DEBUG only. A refresh that does not complete is silent by design,
+            // so this line is the one place its outcome can be read back.
+            LogClickLine(
+                $"search walk: {roots[0]} {(fresh is null ? "full" : "refresh")} -> {result}, " +
+                $"listed {fresh?.Count ?? _searchEntries.Count}, dropped-during {drops?.Count ?? 0}");
+
+            SetSearchScanning(false);
+
+            if (result == FileSearchService.ScanResult.Complete)
             {
                 if (fresh is not null)
                 {
+                    foreach (var drop in drops!)
+                    {
+                        fresh.RemoveAll(drop);
+                    }
                     _searchEntries.Clear();
                     _searchEntries.AddRange(fresh);
                     _searchIndexSavedAtUtc = null;
-                    _searchRefreshFresh = null;
                 }
 
-                SetSearchScanning(false);
+                _searchIndexReady = true;
+                _searchIndexPartial = false;
                 RunSearchFilter();
 
-                // Only a completed scan is worth saving - a cancelled one holds
-                // whatever fraction of the folder it got through, which would
-                // then look like a complete index on the next launch. Handed to
-                // a worker so serializing a large index doesn't freeze the UI;
-                // the list is finished being written by now, but it's copied
-                // rather than shared since the next scan clears the original.
+                // Only a COMPLETE walk is saved - a cancelled or broken-off one
+                // holds whatever fraction of the folder it got through, which
+                // would then look like a complete index on the next launch.
+                // Handed to a worker so serializing a large index doesn't freeze
+                // the UI; the list is finished being written by now, but it's
+                // copied rather than shared since the next scan clears the
+                // original.
                 var snapshot = _searchEntries.ToList();
-                string scopeToSave = existingRoots[0];
+                string scopeToSave = roots[0];
                 _ = Task.Run(() => SearchIndexCache.Save(scopeToSave, snapshot));
+            }
+            else if (fresh is not null)
+            {
+                // A REFRESH THAT DID NOT COMPLETE CHANGES NOTHING, AND SAYS
+                // NOTHING (2026-09-28). The results, their age, the cache on disk
+                // and the mark stay as they were, so the next search that opens
+                // here is due again and asks again. Every ending used to count
+                // as complete, and half a share replaced the index and was saved
+                // over the good cache.
+                if (staleBefore)
+                {
+                    MarkSearchIndexStale();
+                }
+                UpdateSearchStatus();
+            }
+            else if (result == FileSearchService.ScanResult.RootMissing)
+            {
+                SearchStatusText.Text = Strings.SearchStatusScopeMissing;
+            }
+            else
+            {
+                // A first walk the storage broke off: what it found stays on
+                // screen, since it is all there is, but it is not saved, and the
+                // next search that opens here walks the folder again.
+                _searchIndexReady = true;
+                _searchIndexPartial = true;
+                RunSearchFilter();
             }
         }
         catch (OperationCanceledException)
         {
             // Superseded by a newer scan / scope change - leave state alone.
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            if (!token.IsCancellationRequested)
-            {
-                SetSearchScanning(false);
-                if (fresh is null)
-                {
-                    SearchStatusText.Text = Strings.SearchStatusScopeMissing;
-                }
-                else
-                {
-                    _searchRefreshFresh = null;
-                    UpdateSearchStatus();
-                }
-            }
-        }
         finally
         {
-            // Only clear the field if a newer scan hasn't already replaced it.
+            // Only clear the fields a newer scan hasn't already replaced. The
+            // refresh's lists go here too when it was cancelled: a cancel with
+            // no scan after it (a scope loaded from disk) used to leave the
+            // abandoned listing held until the next walk.
+            if (ReferenceEquals(_searchRefreshFresh, fresh))
+            {
+                _searchRefreshFresh = null;
+            }
+            if (ReferenceEquals(_searchRefreshDrops, drops))
+            {
+                _searchRefreshDrops = null;
+            }
             if (ReferenceEquals(_searchScanCts, cts))
             {
                 _searchScanCts = null;
@@ -37196,7 +37279,7 @@ public partial class MainWindow : Window
         // row so the list corrects itself as stale hits are found.
         if (!File.Exists(entry.FullPath))
         {
-            _searchEntries.Remove(entry);
+            RemoveSearchEntries(e => string.Equals(e.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
             RunSearchFilter();
             // After the filter, which would otherwise overwrite this with a
             // plain result count.
@@ -37489,7 +37572,7 @@ public partial class MainWindow : Window
         // results and the count both reflect the deletion. The tree, if the
         // parent folder is expanded there, refreshes itself via its own
         // FileSystemWatcher.
-        _searchEntries.RemoveAll(x => string.Equals(x.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+        RemoveSearchEntries(x => string.Equals(x.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
         RunSearchFilter();
     }
 }
