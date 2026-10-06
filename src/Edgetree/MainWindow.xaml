@@ -1809,6 +1809,14 @@
             <MenuItem Header="{x:Static services:Strings.MenuCopy}"
                     InputGestureText="Ctrl+C"
                     Click="SearchCopy_Click"/>
+            <!-- Present and always off (2026-10-06): the search view has no
+                 folder to paste into - a paste goes to a folder picked in the
+                 tree - and the thumbnail list's menu greys the same row out
+                 while the results drive it. A row missing from one menu and
+                 greyed in the other read as two different rules. -->
+            <MenuItem Header="{x:Static services:Strings.MenuPaste}"
+                    InputGestureText="Ctrl+V"
+                    IsEnabled="False"/>
             <MenuItem Header="{x:Static services:Strings.MenuDelete}"
                     InputGestureText="Del"
                     Click="SearchDelete_Click"/>
@@ -8678,21 +8686,35 @@
                                             InputGestureText="Ctrl+A"
                                             Click="FilmstripSelectAll_Click"/>
                                     <Separator/>
+                                    <!-- Tagged so FilmstripContextMenu_Opened can
+                                         stand them down while the search results
+                                         drive the list (2026-10-06): 붙여넣기
+                                         always, the rest when the menu names no
+                                         file. -->
                                     <MenuItem Header="{x:Static services:Strings.MenuCut}"
                                             InputGestureText="Ctrl+X"
+                                            Tag="cut"
                                             Click="CutItem_Click"/>
                                     <MenuItem Header="{x:Static services:Strings.MenuCopy}"
                                             InputGestureText="Ctrl+C"
+                                            Tag="copy"
                                             Click="CopyItem_Click"/>
                                     <MenuItem Header="{x:Static services:Strings.MenuPaste}"
                                             InputGestureText="Ctrl+V"
+                                            Tag="paste"
                                             Click="PasteItem_Click"/>
-                                    <Separator/>
+                                    <!-- 삭제 sits with the other file rows, as it
+                                         does in the tree's, the results' and the
+                                         panel's menus. This one alone set it
+                                         apart with separators of its own until
+                                         2026-10-06. -->
                                     <MenuItem Header="{x:Static services:Strings.MenuDelete}"
                                             InputGestureText="Del"
+                                            Tag="delete"
                                             Click="DeleteItem_Click"/>
                                     <Separator/>
                                     <MenuItem Header="{x:Static services:Strings.MenuRevealInExplorer}"
+                                            Tag="reveal"
                                             Click="RevealInExplorer_Click"/>
                                     <!-- LAST, where the tree menu keeps it. Its own
                                          handler rather than the tree's: the tree does
@@ -8702,6 +8724,7 @@
                                          the folder - the cell is the one answer that
                                          is always right. -->
                                     <MenuItem Header="{x:Static services:Strings.MenuProperties}"
+                                            Tag="properties"
                                             Click="FilmstripProperties_Click"/>
                                 </ContextMenu>
                             </ListBox.ContextMenu>

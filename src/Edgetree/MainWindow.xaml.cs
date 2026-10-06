@@ -15441,6 +15441,17 @@ public partial class MainWindow : Window
                 : new List<FileSystemItem>();
         }
 
+        // NEVER THE TREE BEHIND THE SEARCH VIEW (2026-10-06). Its selection is
+        // out of sight there - usually the folder the search was opened on -
+        // and nothing on screen says a command would act on it. The menu rows
+        // that reach here stand down in that state (FilmstripContextMenu_
+        // Opened); this is the rule they rely on, kept where every caller
+        // passes through.
+        if (_isSearchViewActive)
+        {
+            return new List<FileSystemItem>();
+        }
+
         return ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false } single
             ? new List<FileSystemItem> { single }
             : new List<FileSystemItem>();
@@ -16935,7 +16946,10 @@ public partial class MainWindow : Window
     // answer there - see FilmstripMenuItem.
     private void RevealInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        if ((FilmstripMenuItem ?? ExplorerTree.SelectedItem as FileSystemItem) is { IsPlaceholder: false } item)
+        // The tree's selection only where the tree is on screen - see
+        // GetEffectiveSelection.
+        if ((FilmstripMenuItem ?? (_isSearchViewActive ? null : ExplorerTree.SelectedItem as FileSystemItem))
+            is { IsPlaceholder: false } item)
         {
             ShellFileService.RevealInExplorer(item.FullPath);
         }
@@ -20944,7 +20958,12 @@ public partial class MainWindow : Window
 
     private void PasteItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
+        // Not while the search view covers the tree: the folder this would
+        // paste into is the tree's selection, which is out of sight there (see
+        // FilmstripContextMenu_Opened, 2026-10-06). A paste goes to a folder
+        // picked in the tree.
+        if (_isSearchViewActive ||
+            ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
         {
             return;
         }
@@ -22385,7 +22404,9 @@ public partial class MainWindow : Window
     // which, for a list showing a folder's pictures, is that folder.
     private void FilmstripProperties_Click(object sender, RoutedEventArgs e)
     {
-        if ((_filmstripMenuTarget ?? ExplorerTree.SelectedItem as FileSystemItem)
+        // The tree's selection only where the tree is on screen - see
+        // GetEffectiveSelection.
+        if ((_filmstripMenuTarget ?? (_isSearchViewActive ? null : ExplorerTree.SelectedItem as FileSystemItem))
             is { IsPlaceholder: false } target)
         {
             OpenPropertiesSheet(target.FullPath, sender);
@@ -33325,6 +33346,36 @@ public partial class MainWindow : Window
         AnyMenu_Opened(sender, e);
         _filmstripMenuInPlay = true;
         _filmstripMenuGeneration++;
+
+        // WHILE THE SEARCH RESULTS DRIVE THE LIST (2026-10-06), the folder
+        // these rows fall back to - the tree's selection - is the one hidden
+        // behind the results: the folder the search was opened on, as often as
+        // not. 붙여넣기 put files there (reported: a paste from the list landed
+        // in the search's top folder), and a right-click between cells, which
+        // names no picture, handed 삭제 that whole folder. A drop on the list
+        // was already refused here for the same reason (FilmstripDropFolder).
+        // So 붙여넣기 stands down for the whole search - it belongs in the
+        // tree, on a folder picked there - and the file rows stand down when
+        // the menu names neither a cell nor any marks. Set both ways every
+        // time: the same menu serves the tree.
+        if (sender is ContextMenu menu)
+        {
+            bool searching = _isSearchViewActive;
+            bool namesFiles = _multiSelection.Count > 0 || _filmstripMenuTarget is not null;
+            SetMenuItemEnabled(menu, "paste", !searching);
+            foreach (string tag in new[] { "cut", "copy", "delete", "reveal", "properties" })
+            {
+                SetMenuItemEnabled(menu, tag, !searching || namesFiles);
+            }
+        }
+    }
+
+    private static void SetMenuItemEnabled(ItemsControl menu, string tag, bool isEnabled)
+    {
+        if (FindTaggedMenuElement<MenuItem>(menu, tag) is { } item)
+        {
+            item.IsEnabled = isEnabled;
+        }
     }
 
     private void FilmstripContextMenu_Closed(object sender, RoutedEventArgs e)
