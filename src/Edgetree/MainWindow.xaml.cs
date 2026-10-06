@@ -36062,12 +36062,121 @@ public partial class MainWindow : Window
     // Replaces the bound rows in one shot (see _searchRows) - reassigning
     // ItemsSource to a fresh list is a single collection reset rather than a
     // per-row notification storm.
-    private void SetSearchRows(List<SearchRow> rows)
+    //
+    // keepPlace: the rows are rebuilt because the index under them was
+    // replaced, not because anyone asked for a different list (2026-10-06).
+    // A collection reset drops the selection, the scroll position and a
+    // keyboard focus that was on a row, so a refresh finishing behind the
+    // results sent someone reading them back to the top with nothing selected
+    // and the arrow keys going nowhere - even when it had found exactly what
+    // was already listed, which for a folder nothing has touched is every
+    // time. An identical list is now left standing; a different one gets the
+    // selected row, the row at the top and the keyboard put back.
+    private void SetSearchRows(List<SearchRow> rows, bool keepPlace = false)
     {
+        if (keepPlace && SearchRowsMatch(_searchRows, rows))
+        {
+            // DEBUG only, with the line below: which of the two a refresh got.
+            LogClickLine($"search rows: refresh found the same {rows.Count} rows, list left standing");
+            return;
+        }
+
+        SearchRow? selected = null;
+        SearchRow? topRow = null;
+        bool hadKeyboard = false;
+        if (keepPlace)
+        {
+            selected = SearchResultsList.SelectedItem as SearchRow;
+            hadKeyboard = SearchResultsList.IsKeyboardFocusWithin;
+            // Item-unit scrolling (FavoritesListBoxStyle), so the offset IS
+            // the index of the row at the top.
+            if (FindDescendant<ScrollViewer>(SearchResultsList) is { } scroller &&
+                (int)scroller.VerticalOffset is var top && top > 0 && top < _searchRows.Count)
+            {
+                topRow = _searchRows[top];
+            }
+        }
+
         _searchRows = rows;
         SearchResultsList.ItemsSource = rows;
+
+        if (keepPlace)
+        {
+            var reselect = selected is null ? null : rows.FirstOrDefault(r => IsSameSearchPlace(r, selected));
+            int topIndex = topRow is null ? -1 : rows.FindIndex(r => IsSameSearchPlace(r, topRow));
+            // Before RelinkSearchViewer, which keeps a previewed result that is
+            // still listed - this makes its row the selected one again too.
+            if (reselect is not null)
+            {
+                SearchResultsList.SelectedItem = reselect;
+            }
+
+            LogClickLine($"search rows: refresh rebuilt the list ({rows.Count} rows), " +
+                $"selection {(selected is null ? "none" : reselect is null ? "gone" : "kept")}, " +
+                $"top row {(topRow is null ? "0" : topIndex.ToString())}, keyboard {(hadKeyboard ? "in the list" : "elsewhere")}");
+
+            if (topIndex > 0 || (hadKeyboard && reselect is not null))
+            {
+                // After the reset has been laid out, or there is no extent to
+                // scroll in and no container to focus.
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    if (!ReferenceEquals(_searchRows, rows))
+                    {
+                        return;
+                    }
+
+                    if (topIndex > 0 && FindDescendant<ScrollViewer>(SearchResultsList) is { } scroller)
+                    {
+                        scroller.ScrollToVerticalOffset(topIndex);
+                        SearchResultsList.UpdateLayout();
+                    }
+
+                    if (hadKeyboard && reselect is not null &&
+                        SearchResultsList.ItemContainerGenerator.ContainerFromItem(reselect) is ListBoxItem item)
+                    {
+                        item.Focus();
+                    }
+                }), System.Windows.Threading.DispatcherPriority.Loaded);
+            }
+        }
+
         RelinkSearchViewer();
     }
+
+    // The same list, row for row - what a refresh of a folder nothing has
+    // touched produces. Entries compare as records, so a file rewritten in
+    // place (same path, new time) counts as a change.
+    private static bool SearchRowsMatch(List<SearchRow> current, List<SearchRow> next)
+    {
+        if (current.Count != next.Count)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < current.Count; i++)
+        {
+            SearchRow a = current[i];
+            SearchRow b = next[i];
+            if (a.IsHeader != b.IsHeader || a.IsShowMore != b.IsShowMore ||
+                !Equals(a.Entry, b.Entry) ||
+                !string.Equals(a.DirectoryPath, b.DirectoryPath, StringComparison.Ordinal) ||
+                !string.Equals(a.ShowMoreLabel, b.ShowMoreLabel, StringComparison.Ordinal))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // Whether two rows from different builds of the list stand for the same
+    // place in it: the same file, the same folder header, or the 더 보기 row.
+    private static bool IsSameSearchPlace(SearchRow a, SearchRow b)
+        => a.IsHeader == b.IsHeader && a.IsShowMore == b.IsShowMore &&
+           (a.Entry is { } entryA
+               ? b.Entry is { } entryB &&
+                 string.Equals(entryA.FullPath, entryB.FullPath, StringComparison.OrdinalIgnoreCase)
+               : string.Equals(a.DirectoryPath, b.DirectoryPath, StringComparison.OrdinalIgnoreCase));
 
     // The result set changed: a keystroke, another page from "더 보기", a
     // different sort, a batch arriving mid-scan. Two jobs, and the second one
@@ -36237,15 +36346,25 @@ public partial class MainWindow : Window
     // The files of one group, or the whole flat list: the chosen field in the
     // chosen direction. Name goes through the tree's natural comparer, so "10"
     // lands after "9" in the results too.
+    //
+    // TIES ARE BROKEN BY FOLDER, THEN NAME (2026-10-06). Left to the sort,
+    // equal keys kept the order the entries arrived in, and a walk lists
+    // several folders at once, so it is not the same order twice: two copies of
+    // one source tree on a share (every name in it twice) came out in a
+    // different order after each refresh. Rows trading places under someone
+    // reading them is a change nothing on disk made, and it kept SetSearchRows
+    // from recognising an unchanged list as unchanged.
     private IOrderedEnumerable<FileSearchService.SearchEntry> SortSearchEntries(
         IEnumerable<FileSearchService.SearchEntry> entries)
-        => _searchSortField == FileSortField.Date
-            ? (_searchSortDescending
-                ? entries.OrderByDescending(x => x.LastWriteTime)
-                : entries.OrderBy(x => x.LastWriteTime))
-            : (_searchSortDescending
-                ? entries.OrderByDescending(x => (string?)x.FileName, FileSystemService.NaturalNameComparer)
-                : entries.OrderBy(x => (string?)x.FileName, FileSystemService.NaturalNameComparer));
+        => (_searchSortField == FileSortField.Date
+                ? (_searchSortDescending
+                    ? entries.OrderByDescending(x => x.LastWriteTime)
+                    : entries.OrderBy(x => x.LastWriteTime))
+                : (_searchSortDescending
+                    ? entries.OrderByDescending(x => (string?)x.FileName, FileSystemService.NaturalNameComparer)
+                    : entries.OrderBy(x => (string?)x.FileName, FileSystemService.NaturalNameComparer)))
+            .ThenBy(x => x.DirectoryPath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(x => x.FileName, StringComparer.OrdinalIgnoreCase);
 
     // Grouping on: the folders are ordered against each other by a
     // REPRESENTATIVE value, not by a second rule of their own. By name that is
@@ -36531,14 +36650,41 @@ public partial class MainWindow : Window
     // Points the search at a folder: persists it as the remembered scope,
     // relabels the header, and gets an index for it - from disk if one was
     // saved for this exact folder, otherwise by scanning.
+    //
+    // THE FOLDER ALREADY BEING SEARCHED IS NOT LOADED AGAIN (2026-10-06).
+    // Ctrl+Shift+F, the tree's 이 폴더에서 검색 row and the folder picker all
+    // land here, and choosing the folder the search was already on started it
+    // over: the saved index was read and parsed again on the UI thread, a
+    // first walk still running went back to zero - minutes, on a share - and
+    // the blue dot was cleared with no refresh behind it, because loading from
+    // disk counts as nothing seen since, and a share's index under a day old
+    // is then not due. The same folder gets what opening the search view
+    // gives it: the refresh check, and nothing else.
     private void SetSearchScope(string folder)
     {
+        if (IsCurrentSearchScope(folder) && (_searchIndexReady || _searchScanning))
+        {
+            // DEBUG only.
+            LogClickLine($"search scope: {folder} (already searched, not reloaded)");
+            RefreshSearchIndexIfDue();
+            return;
+        }
+
         _searchScopeFolder = folder;
         _settings.LastSearchFolder = _searchScopeFolder;
         _settingsService.Save(_settings);
         UpdateSearchScopeText();
         LoadCachedIndexOrScan();
     }
+
+    // Trailing separator and case aside, the way SearchIndexCache names a
+    // scope - "D:\" and "d:" are one folder to the index.
+    private bool IsCurrentSearchScope(string folder)
+        => _searchScopeFolder is { Length: > 0 } scope &&
+           string.Equals(
+               scope.TrimEnd(Path.DirectorySeparatorChar),
+               folder.TrimEnd(Path.DirectorySeparatorChar),
+               StringComparison.OrdinalIgnoreCase);
 
     // The saved index answers at once, and is then refreshed BEHIND the results
     // when RefreshSearchIndexIfDue says so (2026-09-16). It used to be used
@@ -36550,7 +36696,17 @@ public partial class MainWindow : Window
     // which is the moment they have said they are about to look - and the
     // refresh keeps the saved results searchable until the new ones replace
     // them, so nothing is waited for either way.
-    private void LoadCachedIndexOrScan()
+    //
+    // THE FOLDER CHECK AND THE READ RUN ON A WORKER (2026-10-06). Both ran here
+    // on the UI thread: a share that had stopped answering held the window for
+    // as long as Directory.Exists took to give up, and a large saved index is a
+    // parse long enough to feel. StartScopeScan moved its own existence check
+    // off the UI thread on 2026-09-28; this was the other one. Until the answer
+    // comes the load counts as a scan: the view-open path and
+    // RefreshSearchIndexIfDue leave it alone, another load or scan cancels it
+    // the same way, and a change seen meanwhile is marked - the saved listing
+    // predates it.
+    private async void LoadCachedIndexOrScan()
     {
         if (_searchScopeFolder is not { Length: > 0 } folder)
         {
@@ -36561,28 +36717,61 @@ public partial class MainWindow : Window
         // LogSearchDot.
         LogClickLine($"search scope: {folder}");
 
+        _searchScanCts?.Cancel();
+        var cts = new CancellationTokenSource();
+        _searchScanCts = cts;
+        var token = cts.Token;
+
+        // The previous scope's results go now rather than when the new ones
+        // arrive: on a share that is not answering, that can be a while, and a
+        // list under the new folder's name must not be the old folder's files.
+        _searchEntries.Clear();
+        _searchIndexReady = false;
+        _searchIndexPartial = false;
+        _searchIndexSavedAtUtc = null;
+        _searchDisplayLimit = SearchResultDisplayCap;
+        SetSearchRows(new List<SearchRow>());
+        // Cleared as the load starts, for the reason StartScopeScan clears it
+        // as a walk starts: nothing has been observed changing since the saved
+        // listing was written - whatever happened while the app was closed is
+        // what its age says - and a change that lands while it is being read
+        // is newer than it, so that one is left to mark again.
+        ClearSearchIndexStale();
+        SetSearchScanning(true);
+        SearchStatusText.Text = string.Format(Strings.SearchStatusScanning, 0);
+
         // A cache for a folder that has since been removed (or a share that
         // isn't mounted right now) would hand back results that can't lead
         // anywhere - fall through to the scan, which reports it properly.
-        if (Directory.Exists(folder) && SearchIndexCache.TryLoad(folder) is { } cached)
+        var cached = await Task.Run(() => Directory.Exists(folder) ? SearchIndexCache.TryLoad(folder) : null);
+
+        bool superseded = token.IsCancellationRequested;
+        if (ReferenceEquals(_searchScanCts, cts))
         {
-            _searchScanCts?.Cancel();
-            SetSearchScanning(false);
-            _searchEntries.Clear();
-            _searchEntries.AddRange(cached.Entries);
-            _searchIndexSavedAtUtc = cached.SavedAtUtc;
-            _searchIndexReady = true;
-            _searchIndexPartial = false;
-            // Nothing has been observed changing since this listing arrived -
-            // whatever happened while the app was closed is what the age says.
-            ClearSearchIndexStale();
-            _searchDisplayLimit = SearchResultDisplayCap;
-            RunSearchFilter();
-            RefreshSearchIndexIfDue();
+            _searchScanCts = null;
+        }
+        cts.Dispose();
+        // DEBUG only.
+        LogClickLine($"search load: {folder} -> " +
+            (superseded ? "superseded" : cached is { } c ? $"saved index, {c.Entries.Count} entries" : "no saved index"));
+        if (superseded)
+        {
+            // A newer load or scan owns the fields now.
             return;
         }
 
-        StartScopeScan(new[] { folder });
+        if (cached is not { } loaded)
+        {
+            StartScopeScan(new[] { folder });
+            return;
+        }
+
+        SetSearchScanning(false);
+        _searchEntries.AddRange(loaded.Entries);
+        _searchIndexSavedAtUtc = loaded.SavedAtUtc;
+        _searchIndexReady = true;
+        RunSearchFilter();
+        RefreshSearchIndexIfDue();
     }
 
     // When the in-memory index was written to disk, or null while it came from
@@ -36968,7 +37157,9 @@ public partial class MainWindow : Window
 
                 _searchIndexReady = true;
                 _searchIndexPartial = false;
-                RunSearchFilter();
+                // A refresh swaps the index under results someone may be in
+                // the middle of reading, so the list keeps its place.
+                RunSearchFilter(keepPlace: fresh is not null);
 
                 // Only a COMPLETE walk is saved - a cancelled or broken-off one
                 // holds whatever fraction of the folder it got through, which
@@ -37168,7 +37359,8 @@ public partial class MainWindow : Window
     // Applies the current query to the in-memory index, capping how many rows
     // materialize so a query matching thousands of files still renders
     // instantly (the status line notes when the display was capped).
-    private void RunSearchFilter(bool updateStatusWhileScanning = true)
+    // keepPlace: see SetSearchRows.
+    private void RunSearchFilter(bool updateStatusWhileScanning = true, bool keepPlace = false)
     {
         string query = SearchBox.Text;
         if (query.Trim().Length == 0)
@@ -37253,7 +37445,7 @@ public partial class MainWindow : Window
             rows.Add(SearchRow.ShowMore(string.Format(Strings.ShowMoreFormat, total - shownFiles)));
         }
 
-        SetSearchRows(rows);
+        SetSearchRows(rows, keepPlace);
 
         if (_searchScanning && !updateStatusWhileScanning)
         {
