@@ -4148,14 +4148,43 @@
                     Value="{StaticResource TooltipShowDelay}"/>
             <Setter Property="ToolTipService.ShowDuration"
                     Value="20000"/>
+            <!-- Reads the second line's size and date - see
+                 FileSystemItem.TooltipDetail for why at this moment. -->
+            <EventSetter Event="ToolTipOpening"
+                    Handler="TreeRowTooltip_Opening"/>
             <Setter Property="ToolTip">
                 <Setter.Value>
-                    <!-- TooltipPath, not FullPath: the 더 보기 · 접기 row shares
-                         this style and has no path of its own, so the model
-                         answers with its parent's. Identical for every real
-                         row. -->
-                    <ToolTip Content="{Binding TooltipPath}"
-                            FontSize="{Binding PlacementTarget.FontSize, RelativeSource={RelativeSource Self}}"/>
+                    <ToolTip FontSize="{Binding PlacementTarget.FontSize, RelativeSource={RelativeSource Self}}">
+                        <StackPanel>
+                            <!-- TooltipPath, not FullPath: the 더 보기 · 접기 row
+                                 shares this style and has no path of its own,
+                                 so the model answers with its parent's.
+                                 Identical for every real row. -->
+                            <TextBlock Text="{Binding TooltipPath}"/>
+                            <!-- One step smaller and in the menus' secondary
+                                 brush: metadata under the path, the way the
+                                 shortcut column sits beside a menu row. A
+                                 brush rather than Opacity, so it stays
+                                 readable on the dark surfaces. App-level
+                                 resources, because a tooltip is a window of
+                                 its own. -->
+                            <TextBlock Text="{Binding TooltipDetail}"
+                                    FontSize="{DynamicResource TreeTooltipDetailFontSize}"
+                                    Foreground="{DynamicResource SecondaryForeground}">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding TooltipDetail}"
+                                                    Value="{x:Null}">
+                                                <Setter Property="Visibility"
+                                                        Value="Collapsed"/>
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                        </StackPanel>
+                    </ToolTip>
                 </Setter.Value>
             </Setter>
         </Style>

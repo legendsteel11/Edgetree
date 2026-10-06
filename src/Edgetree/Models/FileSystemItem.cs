@@ -155,6 +155,25 @@ public class FileSystemItem : INotifyPropertyChanged
     // both rows now share.
     public string TooltipPath => IsShowMore ? Parent?.FullPath ?? string.Empty : FullPath;
 
+    // The tooltip's second line (2026-10-06): size and last-modified time for a
+    // file, the time alone for a folder. Null leaves the line out, which is
+    // what the 더 보기 row and a row whose read failed show.
+    //
+    // READ WHEN THE TOOLTIP OPENS, not kept from the listing: the tree lists
+    // names only (a date sort stats each entry and throws the answer away),
+    // and even a date taken at listing time would go stale on the first save
+    // in place - the drive watcher leaves LastWrite out on purpose (see
+    // StartDriveWatchers), so nothing would ever correct it, and a wrong "last
+    // modified" is worse than none. MainWindow.TreeRowTooltip_Opening fills
+    // this; the previous answer stays up while the next read is out, so a
+    // second hover on a slow share does not open one line short.
+    private string? _tooltipDetail;
+    public string? TooltipDetail
+    {
+        get => _tooltipDetail;
+        set => SetField(ref _tooltipDetail, value);
+    }
+
     // Drive roots (FileSystemService.GetDriveRoots) are the only items ever
     // constructed with no parent - used to bold their row (C:, D:, ...).
     public bool IsRoot => Parent is null;

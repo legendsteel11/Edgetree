@@ -13993,6 +13993,10 @@ public partial class MainWindow : Window
         // text - it's metadata under a picture, not a menu item.
         appResources["MenuThumbnailInfoFontSize"] =
             SecondaryFontSize(ExplorerTree.FontSize, stepsDown: 1, floor: 8.0);
+        // The tree tooltip's size/date line, one step below the path above it
+        // (which takes the tree's own size through the tooltip's FontSize).
+        appResources["TreeTooltipDetailFontSize"] =
+            SecondaryFontSize(ExplorerTree.FontSize, stepsDown: 1, floor: 8.0);
         // The context menu's image-thumbnail slot (see UpdateThumbnailRow):
         // 4:3, sized to roughly fill the menu's own width at any font zoom.
         // The MAX matters as much as the min: the slot's Image reports the
@@ -14370,6 +14374,50 @@ public partial class MainWindow : Window
 
     private bool IsWithinTreeGestureWindow
         => Environment.TickCount64 - _lastTreeUserInputTicks <= TreeGestureWindowMs;
+
+    // The tree tooltip's size/date line (see FileSystemItem.TooltipDetail for
+    // why it is read here and not at listing time). Off the UI thread for the
+    // bookmark rows' reason: the row can sit on a share that has gone to sleep,
+    // and a hover must never be the thing that freezes the window. A local
+    // stat is back long before the tooltip draws; on a share the line can join
+    // a moment after the path.
+    private async void TreeRowTooltip_Opening(object sender, ToolTipEventArgs e)
+    {
+        // A drive itself has no date worth showing, and the rows that share the
+        // 더 보기 slot (IsShowMore covers all three) have no path of their own.
+        if (sender is not FrameworkElement { DataContext: FileSystemItem item } ||
+            item.IsShowMore || item.IsPlaceholder || item.IsBottomGap ||
+            item.DriveKind is not null ||
+            FileSystemService.IsNetworkPathUnreachable(item.FullPath))
+        {
+            return;
+        }
+
+        string path = item.FullPath;
+        bool isDirectory = item.IsDirectory;
+        FileSystemInfo? info = await Task.Run<FileSystemInfo?>(() =>
+        {
+            try
+            {
+                // Exists first, because File.GetLastWriteTime answers a missing
+                // path with 1601-01-01 rather than failing. The one stat it
+                // makes fills the size and the time together.
+                FileSystemInfo read = isDirectory ? new DirectoryInfo(path) : new FileInfo(path);
+                return read.Exists ? read : null;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                return null;
+            }
+        });
+
+        // Same format as the panel's info line, so one file reads the same in
+        // both. A folder has no size of its own to show.
+        string? date = info is null ? null : $"{info.LastWriteTime:yyyy-MM-dd HH:mm}";
+        item.TooltipDetail = info is FileInfo file
+            ? $"{FormatFileSize(file.Length)}  ·  {date}"
+            : date;
+    }
 
     private void TreeViewItem_Expanded(object sender, RoutedEventArgs e)
     {
