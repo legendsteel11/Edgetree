@@ -6716,6 +6716,53 @@ public partial class MainWindow : Window
         }
     }
 
+    // HOW MANY ROWS THE TREE'S WINDOW HOLDS - which is NOT ViewportHeight while
+    // the whole tree fits inside it (2026-10-06). The tree scrolls by item, and
+    // with nothing to scroll the panel reports the rows it HAS as its viewport,
+    // not the rows it has ROOM for: a 37-row tree in a window with room for
+    // ~78 says viewport=37. Both gap askers below took that number for the
+    // window's size, so a jump to a row near the top of a short tree - a second
+    // drive, a bookmark one row under its root - made room a row or two at a
+    // time inside empty space that needed forty, and the row only came up when
+    // the confirm pass's re-pins happened to push the tree past the window's
+    // bottom: at once, 0.6s later, 1.2s later, or never, depending on the window
+    // height and how much of the tree the jump left open. click.log had all
+    // three: "range-spent ... offset 0 -> 0" with the row 22px down, the confirm
+    // giving up on it, and two re-pins later "settled" just as the measured row
+    // height (ActualHeight / ViewportHeight) fell to the real 22px.
+    //
+    // With range to scroll, ViewportHeight is the window's rows and is used as
+    // it always was. With none, the window is measured in the anchor's own row
+    // height.
+    private static double TreeViewportRows(ScrollViewer scrollViewer, TreeViewItem anchor)
+    {
+        if (scrollViewer.ScrollableHeight > 0.5)
+        {
+            return scrollViewer.ViewportHeight;
+        }
+
+        double row = TreeRowPixels(scrollViewer, anchor);
+        return row > 0
+            ? Math.Max(scrollViewer.ViewportHeight, Math.Floor(scrollViewer.ActualHeight / row))
+            : scrollViewer.ViewportHeight;
+    }
+
+    // One row's height in pixels, measured on the row itself (its header, not
+    // the folder with its open subtree) - the blank gap rows share the template,
+    // so it is their height too. Falls back to the panel's own ratio, the one
+    // both askers used before, when the template is not applied yet.
+    private static double TreeRowPixels(ScrollViewer scrollViewer, TreeViewItem anchor)
+    {
+        if (anchor.Template?.FindName("RowBorder", anchor) is FrameworkElement { ActualHeight: > 0 } row)
+        {
+            return row.ActualHeight;
+        }
+
+        return scrollViewer.ViewportHeight > 0
+            ? scrollViewer.ActualHeight / scrollViewer.ViewportHeight
+            : 0;
+    }
+
     // Scrolled to a computed offset rather than by asking BringIntoView for a
     // viewport-tall rectangle. Two reasons: BringIntoView is a request that WPF
     // may satisfy on a later dispatcher pass (another frame, another flash),
@@ -6765,10 +6812,14 @@ public partial class MainWindow : Window
         // the time. The suspicion this was added for (2026-08-12) is a count
         // taken before a collapse or a child load lands, which shows up here as
         // two passes reporting DIFFERENT indexes for the same row.
+        // The window's rows, which differ from `viewport` only while the whole
+        // tree fits (see TreeViewportRows) - logged beside it so a landing can
+        // be read back as which of the two the gap was sized from.
+        double windowRows = TreeViewportRows(scrollViewer, anchor);
         LogClickLine(
             $"pin: {item.Name} index={index} offset={scrollViewer.VerticalOffset:F0} " +
             $"scrollable={scrollViewer.ScrollableHeight:F0} extent={scrollViewer.ExtentHeight:F0} " +
-            $"viewport={scrollViewer.ViewportHeight:F0} gap={_bottomGapRows.Count}rows");
+            $"viewport={scrollViewer.ViewportHeight:F0} rows={windowRows:F0} gap={_bottomGapRows.Count}rows");
 
         // Within the last screenful there is nothing below the row to scroll up
         // into, so the room is made rather than the pin given up - see the
@@ -6793,7 +6844,14 @@ public partial class MainWindow : Window
         // given up by declining - ArmSettleConfirm below comes back once the
         // tree stops moving, and by then the panel has real numbers.
         bool extentHasCaughtUp = scrollViewer.ExtentHeight >= index + 0.5;
-        double shortfall = index - scrollViewer.ScrollableHeight;
+
+        // The range the row needs is its index; the range there WILL be is the
+        // extent less the window's rows. With range to scroll that is
+        // ScrollableHeight exactly, as before. With the whole tree inside the
+        // window it goes negative, and the shortfall rightly includes the
+        // empty rows below the tree - none of which scroll until the tree and
+        // its gap are taller than the window.
+        double shortfall = index - (scrollViewer.ExtentHeight - windowRows);
         if (!extentHasCaughtUp)
         {
             LogClickLine(
@@ -6824,7 +6882,7 @@ public partial class MainWindow : Window
             // (its own `grows < 2` bounds that), and taking those rows away
             // mid-walk would pull the range out from under the loop that asked
             // for them.
-            int room = (int)Math.Ceiling(scrollViewer.ViewportHeight) + 1;
+            int room = (int)Math.Ceiling(windowRows) + 1;
             int want = _bottomGapRows.Count + (int)Math.Ceiling(shortfall);
             SetBottomGap(Math.Min(want, Math.Max(room, _bottomGapRows.Count)), scrollViewer);
         }
@@ -7110,8 +7168,19 @@ public partial class MainWindow : Window
                 // screenful of blank ones.
                 if (top > 0 && grows < 2 && scrollViewer.ViewportHeight > 0)
                 {
-                    double rowHeight = scrollViewer.ActualHeight / scrollViewer.ViewportHeight;
-                    int need = rowHeight > 0 ? (int)Math.Ceiling(top / rowHeight) : 0;
+                    // THE ROW MEASURED ON THE ROW, and the window's empty rows
+                    // counted in (2026-10-06, see TreeViewportRows). The ratio
+                    // this used - ActualHeight / ViewportHeight - is a row's
+                    // height only while the tree overflows the window; with the
+                    // whole tree inside it, ViewportHeight is the rows the tree
+                    // HAS, so a 22px row read as 47px and one row of shortfall
+                    // asked for one row of gap, inside forty empty ones that do
+                    // not scroll. Every empty row below the tree has to be
+                    // filled before a single row of range exists.
+                    double rowHeight = TreeRowPixels(scrollViewer, anchor);
+                    double windowRows = TreeViewportRows(scrollViewer, anchor);
+                    int empty = (int)Math.Max(0, Math.Ceiling(windowRows - scrollViewer.ExtentHeight));
+                    int need = rowHeight > 0 ? (int)Math.Ceiling(top / rowHeight) + empty : 0;
                     // A gap can never USEFULLY exceed a viewport of rows: it
                     // exists to let the target row reach the top, and the
                     // most that ever takes is a screenful of range below it.
@@ -7121,14 +7190,14 @@ public partial class MainWindow : Window
                     // bad measurement, which the cap turns back into one
                     // screenful at worst. The far-rescroll above makes that
                     // measurement rare; this makes it harmless.
-                    need = Math.Min(need, (int)Math.Ceiling(scrollViewer.ViewportHeight) + 1);
+                    need = Math.Min(need, (int)Math.Ceiling(windowRows) + 1);
                     if (need > 0)
                     {
                         grows++;
                         int grown = _bottomGapRows.Count + need;
                         LogClickLine(
                             $"settle: {name} out of room, gap {_bottomGapRows.Count} -> {grown} " +
-                            $"(top {top:F0}px, row {rowHeight:F0}px)");
+                            $"(top {top:F0}px, row {rowHeight:F0}px, empty {empty} of {windowRows:F0} rows)");
                         SetBottomGap(grown, scrollViewer);
                         continue;
                     }
