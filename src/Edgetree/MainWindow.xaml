@@ -9132,6 +9132,34 @@
                                                                 Property="Foreground"
                                                                 Value="{DynamicResource FileNameHighlightForeground}"/>
                                                     </Trigger>
+                                                    <!-- A MARKED CELL'S NAME LINE TAKES
+                                                         THE SELECTION'S COLOURS (2026-10-06,
+                                                         on request): the tree paints every
+                                                         multi-selected row like its
+                                                         selected row, and here only the
+                                                         corner badge said so - too small to
+                                                         read a set from at a glance. The
+                                                         FRAME stays the cell on show's
+                                                         alone. Tried the same day and
+                                                         dropped, both: the frame taken off
+                                                         the cell on show while it was
+                                                         marked (left as the only mark,
+                                                         nothing in the list was framed),
+                                                         then the frame on every mark (an
+                                                         unmarked cell on show looked
+                                                         exactly like the marks). What made
+                                                         the second one confusing - a cell
+                                                         on show outside the set - no
+                                                         longer happens from a Ctrl+click:
+                                                         see MoveOffUnmarkedCell. -->
+                                                    <DataTrigger Binding="{Binding Item.IsMultiSelected}" Value="True">
+                                                        <Setter TargetName="CellName"
+                                                                Property="Background"
+                                                                Value="{DynamicResource TreeRowSelectedActiveBackground}"/>
+                                                        <Setter TargetName="CellName"
+                                                                Property="Foreground"
+                                                                Value="{DynamicResource FileNameHighlightForeground}"/>
+                                                    </DataTrigger>
                                                     <!-- The label steps aside for the
                                                          box but keeps its place:
                                                          Hidden, not Collapsed, since the
@@ -9267,18 +9295,21 @@
                                                 </Style>
                                             </Path.Style>
                                         </Path>
-                                        <!-- THE MARK, and it is deliberately not
-                                             another border or another wash. The
-                                             frame already means "this is the one
-                                             the panel is showing" and the wash
-                                             means "the pointer is here"; a third
-                                             state sharing either channel would
-                                             leave one of them unable to show.
-                                             So it is a badge in the corner the
-                                             bookmark ribbon does not use, in the
-                                             selection colour with a white check,
-                                             and it reads on any picture because
-                                             it brings its own ground. -->
+                                        <!-- THE MARK, and deliberately not another
+                                             border or another wash. The frame
+                                             means "this is the one the panel is
+                                             showing" and the wash means "the
+                                             pointer is here"; a third state
+                                             sharing either channel would leave one
+                                             of them unable to show (put to the
+                                             test on 2026-10-06 - see the
+                                             container's triggers). So it is a badge
+                                             in the corner the bookmark ribbon does
+                                             not use, in the selection colour with a
+                                             white check, and it reads on any
+                                             picture because it brings its own
+                                             ground. Since 2026-10-06 the name line
+                                             says it too. -->
                                         <Border Width="{DynamicResource FilmstripMarkSize}"
                                                 Height="{DynamicResource FilmstripMarkSize}"
                                                 Margin="3,3,0,0"

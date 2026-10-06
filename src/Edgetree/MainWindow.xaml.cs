@@ -33228,6 +33228,12 @@ public partial class MainWindow : Window
             // The picture does not move. Ctrl-clicking through a folder to
             // gather a dozen files would otherwise load a dozen pictures, and
             // on a network folder that is the expensive half of the app.
+            // Except when the cell just unmarked IS the picture - see
+            // MoveOffUnmarkedCell.
+            if (ReferenceEquals(ViewerFilmstrip.SelectedItem, cell) && !cell.Item.IsMultiSelected)
+            {
+                MoveOffUnmarkedCell(cell);
+            }
             e.Handled = true;
             return;
         }
@@ -33288,6 +33294,43 @@ public partial class MainWindow : Window
         if (renameGesture)
         {
             ScheduleFilmstripRename(cell);
+        }
+    }
+
+    // THE PICTURE ON SHOW WAS JUST UNMARKED, and other marks remain: the panel
+    // moves to the next marked cell, or the nearest one before it when none
+    // follows (2026-10-06, on request). The tree's rule since 2026-08-13 (see
+    // its Ctrl+click branch): a set keeps one of its own as the current one.
+    // Left where it was, the cell kept the frame and the name line of the cell
+    // on show with only its badge gone, and read as still marked; the tree's
+    // row behind it fell outside the set.
+    private void MoveOffUnmarkedCell(FilmstripCell unmarked)
+    {
+        int at = _filmstripCells.IndexOf(unmarked);
+        if (at < 0 || _multiSelection.Count == 0)
+        {
+            return;
+        }
+
+        FilmstripCell? successor = null;
+        for (int i = at + 1; i < _filmstripCells.Count && successor is null; i++)
+        {
+            if (_filmstripCells[i].Item.IsMultiSelected)
+            {
+                successor = _filmstripCells[i];
+            }
+        }
+        for (int i = at - 1; i >= 0 && successor is null; i--)
+        {
+            if (_filmstripCells[i].Item.IsMultiSelected)
+            {
+                successor = _filmstripCells[i];
+            }
+        }
+
+        if (successor is not null)
+        {
+            MoveViewerTo(successor.Item);
         }
     }
 
@@ -37957,6 +38000,15 @@ public partial class MainWindow : Window
             if (MarkedItemFor(entry) is { } marked)
             {
                 RemoveFromMultiSelection(marked);
+                // The selected row just left the set: the selection moves to
+                // the next marked row, as the strip's does (MoveOffUnmarkedCell).
+                // Its row would otherwise keep the selection's colour - the
+                // same colour as a mark - with nothing marking it.
+                if (SearchResultsList.SelectedItem is SearchRow { Entry: { } selectedEntry } &&
+                    string.Equals(selectedEntry.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    SelectNearestMarkedSearchRow(entry);
+                }
             }
             else
             {
@@ -38001,6 +38053,47 @@ public partial class MainWindow : Window
             }
         }
         return true;
+    }
+
+    // The next marked row after this entry's, or the nearest before it; the
+    // selection goes there and the preview follows. Nothing when no mark is left.
+    private void SelectNearestMarkedSearchRow(FileSearchService.SearchEntry from)
+    {
+        if (_multiSelection.Count == 0)
+        {
+            return;
+        }
+
+        int at = _searchRows.FindIndex(r =>
+            r.Entry is { } rowEntry && string.Equals(rowEntry.FullPath, from.FullPath, StringComparison.OrdinalIgnoreCase));
+        if (at < 0)
+        {
+            return;
+        }
+
+        SearchRow? successor = null;
+        for (int i = at + 1; i < _searchRows.Count && successor is null; i++)
+        {
+            if (_searchRows[i].Entry is { } next && IsMarkedSearchEntry(next))
+            {
+                successor = _searchRows[i];
+            }
+        }
+        for (int i = at - 1; i >= 0 && successor is null; i--)
+        {
+            if (_searchRows[i].Entry is { } previous && IsMarkedSearchEntry(previous))
+            {
+                successor = _searchRows[i];
+            }
+        }
+
+        if (successor is not null)
+        {
+            SearchResultsList.SelectedItem = successor;
+            // An instant jump so the row stays reachable, never a slide - the
+            // rule SelectSearchViewerItem follows.
+            SearchResultsList.ScrollIntoView(successor);
+        }
     }
 
     private FileSystemItem? MarkedItemFor(FileSearchService.SearchEntry entry)
