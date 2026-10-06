@@ -17910,10 +17910,31 @@ public partial class MainWindow : Window
             return;
         }
 
+        // THE SAME REFLECTION, SEEN THROUGH A SYNOLOGY (2026-10-06). Windows
+        // gives a new Thumbs.db an alternate data stream, and a Synology keeps
+        // that stream as a file of its own, @eaDir\Thumbs.db@SynoEAStream,
+        // beside it. Reproduced on the share by asking the shell for five
+        // thumbnails in a folder with no Thumbs.db: the watcher reported
+        // Thumbs.db created and changed - dropped above - and then that file
+        // created inside @eaDir, which nothing here dropped. @eaDir is never
+        // listed to an SMB client (a listing of the folder does not show it,
+        // and opening it by name fails), so no tree row and no search result
+        // can be in it. What its changes did was mark the search index changed
+        // - the blue dot came back each time pictures from new folders were
+        // shown, with nothing visible in the folder having moved - and queue
+        // refreshes for folders whose listings could not have changed. By path
+        // segment, so the folder's own creation goes too. QNAP's equivalent (.@__thumb) has
+        // not been seen here; it would go in the same test.
+        if (e.FullPath.Contains(@"\@eaDir\", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(changed, "@eaDir", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
         Dispatcher.BeginInvoke(() =>
         {
             QueueExternalRefresh(folderPath);
-            NoteSearchScopeChanged(folderPath);
+            NoteSearchScopeChanged(folderPath, e.FullPath);
         });
     }
 
@@ -36926,7 +36947,7 @@ public partial class MainWindow : Window
     // things, and the guard won. A refresh on a share runs for minutes, and a
     // change in that time, one the walk may already have passed, went unmarked
     // and the listing that replaced the results was missing it.
-    private void NoteSearchScopeChanged(string changedFolderPath)
+    private void NoteSearchScopeChanged(string changedFolderPath, string changedPath)
     {
         if (_searchIndexStale || _searchScopeFolder is not { Length: > 0 } scope)
         {
@@ -36951,6 +36972,9 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Which file it was - the line that would have named @eaDir on the
+        // first report instead of after a reproduction (2026-10-06).
+        LogSearchDot($"change at {changedPath}");
         MarkSearchIndexStale();
     }
 
