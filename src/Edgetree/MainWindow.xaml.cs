@@ -32631,35 +32631,25 @@ public partial class MainWindow : Window
 
     // Width follows height, and both are written as resources because the cell
     // template is inside a DataTemplate - there is no element to reach for.
-    // Only on a real change: assigning an unchanged value still invalidates
-    // every realized container, which is the lesson ApplyHeaderMetrics and
-    // SetBrushColor each paid for once.
+    // Only on a real change, AND KEY BY KEY (see SetFilmstripResource):
+    // assigning an unchanged value still invalidates every realized container,
+    // which is the lesson ApplyHeaderMetrics and SetBrushColor each paid for
+    // once.
     private void ApplyFilmstripCellSize()
     {
         double height = Math.Round(FilmstripCellHeight);
         double width = FitFilmstripCellWidth(Math.Round(height * FilmstripAspect));
         double nameLine = _settings.ViewerFilmstripNames ? MeasureFilmstripNameLine() : 0;
 
-        bool sameHeight = Resources["FilmstripCellHeight"] is double currentHeight &&
-            Math.Abs(currentHeight - height) < 0.5;
-        bool sameWidth = Resources["FilmstripCellWidth"] is double currentWidth &&
-            Math.Abs(currentWidth - width) < 0.5;
-        bool sameName = Resources["FilmstripNameLineHeight"] is double currentName &&
-            Math.Abs(currentName - nameLine) < 0.5;
-        if (sameHeight && sameWidth && sameName)
-        {
-            return;
-        }
-
-        Resources["FilmstripCellHeight"] = height;
-        Resources["FilmstripCellWidth"] = width;
+        SetFilmstripResource("FilmstripCellHeight", height);
+        SetFilmstripResource("FilmstripCellWidth", width);
 
         // The name line under the frame (see the cell template). Its width is
         // the frame's, border included, so a long name trims instead of pushing
         // the cell wider.
-        Resources["FilmstripNameLineHeight"] = nameLine;
-        Resources["FilmstripNameVisibility"] = nameLine > 0 ? Visibility.Visible : Visibility.Collapsed;
-        Resources["FilmstripCellFrameWidth"] = width + FilmstripCellBorder;
+        SetFilmstripResource("FilmstripNameLineHeight", nameLine);
+        SetFilmstripResource("FilmstripNameVisibility", nameLine > 0 ? Visibility.Visible : Visibility.Collapsed);
+        SetFilmstripResource("FilmstripCellFrameWidth", width + FilmstripCellBorder);
 
         // What one cell OCCUPIES, which is what a layout has to place. The same
         // advance the fit above counts with - border plus the container's own
@@ -32671,8 +32661,8 @@ public partial class MainWindow : Window
         // rows and its column count all read this footprint, so they all see
         // the line or none of them do - a second place subtracting it would be
         // two authorities agreeing only by luck.
-        Resources["FilmstripCellFootprintWidth"] = width + FilmstripCellAdvance;
-        Resources["FilmstripCellFootprintHeight"] = height + FilmstripCellAdvance + nameLine;
+        SetFilmstripResource("FilmstripCellFootprintWidth", width + FilmstripCellAdvance);
+        SetFilmstripResource("FilmstripCellFootprintHeight", height + FilmstripCellAdvance + nameLine);
 
         // The play badge's three keys were computed here as well, and went with
         // it on 2026-08-16 - see the cell template.
@@ -32686,11 +32676,27 @@ public partial class MainWindow : Window
         // draws). The tree draws it at 9px, so the range here starts just above
         // that and tops out before it could read as a label on the frame rather
         // than a mark on the file.
-        Resources["FilmstripRibbonSize"] = Math.Clamp(Math.Round(height * 0.18), 10, 15);
+        SetFilmstripResource("FilmstripRibbonSize", Math.Clamp(Math.Round(height * 0.18), 10, 15));
 
         // The mark rides the cell the way the ribbon does and stops at the same
         // kind of ceiling: it is a badge on the frame, not a label of it.
-        Resources["FilmstripMarkSize"] = Math.Clamp(Math.Round(height * 0.22), 12, 18);
+        SetFilmstripResource("FilmstripMarkSize", Math.Clamp(Math.Round(height * 0.22), 12, 18));
+    }
+
+    // One cell resource, written only when its value moved (09-28 review).
+    // The whole set used to be rewritten whenever any one of them changed,
+    // and the splitter drag that resizes the list calls this every frame:
+    // the height and the width move, while the name line, its visibility
+    // and the two clamped badge sizes mostly do not - and each of those
+    // rewrites invalidated every realized cell as well. Exact comparison is
+    // enough, because every value here is rounded to a whole pixel or is an
+    // enum.
+    private void SetFilmstripResource(string key, object value)
+    {
+        if (!Equals(Resources[key], value))
+        {
+            Resources[key] = value;
+        }
     }
 
     // One line of the thumbnail names, measured rather than assumed. A line's
