@@ -33622,8 +33622,6 @@ public partial class MainWindow : Window
 
     private void FilmstripContextMenu_Closed(object sender, RoutedEventArgs e)
     {
-        AnyMenu_Closed(sender, e);
-
         // AFTER THE COMMAND. WPF closes a menu first and raises the row's Click
         // afterwards, queued at Render priority (MenuItem.InvokeClickAfterRender,
         // read from the IL on 2026-09-28), so ending the span here and now would
@@ -33637,6 +33635,13 @@ public partial class MainWindow : Window
                 _filmstripMenuInPlay = false;
             }
         }));
+
+        // SCHEDULED FIRST, the shared handler after it (09-28 review): if
+        // anything in AnyMenu_Closed threw, the span would never end, and a
+        // span left open answers Del, Ctrl+C and Ctrl+X with the cell this
+        // menu was opened on instead of the tree's selection - until another
+        // menu happened to open (AnyMenu_Opened) and close it.
+        AnyMenu_Closed(sender, e);
     }
 
     // The file a command from the thumbnail list's menu is about: the cell the
