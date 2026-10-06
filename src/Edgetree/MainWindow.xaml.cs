@@ -15291,8 +15291,15 @@ public partial class MainWindow : Window
     // with _deferredExpandItem.
     private System.Windows.Point? _deferredExpandPressPoint;
 
-    private void ClearMultiSelection()
+    private void ClearMultiSelection([System.Runtime.CompilerServices.CallerMemberName] string by = "")
     {
+        // DEBUG only (2026-10-06): which path ended a set - the "strip press"
+        // line says what the press saw, this says what undid it.
+        if (_multiSelection.Count > 0)
+        {
+            LogClickLine($"marks cleared: {_multiSelection.Count} by {by}");
+        }
+
         foreach (var item in _multiSelection)
         {
             item.IsMultiSelected = false;
@@ -33160,6 +33167,11 @@ public partial class MainWindow : Window
             $"strip press: self={(_filmstripSelfSelect ? "yes" : "-")} " +
             $"container={(container is null ? "none" : "yes")} " +
             $"cell={(container?.Content as FilmstripCell)?.Name ?? "-"} " +
+            // 2026-10-06: which branch a press can have taken. These three
+            // showed a first Shift+click in a fresh strip reaching the
+            // plain-click branch (see the anchor rule below).
+            $"mods={Keyboard.Modifiers} marks={_multiSelection.Count} " +
+            $"onShow={(ViewerFilmstrip.SelectedItem as FilmstripCell)?.Name ?? "-"} " +
             $"captured={(Mouse.Captured?.GetType().Name ?? "-")}  hit: {chain}");
 
         if (_filmstripSelfSelect || container is not { Content: FilmstripCell cell })
@@ -33236,6 +33248,24 @@ public partial class MainWindow : Window
             }
             e.Handled = true;
             return;
+        }
+
+        // WITH NOTHING MARKED, A SHIFT RANGE STARTS AT THE CELL ON SHOW
+        // (2026-10-06), as Explorer's starts at the current item. The anchor
+        // was only ever set by a press in the strip, and a rebuilt strip - a
+        // search opened, another folder - starts with none: the first
+        // Shift+click then fell to the plain-click branch below, moved the
+        // picture there and set the anchor, so ranges began working from the
+        // SECOND try. Measured, not guessed: click.log read "mods=Shift
+        // marks=0" on both presses and the cell on show changed between them.
+        // The same rule also stops a stale anchor - the last cell pressed,
+        // before the picture moved by the keys or the tree - from starting a
+        // range somewhere nobody is looking.
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) &&
+            (_filmstripMarkAnchor < 0 || _multiSelection.Count == 0) &&
+            ViewerFilmstrip.SelectedItem is FilmstripCell onShow)
+        {
+            _filmstripMarkAnchor = _filmstripCells.IndexOf(onShow);
         }
 
         // Ctrl+Shift ADDS a range to what is already marked, where Shift alone
@@ -38026,7 +38056,13 @@ public partial class MainWindow : Window
 
         int to = _searchRows.FindIndex(r =>
             r.Entry is { } rowEntry && string.Equals(rowEntry.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
-        string? anchorPath = _searchMarkAnchor ?? (SearchResultsList.SelectedItem as SearchRow)?.Entry?.FullPath;
+        // With nothing marked the range starts at the selected row - the
+        // strip's rule (see its press handler), so a selection moved by the
+        // keys or the strip since the last click starts the range where it is.
+        string? selectedPath = (SearchResultsList.SelectedItem as SearchRow)?.Entry?.FullPath;
+        string? anchorPath = _multiSelection.Count == 0
+            ? selectedPath ?? _searchMarkAnchor
+            : _searchMarkAnchor ?? selectedPath;
         int from = anchorPath is null
             ? -1
             : _searchRows.FindIndex(r =>
