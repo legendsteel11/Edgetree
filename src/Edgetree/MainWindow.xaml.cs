@@ -21686,7 +21686,16 @@ public partial class MainWindow : Window
 
             if (reselect)
             {
-                KeepRenamedRowSelected(renameParent, newName, focus);
+                // By the name the file LANDED under, which is not always the
+                // one typed: Windows drops trailing spaces and dots from the
+                // last part of a path, so "photo. " is saved as "photo"
+                // (measured under .NET 8 on 2026-10-06; Explorer does the
+                // same). Looked up by the typed name, the row was not found,
+                // and the selection stayed on the folder WPF had moved it to.
+                // GetFullPath is the normalization the move itself went
+                // through, so it answers with the name on disk.
+                string landedName = Path.GetFileName(Path.GetFullPath(Path.Combine(renameParent.FullPath, newName)));
+                KeepRenamedRowSelected(renameParent, landedName, focus);
             }
         }
     }
