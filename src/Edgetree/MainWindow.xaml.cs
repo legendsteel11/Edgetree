@@ -37069,6 +37069,7 @@ public partial class MainWindow : Window
         _searchEntries.Clear();
         _searchIndexReady = false;
         _searchIndexPartial = false;
+        _searchIndexSizesMissing = false;
         _searchIndexSavedAtUtc = null;
         _searchDisplayLimit = SearchResultDisplayCap;
         SetSearchRows(new List<SearchRow>());
@@ -37111,6 +37112,7 @@ public partial class MainWindow : Window
         _searchEntries.AddRange(loaded.Entries);
         _searchIndexSavedAtUtc = loaded.SavedAtUtc;
         _searchIndexReady = true;
+        _searchIndexSizesMissing = !loaded.SizesKnown;
         RunSearchFilter();
         RefreshSearchIndexIfDue();
     }
@@ -37146,6 +37148,12 @@ public partial class MainWindow : Window
     // dot: that one says the folder has changed, and this folder need not have.
     private bool _searchIndexPartial;
 
+    // The index on screen was loaded from a file saved before sizes were kept
+    // (see SearchIndexCache.CacheFolder.Sizes), so no row can be told a copy of
+    // another (FindSameFiles). Due for one refresh, which fills the sizes in
+    // and saves them; cleared by any walk that finishes.
+    private bool _searchIndexSizesMissing;
+
     // How old a saved index on a NETWORK drive may be before opening a search
     // on it refreshes it. A day, because a share is re-walked at around 1,700
     // files a second (a 610k-file share took about six minutes), and paying
@@ -37159,7 +37167,10 @@ public partial class MainWindow : Window
     //     and a saved listing may predate anything done while the app was shut;
     //   - it came from disk, the folder is on a NETWORK drive, and it is older
     //     than NetworkSearchIndexMaxAge;
-    //   - the walk that made it was broken off part way (2026-09-28).
+    //   - the walk that made it was broken off part way (2026-09-28);
+    //   - it came from a file saved without file sizes (2026-10-06) - once,
+    //     on a share as well, behind the results like every refresh here; the
+    //     walk saves the sizes, so the next load has them.
     // An index walked THIS session with no change seen is left alone: the
     // drive watchers would have marked it, and re-walking it on every return to
     // the search view would spend a scan to learn nothing.
@@ -37171,7 +37182,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        bool due = _searchIndexStale || _searchIndexPartial ||
+        bool due = _searchIndexStale || _searchIndexPartial || _searchIndexSizesMissing ||
             (_searchIndexSavedAtUtc is { } savedAt &&
              (!IsNetworkSearchScope(folder) || DateTime.UtcNow - savedAt > NetworkSearchIndexMaxAge));
         if (due)
@@ -37390,6 +37401,7 @@ public partial class MainWindow : Window
             _searchEntries.Clear();
             _searchIndexReady = false;
             _searchIndexPartial = false;
+            _searchIndexSizesMissing = false;
             _searchDisplayLimit = SearchResultDisplayCap;
             SetSearchRows(new List<SearchRow>());
         }
@@ -37501,6 +37513,7 @@ public partial class MainWindow : Window
 
                 _searchIndexReady = true;
                 _searchIndexPartial = false;
+                _searchIndexSizesMissing = false;
                 // A refresh swaps the index under results someone may be in
                 // the middle of reading, so the list keeps its place.
                 RunSearchFilter(keepPlace: fresh is not null);

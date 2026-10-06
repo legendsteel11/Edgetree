@@ -59,10 +59,12 @@ public static class SearchIndexCache
         public List<long> Times { get; set; } = new();
         // Parallel to Names too, since 2026-10-06. Added without bumping
         // FormatVersion: a file written before it simply has none, and loads
-        // with every size unknown (-1) rather than being thrown away - which on
-        // a share would have cost a walk of minutes per saved scope, for a
-        // tint on duplicate rows. The next walk fills them in. An older build
-        // reading a newer file ignores the list it does not know.
+        // with every size unknown (-1) rather than being thrown away, so its
+        // results are searchable at once. The walk that fills the sizes in
+        // runs BEHIND them the first time a search opens on it (see
+        // MainWindow.RefreshSearchIndexIfDue) - once per saved scope, minutes
+        // on a share, with nothing waited for. An older build reading a newer
+        // file ignores the list it does not know.
         public List<long> Sizes { get; set; } = new();
     }
 
@@ -123,8 +125,10 @@ public static class SearchIndexCache
     }
 
     // Returns null when there's no usable cache for this scope, in which case
-    // the caller scans as before.
-    public static (List<FileSearchService.SearchEntry> Entries, DateTime SavedAtUtc)? TryLoad(string scope)
+    // the caller scans as before. SizesKnown is false for a file saved before
+    // sizes were kept, which the caller answers with one refresh (see
+    // MainWindow.RefreshSearchIndexIfDue).
+    public static (List<FileSearchService.SearchEntry> Entries, DateTime SavedAtUtc, bool SizesKnown)? TryLoad(string scope)
     {
         try
         {
@@ -146,6 +150,7 @@ public static class SearchIndexCache
             }
 
             var entries = new List<FileSearchService.SearchEntry>();
+            bool sizesKnown = true;
             foreach (var folder in payload.Folders)
             {
                 // Names and Times are written in lockstep; a mismatch means a
@@ -154,6 +159,7 @@ public static class SearchIndexCache
                 // Sizes are trusted only when there is one per name: none at
                 // all is a file from before they were kept (see CacheFolder).
                 bool hasSizes = folder.Sizes.Count == folder.Names.Count;
+                sizesKnown &= hasSizes;
                 for (int i = 0; i < count; i++)
                 {
                     entries.Add(new FileSearchService.SearchEntry(
@@ -164,7 +170,7 @@ public static class SearchIndexCache
                 }
             }
 
-            return (entries, new DateTime(payload.SavedAtUtcTicks, DateTimeKind.Utc));
+            return (entries, new DateTime(payload.SavedAtUtcTicks, DateTimeKind.Utc), sizesKnown);
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or ArgumentOutOfRangeException)
         {
