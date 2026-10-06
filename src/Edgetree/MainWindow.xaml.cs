@@ -36339,7 +36339,11 @@ public partial class MainWindow : Window
         {
             SearchRow a = current[i];
             SearchRow b = next[i];
+            // IsDuplicate too: it is counted over every match, so it can change
+            // for a row whose entry did not - its copy past the display cap
+            // went or came.
             if (a.IsHeader != b.IsHeader || a.IsShowMore != b.IsShowMore ||
+                a.IsDuplicate != b.IsDuplicate || a.IsDuplicateLead != b.IsDuplicateLead ||
                 !Equals(a.Entry, b.Entry) ||
                 !string.Equals(a.DirectoryPath, b.DirectoryPath, StringComparison.Ordinal) ||
                 !string.Equals(a.ShowMoreLabel, b.ShowMoreLabel, StringComparison.Ordinal))
@@ -36528,24 +36532,32 @@ public partial class MainWindow : Window
     // chosen direction. Name goes through the tree's natural comparer, so "10"
     // lands after "9" in the results too.
     //
-    // TIES ARE BROKEN BY FOLDER, THEN NAME (2026-10-06). Left to the sort,
-    // equal keys kept the order the entries arrived in, and a walk lists
-    // several folders at once, so it is not the same order twice: two copies of
-    // one source tree on a share (every name in it twice) came out in a
-    // different order after each refresh. Rows trading places under someone
-    // reading them is a change nothing on disk made, and it kept SetSearchRows
-    // from recognising an unchanged list as unchanged.
+    // TIES ARE BROKEN (2026-10-06). Left to the sort, equal keys kept the
+    // order the entries arrived in, and a walk lists several folders at once,
+    // so it is not the same order twice: two copies of one source tree on a
+    // share (every name in it twice) came out in a different order after each
+    // refresh. Rows trading places under someone reading them is a change
+    // nothing on disk made, and it kept SetSearchRows from recognising an
+    // unchanged list as unchanged.
+    //
+    // By name: folder, then name. By date: NAME, then folder - so copies of a
+    // file, which share its write time, sit together for the duplicate band
+    // (see FindSameFiles) even where many files share that second (a folder
+    // unpacked from one archive); by folder they were split by every other
+    // file written in the same second.
     private IOrderedEnumerable<FileSearchService.SearchEntry> SortSearchEntries(
         IEnumerable<FileSearchService.SearchEntry> entries)
-        => (_searchSortField == FileSortField.Date
-                ? (_searchSortDescending
+        => _searchSortField == FileSortField.Date
+            ? (_searchSortDescending
                     ? entries.OrderByDescending(x => x.LastWriteTime)
                     : entries.OrderBy(x => x.LastWriteTime))
-                : (_searchSortDescending
+                .ThenBy(x => x.FileName, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.DirectoryPath, StringComparer.OrdinalIgnoreCase)
+            : (_searchSortDescending
                     ? entries.OrderByDescending(x => (string?)x.FileName, FileSystemService.NaturalNameComparer)
-                    : entries.OrderBy(x => (string?)x.FileName, FileSystemService.NaturalNameComparer)))
-            .ThenBy(x => x.DirectoryPath, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(x => x.FileName, StringComparer.OrdinalIgnoreCase);
+                    : entries.OrderBy(x => (string?)x.FileName, FileSystemService.NaturalNameComparer))
+                .ThenBy(x => x.DirectoryPath, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(x => x.FileName, StringComparer.OrdinalIgnoreCase);
 
     // Grouping on: the folders are ordered against each other by a
     // REPRESENTATIVE value, not by a second rule of their own. By name that is
@@ -37641,6 +37653,23 @@ public partial class MainWindow : Window
         // for how each answer shapes this sequence.
         IEnumerable<FileSearchService.SearchEntry> ordered = OrderSearchMatches(matches);
 
+        // A faint band says which rows are the same file (2026-10-06, on
+        // request). Counted over every match, so a copy past the display cap
+        // still counts. Asked for by name first, then by date as well, and
+        // those are the only two orders the results have; either way copies
+        // sit together (see SortSearchEntries for the date sort's ties).
+        //
+        // TWO STEPS OF IT: the first row of each set of copies a step stronger
+        // than the rest (asked for the same day). One shade ran consecutive
+        // sets together - up-r ×2 straight into up-p ×2 read as one block of
+        // four - and the stronger row is where each set begins. "First" is the
+        // list's order (by folder path, see SortSearchEntries), not a judgement
+        // of which copy is the original; nothing here can tell.
+        var sameFiles = FindSameFiles(matches);
+        var sameFilesStarted = sameFiles is null
+            ? null
+            : new HashSet<(string, long, DateTime)>(SameFileKeyComparer.Instance);
+
         // Grouped: one header per folder, the folder's files under it (the
         // sequence above already has them contiguous, so a header goes in
         // wherever the folder changes). Flat: file rows only, each carrying its
@@ -37666,8 +37695,12 @@ public partial class MainWindow : Window
             int matchStart = highlightable
                 ? entry.FileName.IndexOf(trimmedQuery, StringComparison.OrdinalIgnoreCase)
                 : -1;
+            var sameFileKey = (entry.FileName, entry.Length, entry.LastWriteTime);
+            bool duplicate = sameFiles is not null && entry.Length >= 0 && sameFiles.Contains(sameFileKey);
             rows.Add(SearchRow.File(entry, matchStart, matchStart >= 0 ? trimmedQuery.Length : 0,
-                showsFolder: !_searchGroupByFolder));
+                showsFolder: !_searchGroupByFolder,
+                isDuplicate: duplicate,
+                isDuplicateLead: duplicate && sameFilesStarted!.Add(sameFileKey)));
             shownFiles++;
         }
 
@@ -37714,6 +37747,48 @@ public partial class MainWindow : Window
         {
             SearchStatusText.Text += string.Format(Strings.SearchStatusIndexAgeSuffix, FormatSearchIndexAge(age));
         }
+    }
+
+    // THE SAME FILE, as far as the index can tell without reading any: name,
+    // size and write time all equal (2026-10-06). The write time is what keeps
+    // two text files that only happen to share a name and a length apart -
+    // edited separately, they were written at different times - while a copy
+    // made by Explorer or by this app carries its source's time along. What it
+    // misses is a copy whose time was reset (a download, a fresh checkout),
+    // and a copy under another name, which a search by name never pairs up.
+    // Null when nothing repeats. A size of -1 (an index saved before sizes
+    // were kept) never counts.
+    private static HashSet<(string Name, long Length, DateTime Time)>? FindSameFiles(
+        List<FileSearchService.SearchEntry> matches)
+    {
+        var seen = new HashSet<(string, long, DateTime)>(SameFileKeyComparer.Instance);
+        HashSet<(string, long, DateTime)>? repeated = null;
+        foreach (var entry in matches)
+        {
+            if (entry.Length < 0)
+            {
+                continue;
+            }
+            var key = (entry.FileName, entry.Length, entry.LastWriteTime);
+            if (!seen.Add(key))
+            {
+                (repeated ??= new HashSet<(string, long, DateTime)>(SameFileKeyComparer.Instance)).Add(key);
+            }
+        }
+        return repeated;
+    }
+
+    // File names compare as Windows compares them, without case.
+    private sealed class SameFileKeyComparer : IEqualityComparer<(string Name, long Length, DateTime Time)>
+    {
+        public static readonly SameFileKeyComparer Instance = new();
+
+        public bool Equals((string Name, long Length, DateTime Time) a, (string Name, long Length, DateTime Time) b)
+            => a.Length == b.Length && a.Time == b.Time &&
+               string.Equals(a.Name, b.Name, StringComparison.OrdinalIgnoreCase);
+
+        public int GetHashCode((string Name, long Length, DateTime Time) key)
+            => HashCode.Combine(StringComparer.OrdinalIgnoreCase.GetHashCode(key.Name), key.Length, key.Time);
     }
 
     private void UpdateSearchStatus()

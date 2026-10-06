@@ -407,6 +407,13 @@ public static class HelpContent
                       "Ctrl+click · Shift+click a result", "Pick several · pick a range, shared with the thumbnail list"),
                     R("여러 개 선택 후 복사 · 잘라내기 · 삭제 · 드래그", "선택한 파일 전체에 적용, 붙여넣기는 트리의 폴더에서",
                       "Copy, cut, delete or drag with several picked", "Applies to every picked file; paste into a folder in the tree"),
+                    // Since 2026-10-06. The row says what the band MEANS, the
+                    // three things compared, because the band itself cannot -
+                    // and "같은 파일" alone would claim more than a comparison
+                    // that never reads the files can know.
+                    R("연한 배경의 결과", "이름 · 크기 · 수정 시각이 같은 파일이 결과에 더 있음, 묶음마다 첫 결과는 한 단계 더 강조",
+                      "A faintly shaded result",
+                      "Another result has the same name, size and modified time; the first of each set is shaded a step more"),
                     R("결과 표시 수", "기본 1,000개 · 목록 끝 더 보기로 1,000개씩 추가",
                       "How many results show", "1,000 at a time - \"Show more\" at the end adds another 1,000"),
                     // The dot is the half a label cannot say: the button names

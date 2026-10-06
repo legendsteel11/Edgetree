@@ -5222,28 +5222,46 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ListBoxItem">
-                        <Border x:Name="Bd"
-                                Background="Transparent"
-                                CornerRadius="3"
-                                SnapsToDevicePixels="True">
-                            <Grid>
-                                <!-- A file marked from the thumbnail list
-                                     (SearchRow.IsMarked, 2026-10-06): the
-                                     selection's own brush, as the tree paints
-                                     its multi-selected rows. A layer over the
-                                     hover colour rather than a trigger, so the
-                                     mark wins over hover the way it does in the
-                                     tree, and bound to a plain value - see
-                                     SearchRow.CutOpacity for why this template
-                                     does not repaint from triggers. The padding
-                                     moved onto the content so the layer fills
-                                     the whole row. -->
-                                <Border Background="{DynamicResource TreeRowSelectedActiveBackground}"
-                                        CornerRadius="3"
-                                        Visibility="{Binding MarkVisibility}"/>
-                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
-                            </Grid>
-                        </Border>
+                        <Grid>
+                            <!-- Another result is the same file
+                                 (SearchRow.IsDuplicate, 2026-10-06): a faint
+                                 band in the file name's own
+                                 colour, so it lightens a row on a dark palette
+                                 and darkens it on a light one with no brush of
+                                 its own to keep per theme. UNDER the row's
+                                 border, so hover, selection and marks paint
+                                 over it. Two strengths: the first row of each
+                                 set of copies is the stronger one
+                                 (SearchRow.DuplicateOpacity). -->
+                            <Border Background="{DynamicResource FileNameForeground}"
+                                    Opacity="{Binding DuplicateOpacity}"
+                                    CornerRadius="3"
+                                    Visibility="{Binding DuplicateVisibility}"/>
+                            <Border x:Name="Bd"
+                                    Background="Transparent"
+                                    CornerRadius="3"
+                                    SnapsToDevicePixels="True">
+                                <Grid>
+                                    <!-- A file marked from the thumbnail list
+                                         (SearchRow.IsMarked, 2026-10-06): the
+                                         selection's own brush, as the tree
+                                         paints its multi-selected rows. A layer
+                                         over the hover colour rather than a
+                                         trigger, so the mark wins over hover
+                                         the way it does in the tree, and bound
+                                         to a plain value - see
+                                         SearchRow.CutOpacity for why this
+                                         template does not repaint from
+                                         triggers. The padding moved onto the
+                                         content so the layer fills the whole
+                                         row. -->
+                                    <Border Background="{DynamicResource TreeRowSelectedActiveBackground}"
+                                            CornerRadius="3"
+                                            Visibility="{Binding MarkVisibility}"/>
+                                    <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                                </Grid>
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver"
                                     Value="True">

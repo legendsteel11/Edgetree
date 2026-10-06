@@ -131,6 +131,22 @@ public sealed class SearchRow : INotifyPropertyChanged
 
     public Visibility MarkVisibility => _isMarked ? Visibility.Visible : Visibility.Collapsed;
 
+    // Another result has this file's name, size and write time - a copy, as
+    // far as the index can tell without reading either file (2026-10-06, see
+    // MainWindow.FindSameFiles). Set when the row is built, so plain init
+    // values; the template draws a faint band from them.
+    public bool IsDuplicate { get; init; }
+
+    // The first row of its set of copies in the list's order, drawn a step
+    // stronger so consecutive sets do not run together. Not "the original".
+    public bool IsDuplicateLead { get; init; }
+
+    public Visibility DuplicateVisibility => IsDuplicate ? Visibility.Visible : Visibility.Collapsed;
+
+    // The band's strength. 0.07 was read clearly on a dark palette on
+    // 2026-10-06; the lead is twice that.
+    public double DuplicateOpacity => IsDuplicateLead ? 0.14 : 0.07;
+
     public static SearchRow Header(string directoryPath) => new()
     {
         IsHeader = true,
@@ -144,7 +160,7 @@ public sealed class SearchRow : INotifyPropertyChanged
     };
 
     public static SearchRow File(FileSearchService.SearchEntry entry, int matchStart, int matchLength,
-        bool showsFolder) => new()
+        bool showsFolder, bool isDuplicate = false, bool isDuplicateLead = false) => new()
     {
         IsHeader = false,
         DirectoryPath = entry.DirectoryPath,
@@ -153,6 +169,8 @@ public sealed class SearchRow : INotifyPropertyChanged
         MatchStart = matchStart,
         MatchLength = matchLength,
         ShowsFolder = showsFolder,
+        IsDuplicate = isDuplicate,
+        IsDuplicateLead = isDuplicateLead,
         IsCut = FileSystemService.CutPaths.Count > 0 && FileSystemService.CutPaths.Contains(entry.FullPath)
     };
 
