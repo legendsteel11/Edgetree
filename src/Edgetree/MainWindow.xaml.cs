@@ -21215,11 +21215,7 @@ public partial class MainWindow : Window
         // creates a fresh instance for a row that wasn't there before) - then
         // dropped straight into inline rename, matching Explorer/VS Code's
         // "type the name right away" new-folder flow.
-        string createdName = Path.GetFileName(createdPath!);
-        var newItem = target.AllLoadedChildren.FirstOrDefault(c =>
-            !c.IsPlaceholder && !c.IsShowMore &&
-            string.Equals(c.Name, createdName, StringComparison.OrdinalIgnoreCase));
-        if (newItem is null)
+        if (target.FindLoadedChild(Path.GetFileName(createdPath!)) is not { } newItem)
         {
             return;
         }
@@ -21741,10 +21737,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var renamed = parent.AllLoadedChildren.FirstOrDefault(c =>
-                !c.IsPlaceholder && !c.IsShowMore &&
-                string.Equals(c.Name, newName, StringComparison.OrdinalIgnoreCase));
-            if (renamed is null)
+            if (parent.FindLoadedChild(newName) is not { } renamed)
             {
                 return;
             }
@@ -37263,34 +37256,15 @@ public partial class MainWindow : Window
             return;
         }
 
+        // IsNetworkFolder counts a drive it cannot ask as network: guessed
+        // wrong that way, an index is refreshed a day later than it could have
+        // been; guessed the other way, a share is re-walked on every visit.
         bool due = _searchIndexStale || _searchIndexPartial || _searchIndexSizesMissing ||
             (_searchIndexSavedAtUtc is { } savedAt &&
-             (!IsNetworkSearchScope(folder) || DateTime.UtcNow - savedAt > NetworkSearchIndexMaxAge));
+             (!IsNetworkFolder(folder) || DateTime.UtcNow - savedAt > NetworkSearchIndexMaxAge));
         if (due)
         {
             StartScopeScan(new[] { folder }, keepCurrent: true);
-        }
-    }
-
-    // A UNC path, or a drive letter mapped to a share. When the drive cannot be
-    // asked, it counts as network: the cost of guessing wrong that way is an
-    // index refreshed a day later than it could have been, and the cost of the
-    // other guess is a share re-walked on every visit.
-    private static bool IsNetworkSearchScope(string folder)
-    {
-        if (folder.StartsWith(@"\\", StringComparison.Ordinal))
-        {
-            return true;
-        }
-
-        try
-        {
-            return Path.GetPathRoot(folder) is not { Length: > 0 } root ||
-                   new DriveInfo(root).DriveType == DriveType.Network;
-        }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
-        {
-            return true;
         }
     }
 
@@ -37319,12 +37293,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        string scopeTrimmed = scope.TrimEnd(Path.DirectorySeparatorChar);
-        string changed = changedFolderPath.TrimEnd(Path.DirectorySeparatorChar);
-        bool inScope =
-            string.Equals(changed, scopeTrimmed, StringComparison.OrdinalIgnoreCase) ||
-            changed.StartsWith(scopeTrimmed + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
-        if (!inScope)
+        if (!FileOperationService.IsSameOrBeneath(changedFolderPath, scope))
         {
             return;
         }
@@ -37333,7 +37302,7 @@ public partial class MainWindow : Window
         // the searched folder - the watchers report every change on every drive.
         if (!_searchIndexReady && !_searchScanning)
         {
-            LogSearchDot($"change in {changed} ignored: no index for the scope yet");
+            LogSearchDot($"change in {changedFolderPath.TrimEnd(Path.DirectorySeparatorChar)} ignored: no index for the scope yet");
             return;
         }
 

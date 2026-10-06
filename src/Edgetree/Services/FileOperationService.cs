@@ -325,7 +325,9 @@ public static class FileOperationService
         => string.Equals(a.TrimEnd(Path.DirectorySeparatorChar), b.TrimEnd(Path.DirectorySeparatorChar),
             StringComparison.OrdinalIgnoreCase);
 
-    private static bool IsSameOrBeneath(string candidate, string root)
+    // Public since 2026-10-06: the search's blue dot asks it too, which had
+    // grown a copy of its own.
+    public static bool IsSameOrBeneath(string candidate, string root)
     {
         string trimmedCandidate = candidate.TrimEnd(Path.DirectorySeparatorChar);
         string trimmedRoot = root.TrimEnd(Path.DirectorySeparatorChar);
