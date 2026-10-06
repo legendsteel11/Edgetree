@@ -356,9 +356,30 @@ public static class ShellThumbnailService
             ImageSource? thumbnail = null;
             string source = "cache   ";
             bool fromCache = false;
-            if (thumbnailOnly)
+
+            // AN SVG IS DRAWN HERE FIRST when it is simple enough (2026-10-06,
+            // see SvgRenderer): ahead of the cache, which may hold an empty
+            // picture an installed handler gave for it, and never written to
+            // it - an icon is a few KB of shapes, cheaper to draw than to store.
+            bool isSvg = IsSvg(path);
+            bool selfDrawn = false;
+            if (isSvg && thumbnailOnly)
+            {
+                thumbnail = SvgRenderer.TryRender(path, pixelSize);
+                selfDrawn = thumbnail is not null;
+                if (selfDrawn)
+                {
+                    source = "svg     ";
+                }
+            }
+
+            if (thumbnail is null && thumbnailOnly)
             {
                 thumbnail = ThumbnailCacheService.TryRead(path, pixelSize);
+                if (isSvg && IsFlat(thumbnail))
+                {
+                    thumbnail = null;
+                }
                 fromCache = thumbnail is not null;
             }
 
@@ -376,12 +397,24 @@ public static class ShellThumbnailService
             {
                 source = "shell   ";
                 thumbnail = Extract(path, pixelSize, thumbnailOnly);
+
+                // An SVG handler's answer that is ONE value all over - fully
+                // transparent, or solid black - is no picture (measured
+                // 2026-10-06: PowerToys' handler gave exactly those two for
+                // Material Symbols, at 128 and at 801, every time). Treated as
+                // no thumbnail, so the caller shows the type icon, and nothing
+                // empty is stored. Only for SVG: a solid frame is a real
+                // thumbnail for a film that opens on black.
+                if (isSvg && IsFlat(thumbnail))
+                {
+                    thumbnail = null;
+                }
             }
 
             // Only what was just made, and only for the thumbnail-only callers:
             // the viewer's non-image mode falls back to a file-type ICON, which
             // is not a picture of this file and must never be stored as one.
-            if (thumbnail is not null && thumbnailOnly && !fromCache)
+            if (thumbnail is not null && thumbnailOnly && !fromCache && !selfDrawn)
             {
                 ThumbnailCacheService.Write(path, thumbnail, pixelSize);
             }
@@ -438,6 +471,36 @@ public static class ShellThumbnailService
         {
             Interlocked.Decrement(ref _inFlight);
         }
+    }
+
+    private static bool IsSvg(string path)
+        => path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase);
+
+    // Every pixel the same value, transparency included. An icon on a
+    // transparent ground is never this - its shape differs from its ground -
+    // however few colours it uses.
+    private static bool IsFlat(ImageSource? image)
+    {
+        if (image is not BitmapSource bitmap || bitmap.PixelWidth == 0 || bitmap.PixelHeight == 0)
+        {
+            return false;
+        }
+
+        var bgra = bitmap.Format == PixelFormats.Bgra32 || bitmap.Format == PixelFormats.Pbgra32
+            ? bitmap
+            : new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+        int stride = bgra.PixelWidth * 4;
+        var pixels = new byte[stride * bgra.PixelHeight];
+        bgra.CopyPixels(pixels, stride, 0);
+        uint first = BitConverter.ToUInt32(pixels, 0);
+        for (int i = 4; i < pixels.Length; i += 4)
+        {
+            if (BitConverter.ToUInt32(pixels, i) != first)
+            {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static ImageSource? Extract(string path, int pixelSize, bool thumbnailOnly)

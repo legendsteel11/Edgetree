@@ -508,12 +508,14 @@ public static class HelpContent
                     R("표시 형식", "Windows가 미리보기를 만들 수 있는 그림 (PSD · RAW · JXL 등 포함)",
                       "Formats it shows",
                       "Any picture Windows can make a thumbnail of - PSD, RAW, JXL and the rest"),
-                    // SVG has no decoder in Windows at all, so this one is the
-                    // shell's answer or nothing - which is why the same file
-                    // shows on one PC and not another. Said here rather than
-                    // left as a mystery; the app cannot promise it either way.
-                    R("SVG", "Windows에 렌더링 기능 설치돼 있을 때만 표시",
-                      "SVG", "Shows only where Windows has something installed that can draw it"),
+                    // SVG has no decoder in Windows at all. Until 2026-10-06 it
+                    // was the shell's answer or nothing; since then the app
+                    // draws the simple ones itself (icon-style shapes in plain
+                    // colours, see SvgRenderer) and only the rest still depends
+                    // on what the PC has installed - which is why the same
+                    // complex file shows on one PC and not another.
+                    R("SVG", "아이콘처럼 단순한 SVG는 항상 표시, 복잡한 SVG는 Windows에 렌더링 기능이 설치돼 있을 때만 표시",
+                      "SVG", "Simple, icon-style SVGs always show; complex ones only where Windows has something installed that can draw them"),
                     R("드래그", "확대 상태에서 화면 이동", "Drag", "Move around, when zoomed in"),
                     // What the plate IS, which nothing on screen says - it
                     // appears on its own once there is more picture than panel,
