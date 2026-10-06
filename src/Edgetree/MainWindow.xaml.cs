@@ -16900,9 +16900,9 @@ public partial class MainWindow : Window
         // The viewer panel follows the selection (debounced - see the
         // method). A no-op while the panel is closed.
         ScheduleViewerPreview();
-        // And, if asked, OPENS AND SHUTS with it. Here and only here: the
-        // search view has its own way into the panel and a result list is not
-        // a tree being walked.
+        // And, if asked, OPENS with it (the shutting half was cut on
+        // 2026-08-15). The results list asks the same since 2026-10-06 - see
+        // SearchResultsList_SelectionChanged.
         ScheduleViewerAutoToggle();
         // Debounced for a different reason than the preview's: not to spare
         // work, but so a selection the APP moved is overwritten before it can
@@ -23533,6 +23533,13 @@ public partial class MainWindow : Window
             _settingsService.Save(_settings);
         }
 
+        // Before the preview reads ViewerItem, or it shows the tree's file
+        // under a list of results first.
+        if (_isSearchViewActive)
+        {
+            LinkSearchViewerOnOpen();
+        }
+
         UpdateViewerPreview();
         // The clock is the panel's, not the slideshow's - so it comes up with
         // the panel if it was left on.
@@ -23830,13 +23837,19 @@ public partial class MainWindow : Window
         // Re-asked at the tick rather than captured when the timer started: the
         // selection is allowed to move all it likes in between, and what matters
         // is where it came to rest.
-        if (ExplorerTree.SelectedItem is not FileSystemItem
-            { IsPlaceholder: false, IsShowMore: false } item)
-        {
-            return;
-        }
-
-        if (item.IsDirectory || _viewerOpen)
+        //
+        // Asked of whichever list is on screen: the results while the search
+        // view is up (2026-10-06), the tree otherwise. A double click that jumps
+        // from a result to the tree has closed the search view by the tick, so
+        // the tree is what is asked then, and its landing opens the panel the
+        // way it did before results could.
+        string? path = _isSearchViewActive
+            ? (SearchResultsList.SelectedItem as SearchRow)?.Entry?.FullPath
+            : ExplorerTree.SelectedItem is FileSystemItem
+                { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } item
+                ? item.FullPath
+                : null;
+        if (path is null || _viewerOpen)
         {
             return;
         }
@@ -23850,7 +23863,7 @@ public partial class MainWindow : Window
         // The same predicate every other door into the panel asks, so a kind the
         // panel learns to show is a kind this opens for, with nothing to keep in
         // step - see HasViewerPreview for the times that went wrong.
-        if (HasViewerPreview(item.FullPath))
+        if (HasViewerPreview(path))
         {
             OpenViewer();
         }
@@ -36108,7 +36121,15 @@ public partial class MainWindow : Window
             // still listed - this makes its row the selected one again too.
             if (reselect is not null)
             {
-                SearchResultsList.SelectedItem = reselect;
+                _searchRestoringSelection = true;
+                try
+                {
+                    SearchResultsList.SelectedItem = reselect;
+                }
+                finally
+                {
+                    _searchRestoringSelection = false;
+                }
             }
 
             LogClickLine($"search rows: refresh rebuilt the list ({rows.Count} rows), " +
@@ -36561,12 +36582,38 @@ public partial class MainWindow : Window
             return;
         }
 
+        PointSearchViewerAt(entry);
+        ScheduleViewerPreview();
+    }
+
+    // The link itself, without asking for a preview - for OpenViewer, which
+    // runs its own straight after.
+    private void PointSearchViewerAt(FileSearchService.SearchEntry entry)
+    {
         var items = SearchViewerItems();
         _viewerListOverride = items;
         _searchViewerItem = items.FirstOrDefault(i =>
                                 string.Equals(i.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase))
                             ?? new FileSystemItem(entry.FileName, entry.FullPath, isDirectory: false);
-        ScheduleViewerPreview();
+    }
+
+    // THE PANEL OPENING ONTO THE SEARCH VIEW TAKES THE LIST'S CHOICE
+    // (2026-10-06). It took the tree's: nothing linked the two until the next
+    // selection change in the list, so the panel came up showing whatever the
+    // tree had selected behind the results - and a click on a result that
+    // opens the panel (자동 펼치기) would have opened it on the wrong file. The
+    // selected result if there is one, otherwise what RelinkSearchViewer does
+    // for a fresh result set: the top one, or blank.
+    private void LinkSearchViewerOnOpen()
+    {
+        if (SearchResultsList.SelectedItem is SearchRow { Entry: { } chosen })
+        {
+            PointSearchViewerAt(chosen);
+        }
+        else
+        {
+            RelinkSearchViewer();
+        }
     }
 
     // The way back from the strip and the chevrons: move the list's selection
@@ -37979,8 +38026,22 @@ public partial class MainWindow : Window
         // there is nothing to preview into, so the gesture keeps the only job
         // it can do. With the panel open the preview has already happened, off
         // the list's own selection change, and there is nothing left here.
+        //
+        // UNLESS 자동 펼치기 WILL OPEN IT (2026-10-06): then there is somewhere
+        // to preview into a moment from now, and the click stays in the list
+        // like every other click in the search view. Asked with the same test
+        // the timer asks, so a file the panel cannot show still jumps. The
+        // timer is restarted here as well as by the selection change, because
+        // a click on the row already selected - left that way when the panel
+        // was shut by hand - changes no selection.
         if (!_viewerOpen && row.Entry is { } entry)
         {
+            if (_settings.ViewerFollowsSelection && HasViewerPreview(entry.FullPath))
+            {
+                ScheduleViewerAutoToggle();
+                return;
+            }
+
             ActivateSearchResult(entry);
         }
     }
@@ -37998,7 +38059,24 @@ public partial class MainWindow : Window
         {
             PreviewSearchResult(entry);
         }
+
+        // 자동 펼치기 for the results too (2026-10-06), through the tree's own
+        // debounce and test. It used to be the tree's alone, and a click on a
+        // picture in the results with the panel shut was the one case in the
+        // search view that did not end in the panel: it jumped to the tree
+        // instead, and only the tree's landing opened the panel. Not for a
+        // selection the list puts back after a refresh - see
+        // _searchRestoringSelection.
+        if (!_searchRestoringSelection)
+        {
+            ScheduleViewerAutoToggle();
+        }
     }
+
+    // Set while SetSearchRows puts a selection back after a refresh rebuilt the
+    // rows. That is the list keeping its place, not anyone choosing a file, and
+    // a panel shut by hand must not open because an index finished walking.
+    private bool _searchRestoringSelection;
 
     // Enter deliberately activates (jump to the file in the tree), NOT "열기"
     // - which is why the menu's 열기 shows no gesture while 복사/삭제/경로

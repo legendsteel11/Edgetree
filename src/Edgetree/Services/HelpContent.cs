@@ -388,9 +388,13 @@ public static class HelpContent
                     // that meaning moves to the double click so the single one
                     // can show the file without collapsing the list. Stated as
                     // three plain outcomes rather than as one row with an
-                    // if-clause in it.
+                    // if-clause in it. A fourth since 2026-10-06, the same way:
+                    // 자동 펼치기 now opens the panel from a result too, which
+                    // takes the first row's place for a media file.
                     R("결과 클릭", "트리의 해당 항목으로 이동",
                       "Click a result", "Go to it in the tree"),
+                    R("결과 클릭 (자동 펼치기 활성화)", "미디어 파일이면 패널이 펼쳐지며 표시됨",
+                      "Click a result", "(with Expand on selection) A media file opens in the multimedia panel"),
                     R("결과 클릭 · ↑ ↓ (멀티미디어 패널 열림)", "검색 결과 간 이동",
                       "Click a result · ↑ ↓", "(with the multimedia panel open) Move through the results"),
                     R("결과 더블클릭 (멀티미디어 패널 열림)", "트리의 해당 항목으로 이동",

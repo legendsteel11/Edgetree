@@ -7034,7 +7034,9 @@
                      it in the tree, which is what a single click did before the
                      panel existed (see SearchResultsList_PreviewMouseLeftButtonUp
                      and PreviewSearchResult). With the panel closed a single
-                     click still goes to the tree. -->
+                     click still goes to the tree, unless 자동 펼치기 is on and
+                     the file is one the panel can show: then the click opens
+                     the panel and the list stays (2026-10-06). -->
                 <ListBox x:Name="SearchResultsList"
                         Grid.Row="2"
                         Style="{StaticResource FavoritesListBoxStyle}"
