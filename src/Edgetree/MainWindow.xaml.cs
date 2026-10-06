@@ -3454,32 +3454,42 @@ public partial class MainWindow : Window
     // redraw the sliver's own bare background/header on each tick - showing
     // it before animating (or not hiding it at all) is what used to make the
     // reveal side of this transition stutter (see AnimateWidth's comment).
-    private void EnterAutoHide()
+    // EXPERIMENT (2026-08-08, user request): the viewer panel used to fold on
+    // every hide so hide/reveal only ever handled the tree-only width. Now it
+    // rides along - the slide and collapse just see a wider window, and
+    // RevealFromAutoHide adds the panel's width back on. If hide/reveal
+    // misbehaves with the viewer open, this is the first place to look (the
+    // fold was one CloseViewer() call in EnterAutoHide).
+    //
+    // AND IT FOLDS AGAIN WHEN THERE IS NOTHING IN IT TO LOOK AT (2026-09-14).
+    // Riding along is right for a picture, a film or a track: the panel is the
+    // thing being used, and coming back to it open is the point. With a folder
+    // or a file the panel cannot show selected, what rides along is an empty
+    // panel - and a reveal then unfolds that whole width across the screen to
+    // show nothing.
+    //
+    // ON EVERY HIDE, not only the first (2026-10-06). This sat in EnterAutoHide
+    // alone, so it held for the hide that turned auto-hide on and for none of
+    // the hides after a peek (CloseAutoHideReveal) - and those are nearly all
+    // of them: from the second hide on, an empty panel rode along every time.
+    //
+    // Judged by the SELECTION through IsViewerCarouselItem, the one place the
+    // panel's world is decided, not by whether a picture is still on screen:
+    // the last picture can outlive the selection that showed it. A track
+    // playing in the background is not cut by this - CloseViewer keeps
+    // background play, and without background play a track that is not the
+    // selection is not playing at all.
+    private void FoldEmptyViewerBeforeHide()
     {
-        // EXPERIMENT (2026-08-08, user request): the viewer panel used to
-        // fold here so hide/reveal only ever handled the tree-only width.
-        // Now it rides along - the slide and collapse just see a wider
-        // window, and RevealFromAutoHide adds the panel's width back on. If
-        // hide/reveal misbehaves with the viewer open, this is the first
-        // place to look (the fold was one CloseViewer() call right here).
-        //
-        // AND IT FOLDS AGAIN WHEN THERE IS NOTHING IN IT TO LOOK AT
-        // (2026-09-14). Riding along is right for a picture, a film or a track:
-        // the panel is the thing being used, and coming back to it open is the
-        // point. With a folder or a file the panel cannot show selected, what
-        // rides along is an empty panel - and a reveal then unfolds that whole
-        // width across the screen to show nothing.
-        //
-        // Judged by the SELECTION through IsViewerCarouselItem, the one place
-        // the panel's world is decided, not by whether a picture is still on
-        // screen: the last picture can outlive the selection that showed it.
-        // A track playing in the background is not cut by this - CloseViewer
-        // keeps background play, and without background play a track that is
-        // not the selection is not playing at all.
         if (_viewerOpen && (ViewerItem is not { } shown || !IsViewerCarouselItem(shown)))
         {
             CloseViewer();
         }
+    }
+
+    private void EnterAutoHide()
+    {
+        FoldEmptyViewerBeforeHide();
 
         _settings.IsAutoHidden = true;
         StopHoverReveal();
@@ -4067,6 +4077,9 @@ public partial class MainWindow : Window
     {
         _revealedByDrag = false;
         LogAutoHide("rehide   enter");
+
+        // Before either way out below, as EnterAutoHide does it before its own.
+        FoldEmptyViewerBeforeHide();
 
         // A reveal caught mid-flight does NOT get turned around with a second
         // animation. That was tried, and it stranded the window: the reversing
