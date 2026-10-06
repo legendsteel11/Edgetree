@@ -33500,6 +33500,8 @@ public partial class MainWindow : Window
         // time: the same menu serves the tree.
         if (sender is ContextMenu menu)
         {
+            ShowMultiSelectionInfo(menu);
+
             bool searching = _isSearchViewActive;
             bool namesFiles = _multiSelection.Count > 0 || _filmstripMenuTarget is not null;
             SetMenuItemEnabled(menu, "paste", !searching);
@@ -33508,6 +33510,30 @@ public partial class MainWindow : Window
                 SetMenuItemEnabled(menu, tag, !searching || namesFiles);
             }
         }
+    }
+
+    // The "N개 항목 선택됨" row a menu carries as multiInfo / multiInfoSep:
+    // shown while more than one file is marked, hidden otherwise, so the
+    // everyday one-file menu stays as it always was. Returns whether it
+    // showed. The tree menu sets its own inline (ExplorerItemContextMenu_
+    // Opened); the results' and the thumbnail list's menus come here.
+    private bool ShowMultiSelectionInfo(ItemsControl menu)
+    {
+        bool several = _multiSelection.Count > 1;
+        var visibility = several ? Visibility.Visible : Visibility.Collapsed;
+        if (FindTaggedMenuElement<MenuItem>(menu, "multiInfo") is { } infoItem)
+        {
+            infoItem.Visibility = visibility;
+            if (several && infoItem.Header is TextBlock infoText)
+            {
+                infoText.Text = string.Format(Strings.MenuMultiSelectionInfo, _multiSelection.Count);
+            }
+        }
+        if (FindTaggedMenuElement<Separator>(menu, "multiInfoSep") is { } infoSeparator)
+        {
+            infoSeparator.Visibility = visibility;
+        }
+        return several;
     }
 
     private static void SetMenuItemEnabled(ItemsControl menu, string tag, bool isEnabled)
@@ -38884,6 +38910,13 @@ public partial class MainWindow : Window
             }
 
             openWithCodeItem.IsEnabled = ShellFileService.IsCodeRegistered();
+
+            // The count of marked results on top, and 경로 복사 off while
+            // there are several - the tree menu's two rules, for the same
+            // reasons (see ExplorerItemContextMenu_Opened): the edit rows act
+            // on all of them, and a one-file row should not quietly act on one.
+            bool several = ShowMultiSelectionInfo(menu);
+            SetMenuItemEnabled(menu, "copyPath", !several);
 
             // Guard for opens that bypassed the right-click handler (keyboard
             // menu key): hide a slot left over from an earlier open rather
