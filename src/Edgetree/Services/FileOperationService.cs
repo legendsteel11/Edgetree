@@ -383,7 +383,8 @@ public static class FileOperationService
     // the external original - the safer default for a sidebar utility, not a
     // full file manager) and asks per top-level dropped item before
     // overwriting anything that already exists at the destination; declining
-    // just skips that item and moves on to the next.
+    // just skips that item and moves on to the next. A name the SAME drop has
+    // already put there is numbered instead - see below.
     public static bool TryImportDroppedPaths(IReadOnlyList<string> sourcePaths, string destinationFolder,
         Func<string, bool> confirmOverwrite, out IReadOnlyList<string> createdPaths, out string? error)
     {
@@ -422,7 +423,22 @@ public static class FileOperationService
                 string destPath = Path.Combine(destinationFolder, name);
                 bool exists = File.Exists(destPath) || Directory.Exists(destPath);
 
-                if (exists && !confirmOverwrite(name))
+                // A NAME THIS DROP HAS ALREADY USED IS NUMBERED, NOT ASKED
+                // ABOUT (2026-10-06). Files gathered from several folders - a
+                // multi-selection made in search results, or by Ctrl+click
+                // across the tree - can share a name, and the second one used
+                // to meet the overwrite question for the copy of the first,
+                // made a moment earlier by this same drop. The question cannot
+                // say that is what it means, and answering yes lost a file.
+                // Numbered up to " (2)" the way a paste numbers every
+                // collision; the question is kept for what was in the folder
+                // before the drop.
+                if (exists && created.Contains(destPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    destPath = GetUniqueDestination(destPath);
+                    exists = false;
+                }
+                else if (exists && !confirmOverwrite(name))
                 {
                     continue;
                 }
