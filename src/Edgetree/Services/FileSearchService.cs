@@ -19,7 +19,12 @@ public static class FileSearchService
     // file on top of the folder path it already shares with its siblings.
     // LastWriteTime comes from the FileInfo the enumeration already yields (no
     // extra stat call) and drives the results date sort.
-    public sealed record SearchEntry(string DirectoryPath, string FileName, DateTime LastWriteTime)
+    //
+    // Length too (2026-10-06), from the same FileInfo and so at no cost to a
+    // walk, for telling a copy from a namesake (see MainWindow.FindSameFiles).
+    // -1 is "not known": an index saved before sizes were kept, until the
+    // folder is walked again.
+    public sealed record SearchEntry(string DirectoryPath, string FileName, DateTime LastWriteTime, long Length = -1)
     {
         public string FullPath => Path.Combine(DirectoryPath, FileName);
     }
@@ -187,7 +192,7 @@ public static class FileSearchService
                             {
                                 ct.ThrowIfCancellationRequested();
 
-                                batch.Add(new SearchEntry(dirPath, file.Name, file.LastWriteTime));
+                                batch.Add(new SearchEntry(dirPath, file.Name, file.LastWriteTime, file.Length));
                                 if (batch.Count >= BatchSize)
                                 {
                                     onBatch.Report(batch);

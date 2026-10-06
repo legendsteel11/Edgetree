@@ -57,6 +57,13 @@ public static class SearchIndexCache
         // Parallel to Names. UTC ticks, so restoring can't be thrown off by the
         // machine's time zone or a DST boundary between sessions.
         public List<long> Times { get; set; } = new();
+        // Parallel to Names too, since 2026-10-06. Added without bumping
+        // FormatVersion: a file written before it simply has none, and loads
+        // with every size unknown (-1) rather than being thrown away - which on
+        // a share would have cost a walk of minutes per saved scope, for a
+        // tint on duplicate rows. The next walk fills them in. An older build
+        // reading a newer file ignores the list it does not know.
+        public List<long> Sizes { get; set; } = new();
     }
 
     // One file per scope, named by a hash of the scope path rather than the path
@@ -85,6 +92,7 @@ public static class SearchIndexCache
                 }
                 folder.Names.Add(entry.FileName);
                 folder.Times.Add(entry.LastWriteTime.ToUniversalTime().Ticks);
+                folder.Sizes.Add(entry.Length);
             }
 
             var payload = new CacheFile
@@ -143,12 +151,16 @@ public static class SearchIndexCache
                 // Names and Times are written in lockstep; a mismatch means a
                 // corrupted file, so stop rather than index past the end.
                 int count = Math.Min(folder.Names.Count, folder.Times.Count);
+                // Sizes are trusted only when there is one per name: none at
+                // all is a file from before they were kept (see CacheFolder).
+                bool hasSizes = folder.Sizes.Count == folder.Names.Count;
                 for (int i = 0; i < count; i++)
                 {
                     entries.Add(new FileSearchService.SearchEntry(
                         folder.Path,
                         folder.Names[i],
-                        new DateTime(folder.Times[i], DateTimeKind.Utc).ToLocalTime()));
+                        new DateTime(folder.Times[i], DateTimeKind.Utc).ToLocalTime(),
+                        hasSizes ? folder.Sizes[i] : -1));
                 }
             }
 
