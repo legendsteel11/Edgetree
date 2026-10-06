@@ -617,6 +617,43 @@ internal static class NativeMethods
         return ShellExecuteEx(ref info);
     }
 
+    // 속성 for one path: the "properties" verb first, SHObjectProperties when
+    // the verb refuses. Measured 2026-10-06 from a PowerShell STA probe: the
+    // verb fails on the USER PROFILE FOLDER itself (C:\Users\<name>) with
+    // E_FAIL, hInstApp 5 - by path or by a parsed PIDL, with or without
+    // lpDirectory - while C:\Users and every folder under the profile open
+    // fine. SHObjectProperties on the same path opened the sheet ("<name>
+    // 속성"), and so did the Profile known-folder PIDL. Why the verb refuses
+    // that one folder is the shell's business; the second door is what
+    // matters.
+    //
+    // NO_UI on the first attempt, because without it the shell answers the
+    // refusal with its own message box - the path as the title and "지정되지
+    // 않은 오류입니다" - before the fallback gets a chance to show the sheet.
+    // The verb stays first rather than being replaced: ShellDialogPlacement was
+    // measured against the sheet it raises, and it is the one every other path
+    // has used since.
+    public static bool TryShowProperties(string path)
+    {
+        var info = new ShellExecuteInfo
+        {
+            fMask = SEE_MASK_INVOKEIDLIST | SEE_MASK_FLAG_NO_UI,
+            lpVerb = "properties",
+            lpFile = path,
+            lpDirectory = Path.GetDirectoryName(path),
+            nShow = SW_SHOWNORMAL
+        };
+        info.cbSize = Marshal.SizeOf(info);
+
+        return ShellExecuteEx(ref info) || SHObjectProperties(IntPtr.Zero, SHOP_FILEPATH, path, null);
+    }
+
+    private const uint SEE_MASK_FLAG_NO_UI = 0x00000400;
+    private const uint SHOP_FILEPATH = 0x00000002;
+
+    [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool SHObjectProperties(IntPtr hwnd, uint objectType, string objectName, string? propertyPage);
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHParseDisplayName(
         string name, IntPtr bindingContext, out IntPtr pidl, uint sfgaoIn, out uint sfgaoOut);

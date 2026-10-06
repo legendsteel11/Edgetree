@@ -92,7 +92,7 @@ public static class ShellFileService
     public static void ShowProperties(string path)
     {
         NativeMethods.AllowNextWindowToActivate();
-        NativeMethods.TryOpenWithShellVerb(path, "properties");
+        NativeMethods.TryShowProperties(path);
     }
 
     // Call off the UI thread: the fallback decodes the picture at full size.
