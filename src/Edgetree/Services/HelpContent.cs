@@ -399,6 +399,14 @@ public static class HelpContent
                       "Click a result · ↑ ↓", "(with the multimedia panel open) Move through the results"),
                     R("결과 더블클릭 (멀티미디어 패널 열림)", "트리의 해당 항목으로 이동",
                       "Double-click a result", "(with the multimedia panel open) Go to it in the tree"),
+                    // Since 2026-10-06: the results pick several the way the
+                    // tree and the thumbnail list do, into the one set the two
+                    // lists share. The second row is where a paste goes,
+                    // because the search view has no folder to paste into.
+                    R("결과 Ctrl+클릭 · Shift+클릭", "여러 개 선택 · 범위 선택, 썸네일 목록과 같은 선택",
+                      "Ctrl+click · Shift+click a result", "Pick several · pick a range, shared with the thumbnail list"),
+                    R("여러 개 선택 후 복사 · 잘라내기 · 삭제 · 드래그", "선택한 파일 전체에 적용, 붙여넣기는 트리의 폴더에서",
+                      "Copy, cut, delete or drag with several picked", "Applies to every picked file; paste into a folder in the tree"),
                     R("결과 표시 수", "기본 1,000개 · 목록 끝 더 보기로 1,000개씩 추가",
                       "How many results show", "1,000 at a time - \"Show more\" at the end adds another 1,000"),
                     // The dot is the half a label cannot say: the button names

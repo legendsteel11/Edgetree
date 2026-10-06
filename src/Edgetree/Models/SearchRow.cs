@@ -12,10 +12,10 @@ namespace SidebarExplorer.App.Models;
 // switches layout on IsHeader, and the click/keyboard/context-menu handlers act
 // only on rows whose Entry is non-null.
 //
-// INotifyPropertyChanged exists solely for Icon: in Windows-shell icon mode a
-// per-file icon (.exe 등) can arrive from a background extraction after the
-// row is already on screen (see ShellIconService), and the callback re-raises
-// Icon so the row picks it up. Everything else is init-only as before.
+// INotifyPropertyChanged is for what changes while the row is on screen: Icon
+// (in Windows-shell icon mode a per-file icon (.exe 등) can arrive from a
+// background extraction, see ShellIconService), and the two marks, IsCut and
+// IsMarked. Everything else is init-only.
 public sealed class SearchRow : INotifyPropertyChanged
 {
     public bool IsHeader { get; init; }
@@ -108,6 +108,28 @@ public sealed class SearchRow : INotifyPropertyChanged
     // repaints only from direct value bindings (see the note above), and the
     // ambiguity it would solve does not exist here.
     public System.Windows.FontStyle CutFontStyle => _isCut ? FontStyles.Italic : FontStyles.Normal;
+
+    // One of the app's multi-selection (MainWindow._multiSelection), marked
+    // from the thumbnail list while the results drive it (2026-10-06). The
+    // tree's rows ARE the marked items and paint IsMultiSelected themselves;
+    // these rows are not, so MainWindow sets this by path. A plain value the
+    // template binds to directly, for the reason given for CutOpacity above.
+    private bool _isMarked;
+    public bool IsMarked
+    {
+        get => _isMarked;
+        set
+        {
+            if (_isMarked != value)
+            {
+                _isMarked = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsMarked)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(MarkVisibility)));
+            }
+        }
+    }
+
+    public Visibility MarkVisibility => _isMarked ? Visibility.Visible : Visibility.Collapsed;
 
     public static SearchRow Header(string directoryPath) => new()
     {

@@ -5225,9 +5225,24 @@
                         <Border x:Name="Bd"
                                 Background="Transparent"
                                 CornerRadius="3"
-                                Padding="{TemplateBinding Padding}"
                                 SnapsToDevicePixels="True">
-                            <ContentPresenter/>
+                            <Grid>
+                                <!-- A file marked from the thumbnail list
+                                     (SearchRow.IsMarked, 2026-10-06): the
+                                     selection's own brush, as the tree paints
+                                     its multi-selected rows. A layer over the
+                                     hover colour rather than a trigger, so the
+                                     mark wins over hover the way it does in the
+                                     tree, and bound to a plain value - see
+                                     SearchRow.CutOpacity for why this template
+                                     does not repaint from triggers. The padding
+                                     moved onto the content so the layer fills
+                                     the whole row. -->
+                                <Border Background="{DynamicResource TreeRowSelectedActiveBackground}"
+                                        CornerRadius="3"
+                                        Visibility="{Binding MarkVisibility}"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver"

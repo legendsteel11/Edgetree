@@ -15299,6 +15299,7 @@ public partial class MainWindow : Window
         }
         _multiSelection.Clear();
         UpdateFilmstripMarkCount();
+        ScheduleSearchMarksSync();
         _deferredMultiClearItem = null;
     }
 
@@ -15311,6 +15312,7 @@ public partial class MainWindow : Window
         }
 
         UpdateFilmstripMarkCount();
+        ScheduleSearchMarksSync();
     }
 
     private void RemoveFromMultiSelection(FileSystemItem item)
@@ -15322,6 +15324,71 @@ public partial class MainWindow : Window
         }
 
         UpdateFilmstripMarkCount();
+        ScheduleSearchMarksSync();
+    }
+
+    // ----- The same marks in the search results (2026-10-06) ------------------
+    //
+    // While the results drive the panel, the thumbnail list's cells are items
+    // made from the result rows (SearchViewerItems), and marking them puts them
+    // in _multiSelection like any other mark. The tree paints its marks because
+    // its rows ARE the marked items; a results row is a SearchRow, so it is
+    // told by path instead. Once per dispatcher pass, however many marks a
+    // Shift range changed, and before the pass renders.
+    //
+    // THE MARKS BELONG TO THE LIST ON SCREEN. Opening or leaving the search
+    // view drops them (SetSearchViewActive), and a new result set keeps only
+    // the ones it still lists (SetSearchRows). Before this, marks made in the
+    // results outlived the search view - and the tree's Del, Ctrl+C and Ctrl+X
+    // act on the marks whenever there are any (GetEffectiveSelection), so a
+    // delete in the tree would have gone to files nobody could see there.
+    private bool _searchMarksSyncPending;
+
+    private void ScheduleSearchMarksSync()
+    {
+        if (_searchMarksSyncPending)
+        {
+            return;
+        }
+
+        _searchMarksSyncPending = true;
+        Dispatcher.BeginInvoke(new Action(() =>
+        {
+            _searchMarksSyncPending = false;
+            SyncSearchRowMarks();
+        }), System.Windows.Threading.DispatcherPriority.Normal);
+    }
+
+    private void SyncSearchRowMarks()
+    {
+        HashSet<string>? marked = _isSearchViewActive && _multiSelection.Count > 0
+            ? new HashSet<string>(_multiSelection.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase)
+            : null;
+        foreach (var row in _searchRows)
+        {
+            row.IsMarked = marked is not null && row.Entry is { } entry && marked.Contains(entry.FullPath);
+        }
+    }
+
+    private bool IsMarkedSearchEntry(FileSearchService.SearchEntry entry)
+        => _multiSelection.Count > 0 &&
+           _multiSelection.Any(i => string.Equals(i.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+
+    // What a command in the results list acts on, as paths: every mark while
+    // there are any - the selected row is one of them, see
+    // SearchResultsList_SelectionChanged - and otherwise the selected row. The
+    // tree's rule (GetEffectiveSelection) for a list of SearchRows.
+    private string[] SearchCommandPaths()
+    {
+        if (_multiSelection.Count > 0)
+        {
+            return _multiSelection
+                .Select(i => i.FullPath)
+                .Where(File.Exists)
+                .ToArray();
+        }
+
+        return SelectedSearchResult is { } entry ? new[] { entry.FullPath } : Array.Empty<string>();
     }
 
     // Every row currently on screen or scrolled out of view but realized in
@@ -36234,6 +36301,27 @@ public partial class MainWindow : Window
             }
         }
 
+        // A mark on a file the new set no longer lists goes with it: off the
+        // list it is off the screen, and the commands act on every mark. Only
+        // while the results are up - a refresh can finish after the view has
+        // closed, and the marks then are the tree's.
+        if (_isSearchViewActive && _multiSelection.Count > 0)
+        {
+            var listed = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var row in rows)
+            {
+                if (row.Entry is { } listedEntry)
+                {
+                    listed.Add(listedEntry.FullPath);
+                }
+            }
+            foreach (var gone in _multiSelection.Where(i => !listed.Contains(i.FullPath)).ToList())
+            {
+                RemoveFromMultiSelection(gone);
+            }
+        }
+        SyncSearchRowMarks();
+
         RelinkSearchViewer();
     }
 
@@ -36515,6 +36603,14 @@ public partial class MainWindow : Window
         }
 
         _isSearchViewActive = active;
+        // The list the marks were made in is going out of sight either way -
+        // the tree's under the results, or the results' as the tree comes back
+        // - and a mark nobody can see must not be what Del acts on. See the
+        // note over ScheduleSearchMarksSync.
+        if (_multiSelection.Count > 0)
+        {
+            ClearMultiSelection();
+        }
         SearchView.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
         // Seats the strip as well as showing it, and _isSearchViewActive is set
         // just above - which is the whole of what the seat depends on.
@@ -36622,6 +36718,19 @@ public partial class MainWindow : Window
         }
 
         _searchViewerGeneration++;
+        // A MARKED FILE KEEPS ITS ITEM across a new set (2026-10-06). The mark
+        // lives on the item (IsMultiSelected) and in _multiSelection by
+        // reference, so a fresh instance for a file still listed - after 더
+        // 보기, a refresh, a sort - would have shown no badge in the thumbnail
+        // list while the row and the commands still counted it. Only the marked
+        // ones are carried: every other cell is rebuilt for the new generation
+        // as before.
+        Dictionary<string, FileSystemItem>? marked = null;
+        foreach (var markedItem in _multiSelection)
+        {
+            // TryAdd, not ToDictionary: two items for one path would throw there.
+            (marked ??= new(StringComparer.OrdinalIgnoreCase)).TryAdd(markedItem.FullPath, markedItem);
+        }
         var items = new List<FileSystemItem>();
         foreach (var row in _searchRows)
         {
@@ -36630,7 +36739,9 @@ public partial class MainWindow : Window
                 continue;
             }
 
-            var item = new FileSystemItem(entry.FileName, entry.FullPath, isDirectory: false);
+            var item = marked is not null && marked.TryGetValue(entry.FullPath, out var kept)
+                ? kept
+                : new FileSystemItem(entry.FileName, entry.FullPath, isDirectory: false);
             if (IsViewerCarouselItem(item))
             {
                 items.Add(item);
@@ -37702,8 +37813,24 @@ public partial class MainWindow : Window
         _searchDoubleClicked = null;
         var container = ItemsControl.ContainerFromElement(SearchResultsList, (DependencyObject)e.OriginalSource) as ListBoxItem;
         LogClick("press", container?.Content as SearchRow);
+        _searchCollapseMarksOnUp = false;
+        _searchMarkClick = false;
         if (container is { Content: SearchRow { Entry: { } entry } })
         {
+            // Ctrl / Shift MARK, the tree's and the strip's gestures, into the
+            // same set (2026-10-06). Handled here so the list does not also
+            // move its selection: like a Ctrl+click in the strip, gathering a
+            // dozen files must not load a dozen pictures on the way. The
+            // keyboard comes to the list, or Del would go to the search box.
+            if (MarkSearchRowsFromClick(entry))
+            {
+                _searchMarkClick = true;
+                container.Focus();
+                e.Handled = true;
+                return;
+            }
+            _searchMarkAnchor = entry.FullPath;
+
             _searchDragStart = e.GetPosition(SearchResultsList);
             _searchDragCandidate = entry;
             // Recorded on the PRESS, where the count is definitive, and acted
@@ -37712,7 +37839,113 @@ public partial class MainWindow : Window
             {
                 _searchDoubleClicked = entry;
             }
+
+            // The strip's rule and the tree's: a plain press on one of several
+            // marks may be the start of dragging them all, so the marks stay
+            // until the release says it was a click after all.
+            _searchCollapseMarksOnUp = Keyboard.Modifiers == ModifierKeys.None &&
+                                       _multiSelection.Count > 1 && IsMarkedSearchEntry(entry);
         }
+    }
+
+    // A press on a marked row that has not yet turned out to be a drag - see
+    // the press handler. Cleared by the drag starting.
+    private bool _searchCollapseMarksOnUp;
+
+    // The press was a Ctrl / Shift mark, so its release has nothing else to do:
+    // no preview, no jump to the tree, no panel opening.
+    private bool _searchMarkClick;
+
+    // Where the next Shift+click range in the results starts: the last plainly-
+    // or Ctrl-clicked row, as in the tree. A path, so it survives the rows
+    // being rebuilt; a range from a path no longer listed starts at the click.
+    private string? _searchMarkAnchor;
+
+    // Ctrl toggles one row, Shift replaces the marks with a range from the
+    // anchor, Ctrl+Shift adds the range - the strip's three, in the list's
+    // order. False for a plain click, which the caller handles as before.
+    private bool MarkSearchRowsFromClick(FileSearchService.SearchEntry entry)
+    {
+        var modifiers = Keyboard.Modifiers;
+        if (modifiers == ModifierKeys.Control)
+        {
+            // The selected row joins the first mark, as the cell on show does
+            // in the strip: Ctrl+clicking a second file means "this one as
+            // well", and the one it is added to is the one already chosen.
+            if (_multiSelection.Count == 0 &&
+                SearchResultsList.SelectedItem is SearchRow { Entry: { } current } &&
+                !string.Equals(current.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                AddToMultiSelection(SearchItemFor(current));
+            }
+
+            if (MarkedItemFor(entry) is { } marked)
+            {
+                RemoveFromMultiSelection(marked);
+            }
+            else
+            {
+                AddToMultiSelection(SearchItemFor(entry));
+            }
+
+            _searchMarkAnchor = entry.FullPath;
+            return true;
+        }
+
+        if (modifiers != ModifierKeys.Shift && modifiers != (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            return false;
+        }
+
+        int to = _searchRows.FindIndex(r =>
+            r.Entry is { } rowEntry && string.Equals(rowEntry.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+        string? anchorPath = _searchMarkAnchor ?? (SearchResultsList.SelectedItem as SearchRow)?.Entry?.FullPath;
+        int from = anchorPath is null
+            ? -1
+            : _searchRows.FindIndex(r =>
+                r.Entry is { } rowEntry && string.Equals(rowEntry.FullPath, anchorPath, StringComparison.OrdinalIgnoreCase));
+        if (to < 0)
+        {
+            return false;
+        }
+        if (from < 0)
+        {
+            from = to;
+        }
+
+        if (modifiers == ModifierKeys.Shift)
+        {
+            ClearMultiSelection();
+        }
+
+        for (int i = Math.Min(from, to); i <= Math.Max(from, to); i++)
+        {
+            if (_searchRows[i].Entry is { } inRange && MarkedItemFor(inRange) is null)
+            {
+                AddToMultiSelection(SearchItemFor(inRange));
+            }
+        }
+        return true;
+    }
+
+    private FileSystemItem? MarkedItemFor(FileSearchService.SearchEntry entry)
+        => _multiSelection.FirstOrDefault(i =>
+            string.Equals(i.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+
+    // The item a mark made in the list goes on: the thumbnail list's own one
+    // when that list holds this file, so its cell shows the badge too; a fresh
+    // one otherwise (a document, or the panel shut) - SearchViewerItems carries
+    // a marked item into the cells by path when they are next built.
+    private FileSystemItem SearchItemFor(FileSearchService.SearchEntry entry)
+    {
+        if (ReferenceEquals(_searchViewerItemsFor, _searchRows) && _searchViewerItems is { } cells &&
+            cells.FirstOrDefault(i =>
+                string.Equals(i.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase)) is { } cellItem)
+        {
+            return cellItem;
+        }
+
+        return new FileSystemItem(entry.FileName, entry.FullPath, isDirectory: false);
     }
 
     // The second click of a double, waiting for its release. Not a bool: the
@@ -38038,19 +38271,26 @@ public partial class MainWindow : Window
 
         _searchDragStart = null;
         _searchDragCandidate = null;
+        _searchCollapseMarksOnUp = false;
+
+        // A marked row carries every mark with it (2026-10-06), the way a
+        // marked tree row or thumbnail does; any other row goes alone.
+        string[] dragPaths = IsMarkedSearchEntry(entry) && SearchCommandPaths() is { Length: > 0 } marks
+            ? marks
+            : new[] { entry.FullPath };
 
         // FileDrop + Copy-only, exactly like the tree's own drag-out (see
         // TreeViewItem_PreviewMouseMove): any app that accepts an Explorer file
         // drop accepts this, and Copy (never Move) means dragging a result into
         // Explorer/another app can never remove the original file.
-        var data = new DataObject(DataFormats.FileDrop, new[] { entry.FullPath });
+        var data = new DataObject(DataFormats.FileDrop, dragPaths);
 
         // Already sourced from the stable list rather than a row container; the
         // finally matches the tree's for the same reason - see the note there
         // on a mouse capture outliving the drag.
         try
         {
-            DragOutFiles(SearchResultsList, data, "search", 1);
+            DragOutFiles(SearchResultsList, data, "search", dragPaths.Length);
         }
         finally
         {
@@ -38063,6 +38303,20 @@ public partial class MainWindow : Window
 
     private void SearchResultsList_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (_searchMarkClick)
+        {
+            _searchMarkClick = false;
+            return;
+        }
+
+        // A press on one of several marks that did not become a drag was a
+        // click, and a click means "just this one" - see the press handler.
+        if (_searchCollapseMarksOnUp)
+        {
+            _searchCollapseMarksOnUp = false;
+            ClearMultiSelection();
+        }
+
         if (ItemsControl.ContainerFromElement(SearchResultsList, (DependencyObject)e.OriginalSource) is not ListBoxItem { Content: SearchRow row })
         {
             LogClick("up (no row)", null);
@@ -38130,6 +38384,20 @@ public partial class MainWindow : Window
         // it has to follow this the way it follows the tree's selection.
         SchedulePathBarSync();
 
+        // The tree's invariant, for the same reason (see _multiSelection): a
+        // selection that lands outside the marks ends them - an arrow key, a
+        // click on an unmarked row, a right-click there, a chevron. Landing on
+        // a marked row keeps them, which is how the menu of a marked row comes
+        // to act on all of them. Not for a selection the list itself puts back
+        // after a refresh, and not for the moment a reset leaves nothing
+        // selected.
+        if (_multiSelection.Count > 0 && !_searchRestoringSelection &&
+            SearchResultsList.SelectedItem is SearchRow picked &&
+            (picked.Entry is not { } pickedEntry || !IsMarkedSearchEntry(pickedEntry)))
+        {
+            ClearMultiSelection();
+        }
+
         if (SearchResultsList.SelectedItem is SearchRow { Entry: { } entry })
         {
             PreviewSearchResult(entry);
@@ -38160,6 +38428,27 @@ public partial class MainWindow : Window
     // must never name a key that doesn't work here).
     private void SearchResultsList_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // With marks, the three set commands take them whatever row is
+        // selected - or none: a Ctrl+click marks without selecting.
+        if (_multiSelection.Count > 0)
+        {
+            switch (e.Key)
+            {
+                case Key.Delete:
+                    SearchDelete_Click(sender, e);
+                    e.Handled = true;
+                    return;
+                case Key.C when Keyboard.Modifiers == ModifierKeys.Control:
+                    SearchCopy_Click(sender, e);
+                    e.Handled = true;
+                    return;
+                case Key.X when Keyboard.Modifiers == ModifierKeys.Control:
+                    SearchCut_Click(sender, e);
+                    e.Handled = true;
+                    return;
+            }
+        }
+
         // A header row answers Enter the same way it answers a click - the
         // list is keyboard-walkable and the folder line must not be the one
         // row the keyboard cannot use. Everything below needs an Entry.
@@ -38430,12 +38719,18 @@ public partial class MainWindow : Window
         }
     }
 
+    // Copy, cut and delete take every mark (SearchCommandPaths), the way the
+    // tree's do (2026-10-06). Files from different folders are a shape the
+    // tree's own Ctrl+click could always make, and what can collide on the way
+    // in is answered where they land: a paste numbers a repeated name up to
+    // " (2)", and so does a drop for names repeated within itself (see
+    // FileOperationService.TryImportDroppedPaths).
     private void SearchCopy_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedSearchResult is { } entry)
+        if (SearchCommandPaths() is { Length: > 0 } paths)
         {
             ClearCutMarks();
-            FileOperationService.CopyToClipboard(entry.FullPath);
+            FileOperationService.CopyToClipboard(paths);
         }
     }
 
@@ -38444,9 +38739,9 @@ public partial class MainWindow : Window
     // exactly the trip this saves (find it by name, then move it).
     private void SearchCut_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedSearchResult is { } entry && FileOperationService.CutToClipboard(entry.FullPath))
+        if (SearchCommandPaths() is { Length: > 0 } paths && FileOperationService.CutToClipboard(paths))
         {
-            MarkCutPaths(new[] { entry.FullPath });
+            MarkCutPaths(paths);
         }
     }
 
@@ -38485,25 +38780,26 @@ public partial class MainWindow : Window
 
     private void SearchDelete_Click(object sender, RoutedEventArgs e)
     {
-        if (SelectedSearchResult is not { } entry)
+        if (SearchCommandPaths() is not { Length: > 0 } paths)
         {
             return;
         }
 
         // The same shell call the tree's delete uses, and the same question in
         // front of it, so one gesture cannot mean two different things depending
-        // on which list it was performed in. Shift is read here too.
+        // on which list it was performed in. Shift is read here too. The shell
+        // takes a list from any number of folders; each file goes from its own.
         bool searchPermanent = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
-        if (!searchPermanent && !ConfirmUnrecyclableDelete(new[] { entry.FullPath }))
+        if (!searchPermanent && !ConfirmUnrecyclableDelete(paths))
         {
             return;
         }
 
         if (!FileOperationService.TryShellDelete(
-                new[] { entry.FullPath },
+                paths,
                 new System.Windows.Interop.WindowInteropHelper(this).Handle,
                 searchPermanent,
-                out bool searchDeleteCancelled, out var error))
+                out _, out var error))
         {
             if (error is not null)
             {
@@ -38512,16 +38808,26 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (searchDeleteCancelled || File.Exists(entry.FullPath) || Directory.Exists(entry.FullPath))
+        // Asked of each file rather than of the call: a cancel part way through
+        // a list leaves the ones before it gone and the rest in place, and the
+        // results have to say exactly that.
+        var gone = new HashSet<string>(
+            paths.Where(p => !File.Exists(p) && !Directory.Exists(p)),
+            StringComparer.OrdinalIgnoreCase);
+        if (gone.Count == 0)
         {
             return;
         }
 
-        // Drop it from the in-memory index and re-run the filter so the shown
-        // results and the count both reflect the deletion. The tree, if the
+        // The marks are spent - the files they named are what just went - so
+        // they end here, as the tree's do after its delete.
+        ClearMultiSelection();
+
+        // Drop them from the in-memory index and re-run the filter so the shown
+        // results and the count both reflect the deletion. The tree, if a
         // parent folder is expanded there, refreshes itself via its own
         // FileSystemWatcher.
-        RemoveSearchEntries(x => string.Equals(x.FullPath, entry.FullPath, StringComparison.OrdinalIgnoreCase));
+        RemoveSearchEntries(x => gone.Contains(x.FullPath));
         RunSearchFilter();
     }
 }
