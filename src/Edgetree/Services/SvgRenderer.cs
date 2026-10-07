@@ -128,9 +128,16 @@ public static class SvgRenderer
                 document = XDocument.Load(reader);
             }
 
+            // A <style> ANYWHERE declines the file, <defs> included - which is
+            // where editors put it, and <defs> is otherwise skipped below. Its
+            // rules reach the shapes through class names this does not read,
+            // so drawing on without it paints them in the default black: an
+            // Illustrator export colours everything that way (2026-10-07
+            // review).
             if (document.Root is not { } root || root.Name.LocalName != "svg" ||
                 ViewBoxOf(root) is not { } viewBox || viewBox.Width <= 0 || viewBox.Height <= 0 ||
-                root.Attributes().Any(a => DecliningAttributes.Contains(a.Name.LocalName)) ||
+                root.Attributes().Any(IsDeclining) ||
+                document.Descendants().Any(e => e.Name.LocalName == "style") ||
                 Paint.Default.Inherit(root) is not { } rootPaint)
             {
                 return null;
@@ -197,6 +204,16 @@ public static class SvgRenderer
         "marker-start", "marker-mid", "marker-end", "stroke-dasharray",
     };
 
+    // Plus a group or shape faded with opacity, which used to be drawn at full
+    // strength: a duotone icon's faded back layer came out solid and hid the
+    // shape in front of it (2026-10-07 review). Opacity on a GROUP is not the
+    // same as fading each child - overlaps are composited once - so it is
+    // declined rather than approximated. A written opacity of 1 changes
+    // nothing and is let through.
+    private static bool IsDeclining(XAttribute attribute)
+        => DecliningAttributes.Contains(attribute.Name.LocalName) ||
+           (attribute.Name.LocalName == "opacity" && !(Length(attribute.Value) >= 1));
+
     // How deep groups may nest before the file is declined. Icons nest two
     // or three deep; the limit is there because this walk recurses once per
     // level, and a file of tens of thousands of nested <g> fits under
@@ -224,7 +241,7 @@ public static class SvgRenderer
                 continue;
             }
 
-            if (element.Attributes().Any(a => DecliningAttributes.Contains(a.Name.LocalName)))
+            if (element.Attributes().Any(IsDeclining))
             {
                 return false;
             }
@@ -499,6 +516,14 @@ public static class SvgRenderer
             if (value.StartsWith('#') && value.Length == 4)
             {
                 value = "#" + value[1] + value[1] + value[2] + value[2] + value[3] + value[3];
+            }
+            // Only #rrggbb among the hex forms. SVG writes alpha LAST
+            // (#rrggbbaa, #rgba) and WPF reads an eight-digit value with alpha
+            // FIRST, so passing those on would turn the colour into another
+            // one (2026-10-07 review).
+            if (value.StartsWith('#') && value.Length != 7)
+            {
+                return false;
             }
             if (value.StartsWith("rgb(", StringComparison.OrdinalIgnoreCase) && value.EndsWith(')'))
             {
