@@ -38109,10 +38109,12 @@ public partial class MainWindow : Window
         if (container is { Content: SearchRow { Entry: { } entry } })
         {
             // Ctrl / Shift MARK, the tree's and the strip's gestures, into the
-            // same set (2026-10-06). Handled here so the list does not also
-            // move its selection: like a Ctrl+click in the strip, gathering a
-            // dozen files must not load a dozen pictures on the way. The
-            // keyboard comes to the list, or Del would go to the search box.
+            // same set (2026-10-06). Handled here so the list does not move
+            // its selection by itself: like a Ctrl+click in the strip,
+            // gathering a dozen files must not load a dozen pictures on the
+            // way. A Shift range does move it, to the clicked row, on purpose
+            // (see MarkSearchRowsFromClick). The keyboard comes to the list,
+            // or Del would go to the search box.
             if (MarkSearchRowsFromClick(entry))
             {
                 _searchMarkClick = true;
@@ -38240,6 +38242,20 @@ public partial class MainWindow : Window
             {
                 AddToMultiSelection(SearchItemFor(inRange));
             }
+        }
+
+        // THE SELECTION GOES TO THE CLICKED ROW, as a Shift+click in the tree
+        // takes it there (2026-10-07). Left where it was, the row selected
+        // before could sit outside the new range in the selection's colour -
+        // the same colour as a mark - while Del and Ctrl+C acted on the range
+        // alone. The clicked row is marked by now, so the change keeps the
+        // marks (SearchResultsList_SelectionChanged) and the panel shows that
+        // file, as it does after the tree's Shift+click. The anchor stays
+        // where the range began. Ctrl alone still selects nothing - gathering
+        // files one by one must not load each picture on the way.
+        if (!ReferenceEquals(SearchResultsList.SelectedItem, _searchRows[to]))
+        {
+            SearchResultsList.SelectedItem = _searchRows[to];
         }
         return true;
     }
