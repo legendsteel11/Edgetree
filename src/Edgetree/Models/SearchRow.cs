@@ -13,7 +13,7 @@ namespace SidebarExplorer.App.Models;
 // only on rows whose Entry is non-null.
 //
 // INotifyPropertyChanged is for what changes while the row is on screen: Icon
-// (in Windows-shell icon mode a per-file icon (.exe 등) can arrive from a
+// (in Windows-shell icon mode a per-file icon, an .exe's for one, can arrive from a
 // background extraction, see ShellIconService), and the two marks, IsCut and
 // IsMarked. Everything else is init-only.
 public sealed class SearchRow : INotifyPropertyChanged
