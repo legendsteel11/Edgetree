@@ -38219,6 +38219,16 @@ public partial class MainWindow : Window
             from = to;
         }
 
+        // KEPT AS THE ANCHOR, so the next Shift+click ranges from the same
+        // start (2026-10-07 review). A first range taken from the selected row
+        // never wrote it down, and the second one went back to whatever row had
+        // last been clicked: click 1, ↓ to 4, Shift+8 marked 4-8, then Shift+6
+        // marked 1-6. The strip keeps its anchor the same way.
+        if (_searchRows[from].Entry is { } anchorEntry)
+        {
+            _searchMarkAnchor = anchorEntry.FullPath;
+        }
+
         if (modifiers == ModifierKeys.Shift)
         {
             ClearMultiSelection();
