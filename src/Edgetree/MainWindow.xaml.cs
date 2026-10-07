@@ -288,6 +288,7 @@ public partial class MainWindow : Window
         SizeChanged += MainWindow_SizeChanged;
         SystemParameters.StaticPropertyChanged += SystemParameters_StaticPropertyChanged;
         SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
+        FileSystemItem.ChildrenReplaced += _ => NoteTreeListingChanged();
     }
 
     // Defensive - not a confirmed fix for any specific reported symptom, just
@@ -10493,6 +10494,12 @@ public partial class MainWindow : Window
                     ResyncLoadedSubtree(child);
                 }
             }
+
+            // The merge above reorders the folder's rows and keeps their
+            // instances, so nothing the strip watches for has changed - same
+            // folder, same count, same items - and its cells stayed in the old
+            // order (2026-10-07). Told here, as a replacement is told.
+            NoteTreeListingChanged();
         }
     }
 
@@ -14918,9 +14925,12 @@ public partial class MainWindow : Window
     //
     // Re-resolving by NAME against the parent's current children repairs the
     // one place that breaks, at the cost of one lookup on a path that is about
-    // to walk the tree anyway. The alternative - rebuilding the strip whenever a
-    // folder's children are replaced - is closer to the root but has to know
-    // every path a refresh takes, and pays for the whole bar each time.
+    // to walk the tree anyway. The alternative it was weighed against - making
+    // the strip catch up whenever a folder's children are replaced - went in
+    // as well on 2026-10-07 (NoteTreeListingChanged), as a merge rather than a
+    // rebuild, once marks made in the tree turned out to need it: a mark is
+    // painted from the instance, which no lookup at click time can reach. This
+    // stays as the net for anything that runs before that merge's pass.
     //
     // Returns the item untouched when it is still the live one (its own name
     // finds itself) and when the folder no longer lists it at all, so callers
@@ -19551,6 +19561,10 @@ public partial class MainWindow : Window
         {
             _roots.Add(root);
         }
+
+        // Every item under the old roots has gone with them - see
+        // NoteTreeListingChanged.
+        NoteTreeListingChanged();
 
         // A drive that was hidden had no watcher (they are made per ROOT), so
         // its live updates would otherwise stay dead until the next launch.
@@ -31022,6 +31036,44 @@ public partial class MainWindow : Window
     // UpdateFilmstrip as a reason to merge. A flag rather than a fudged count:
     // the count already does two jobs here, and a third is how this bug began.
     private bool _filmstripListingChanged;
+
+    // THE TREE THREW ITS ITEMS AWAY AND MADE NEW ONES (RefreshChildren,
+    // ReloadRoots) - F5, 새로고침, the app-wide sort, the hidden-item and
+    // file-type filters, 숨김 해제, the per-folder cap. The strip rebuilds only
+    // for another folder or another count, so after any of those its cells
+    // went on holding the old instances, and a mark made in the tree - set on
+    // the NEW ones - never showed on them (reproduced 2026-10-07: F5 with a
+    // file selected, then a Shift range in the tree; another folder and back
+    // cured it).
+    //
+    // OR KEPT THEM IN ANOTHER ORDER: a folder's own sort merges in place
+    // (ResortFollowingSubtree), same instances and same count, and the cells
+    // stayed in the old order - tested the same day, right after the first
+    // half of this went in.
+    //
+    // The 2026-08-21 fix for the same root re-resolved by path where a cell is
+    // clicked, walked to and highlighted; a mark is painted from the instance
+    // itself, so this goes to the root, the way that note left open: the next
+    // pass merges the cells (MergeFilmstripCells), whose survivors adopt the
+    // new instances, keep their pictures and take the new order. Once per
+    // dispatcher pass, however many folders a refresh re-read.
+    private bool _filmstripMergePending;
+
+    private void NoteTreeListingChanged()
+    {
+        _filmstripListingChanged = true;
+        if (_filmstripMergePending)
+        {
+            return;
+        }
+
+        _filmstripMergePending = true;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+        {
+            _filmstripMergePending = false;
+            UpdateViewerCarousel();
+        }));
+    }
 
     private const double FilmstripMinCellHeight = 40;
     // Above this the strip is taking more from the picture than it gives back,

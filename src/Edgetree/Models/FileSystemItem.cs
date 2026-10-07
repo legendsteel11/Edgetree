@@ -1090,7 +1090,16 @@ public class FileSystemItem : INotifyPropertyChanged
         }
         _childrenLoaded = false;
         EnsureChildrenLoaded();
+        ChildrenReplaced?.Invoke(this);
     }
+
+    // Raised once RefreshChildren has put fresh instances in place of this
+    // folder's children (2026-10-07). Whatever holds on to items has to hear of
+    // it - the thumbnail list's cells, today - or it goes on holding instances
+    // the tree no longer has (see MainWindow.NoteTreeListingChanged). An event
+    // rather than a call beside each caller, because the next place to call
+    // RefreshChildren is the one that would forget.
+    public static event Action<FileSystemItem>? ChildrenReplaced;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
