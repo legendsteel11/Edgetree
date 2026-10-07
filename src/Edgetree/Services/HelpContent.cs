@@ -530,6 +530,10 @@ public static class HelpContent
                     // is on screen. Each belongs with the thing it does.
                     R("마우스 앞 · 뒤 버튼", "이전 · 다음 이미지",
                       "Mouse back · forward buttons", "Previous · next image"),
+                    // Since 2026-10-07: a plain click on the picture brings its
+                    // thumbnail back into view after the list was scrolled away.
+                    R("클릭", "썸네일 목록을 보고 있는 그림 위치로 이동",
+                      "Click", "Scrolls the thumbnail list back to the picture on show"),
                     R("더블클릭", "맞춤 ↔ 1:1 전환", "Double-click", "Fit ↔ actual size"),
                     // Says what it gives up, because that is the whole choice
                     // between it and 맞춤: one shows all of the picture, the

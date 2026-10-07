@@ -45,6 +45,53 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // TWELVE LINES: four additions, four changes (the bookmark landing is
+    // written as what now works, not as a fault), four fixes of faults that
+    // were in v2.6.2. The release notes carry five more: the marked count on
+    // the menus, marked thumbnails naming themselves, the search keeping its
+    // place and not re-reading the same folder, 붙여넣기 standing down on the
+    // thumbnail menu during a search, and two fixes (the first Shift+click on
+    // the thumbnails, a rename ending in a space or a dot).
+    //
+    // Off the card and the notes both: everything that repaired this
+    // release's own new code before it shipped - the SVG renderer's leak and
+    // its declining rules, the search's Shift range and menu fixes - and the
+    // internal cleanups.
+    //
+    // The NAS line names no maker. The cause was one vendor's folder, but the
+    // card speaks of what someone saw, and "일부" keeps it from claiming more
+    // than was fixed.
+    version: 'v2.6.3',
+    ko: [
+      '검색 결과에서 `Ctrl`·`Shift`+클릭으로 여러 개를 선택할 수 있습니다. 복사, 잘라내기, 삭제, 드래그가 선택한 파일 전체에 적용됩니다.',
+      '검색 결과에서 이름, 크기, 수정 시각이 같은 파일은 연한 배경으로 표시됩니다.',
+      '트리의 툴팁에 파일 크기와 수정 시각이 표시됩니다.',
+      '멀티미디어 패널의 그림을 클릭하면 썸네일 목록이 보고 있는 그림 위치로 이동합니다.',
+      '`자동 펼치기`가 검색 결과에서도 동작합니다.',
+      '아이콘처럼 단순한 SVG는 멀티미디어 패널과 썸네일 목록에 항상 표시됩니다.',
+      '이름이 같은 파일 여러 개를 한 번에 드롭하면 덮어쓰기를 묻지 않고 번호를 붙여 저장합니다.',
+      '트리가 화면에 모두 들어오는 경우에도 북마크로 이동하면 대상이 바로 맨 위에 표시됩니다.',
+      '일부 NAS 폴더를 검색할 때 `다시 인덱싱`의 파란 점이 변경이 없어도 켜지던 문제를 수정했습니다.',
+      '새로고침이나 정렬 변경 후 트리에서 여러 개를 선택하면 썸네일 목록에 표시되지 않던 문제를 수정했습니다.',
+      '사용자 폴더(`C:\\Users\\이름`)의 `속성`이 열리지 않던 문제를 수정했습니다.',
+      '자동 숨김 상태에서 빈 멀티미디어 패널이 함께 펼쳐지던 문제를 수정했습니다.',
+    ],
+    en: [
+      'Pick several search results with Ctrl+click or Shift+click. Copy, cut, delete and drag apply to every picked file.',
+      'Search results with the same name, size and modified time are faintly shaded.',
+      'Tree tooltips now show the file\'s size and modified time.',
+      'Clicking the picture in the multimedia panel scrolls the thumbnail list back to it.',
+      'Expand on selection now works from search results too.',
+      'Simple, icon-style SVGs now always show in the multimedia panel and the thumbnail list.',
+      'Dropping several files with the same name numbers them instead of asking to overwrite.',
+      'A bookmark jump now lands at the top at once, even when the whole tree fits the window.',
+      'Fixed the Reindex button\'s blue dot turning on with no change in some NAS folders.',
+      'Fixed marks made in the tree not showing on the thumbnail list after a refresh or a sort change.',
+      'Fixed Properties not opening for the user folder (C:\\Users\\name).',
+      'Fixed an empty multimedia panel unfolding with the sidebar in auto-hide.',
+    ],
+  },
+  {
     // TEN LINES, kept at ten on the author's reading of the draft. The four
     // additions lead - two of them the thumbnail list's own, the names under
     // the cells and renaming from them - then the four changes someone will

@@ -1,4 +1,4 @@
-# Edgetree v2.6.2
+# Edgetree v2.6.3
 
 [한국어 안내](README-ko.md)
 
@@ -132,6 +132,9 @@ leaves them where they are.
 - **Folder search** (`Ctrl+F`): pick a folder and find files by name, with
   substring or `*`/`?` wildcard matching. Results are grouped by folder;
   click one to jump to it in the tree, or drag it into another app.
+- **Pick several results** with `Ctrl`/`Shift`+click to copy, cut, delete or
+  drag them together; results that are the same file (name, size and modified
+  time) are faintly shaded.
 - **The index is saved**, so a folder you've searched before is ready
   instantly on the next launch — on a NAS this turns minutes of indexing
   into about a second. Searching works while indexing is still running.
@@ -216,6 +219,21 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.6.3 (2026-10-07)
+
+- Pick several search results with Ctrl+click or Shift+click. Copy, cut, delete and drag apply to every picked file.
+- Search results with the same name, size and modified time are faintly shaded.
+- Tree tooltips now show the file's size and modified time.
+- Clicking the picture in the multimedia panel scrolls the thumbnail list back to it.
+- Expand on selection now works from search results too.
+- Simple, icon-style SVGs now always show in the multimedia panel and the thumbnail list.
+- Dropping several files with the same name numbers them instead of asking to overwrite.
+- A bookmark jump now lands at the top at once, even when the whole tree fits the window.
+- Fixed the Reindex button's blue dot turning on with no change in some NAS folders.
+- Fixed marks made in the tree not showing on the thumbnail list after a refresh or a sort change.
+- Fixed Properties not opening for the user folder (C:\Users\name).
+- Fixed an empty multimedia panel unfolding with the sidebar in auto-hide.
 
 ### v2.6.2 (2026-09-28)
 
