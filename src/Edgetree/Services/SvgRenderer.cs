@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 using System.Xml;
 using System.Xml.Linq;
 // The project also references WinForms, whose System.Drawing names the same
@@ -69,7 +70,37 @@ public static class SvgRenderer
         // are pool (MTA) threads. One short thread per icon is noise next to
         // the file read it follows.
         BitmapSource? result = null;
-        var thread = new Thread(() => result = BuildAndRasterize(path, pixelSize))
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                result = BuildAndRasterize(path, pixelSize);
+            }
+            // THE THREAD'S OWN BOUNDARY (2026-10-07 review). Nothing above it
+            // catches for this thread, and an exception that leaves it ends the
+            // process - BuildAndRasterize catches what a bad FILE throws, and
+            // this catches what the machine can (a COMException from the
+            // render under handle pressure, for one). Either way it is the
+            // shell's turn, as for any file not drawn here.
+            catch (Exception)
+            {
+                result = null;
+            }
+            finally
+            {
+                // THE THREAD'S DISPATCHER IS ENDED BY HAND. The DrawingVisual
+                // and the bitmap give this thread a Dispatcher, and one left
+                // running when its thread exits is never collected, with its
+                // window and render context. Measured 2026-10-07 by rendering
+                // one icon 2,000 times through this method: private memory
+                // 8.7MB -> 505.7MB and handles 242 -> 22,376, about 250KB and
+                // eleven handles an icon - and a drawn SVG is drawn again every
+                // time it is shown, since it is not cached. With this line the
+                // same loop gained no handles and its memory stayed flat after
+                // the first round.
+                Dispatcher.FromThread(Thread.CurrentThread)?.InvokeShutdown();
+            }
+        })
         {
             IsBackground = true,
         };
@@ -106,7 +137,7 @@ public static class SvgRenderer
             }
 
             var group = new DrawingGroup();
-            if (!AddChildren(root, rootPaint, group) || group.Children.Count == 0)
+            if (!AddChildren(root, rootPaint, group, depth: 0) || group.Children.Count == 0)
             {
                 return null;
             }
@@ -166,8 +197,20 @@ public static class SvgRenderer
         "marker-start", "marker-mid", "marker-end", "stroke-dasharray",
     };
 
-    private static bool AddChildren(XElement parent, Paint paint, DrawingGroup group)
+    // How deep groups may nest before the file is declined. Icons nest two
+    // or three deep; the limit is there because this walk recurses once per
+    // level, and a file of tens of thousands of nested <g> fits under
+    // MaxFileBytes and would overflow the stack - which no catch can stop,
+    // and which ends the process (2026-10-07 review).
+    private const int MaxGroupDepth = 32;
+
+    private static bool AddChildren(XElement parent, Paint paint, DrawingGroup group, int depth)
     {
+        if (depth > MaxGroupDepth)
+        {
+            return false;
+        }
+
         foreach (var element in parent.Elements())
         {
             string name = element.Name.LocalName;
@@ -200,7 +243,7 @@ public static class SvgRenderer
 
             if (name == "g")
             {
-                if (!AddChildren(element, own, group))
+                if (!AddChildren(element, own, group, depth + 1))
                 {
                     return false;
                 }
