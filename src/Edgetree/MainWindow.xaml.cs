@@ -15576,20 +15576,44 @@ public partial class MainWindow : Window
                 : new List<FileSystemItem>();
         }
 
-        // NEVER THE TREE BEHIND THE SEARCH VIEW (2026-10-06). Its selection is
-        // out of sight there - usually the folder the search was opened on -
-        // and nothing on screen says a command would act on it. The menu rows
-        // that reach here stand down in that state (FilmstripContextMenu_
-        // Opened); this is the rule they rely on, kept where every caller
-        // passes through.
-        if (_isSearchViewActive)
-        {
-            return new List<FileSystemItem>();
-        }
-
-        return ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false } single
+        // Never the tree hidden behind the search view - see
+        // TreeSelectionOnScreen, kept where every caller passes through.
+        return TreeSelectionOnScreen is { } single
             ? new List<FileSystemItem> { single }
             : new List<FileSystemItem>();
+    }
+
+    // THE TREE'S SELECTION, WHERE IT CAN BE SEEN. Behind the search view the
+    // tree is out of sight and its selection is usually the folder the search
+    // was opened on, so nothing on screen says a command would act on it -
+    // and none may (2026-10-06; the thumbnail list's menu rows stand down in
+    // that state too, see FilmstripContextMenu_Opened).
+    //
+    // EXCEPT WHEN THAT ROW IS THE FILE THE PANEL IS SHOWING (2026-10-07
+    // review). Then it is on screen, and the panel's own menu only opens in
+    // exactly that case (ViewerImageHost_ContextMenuOpening) - its 삭제,
+    // 잘라내기, 복사 and 탐색기에서 위치 열기 run the tree's handlers, so the
+    // blanket rule left those four rows doing nothing while 이름 바꾸기 and
+    // 속성 beside them worked.
+    private FileSystemItem? TreeSelectionOnScreen
+    {
+        get
+        {
+            if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsShowMore: false } selected)
+            {
+                return null;
+            }
+
+            if (!_isSearchViewActive)
+            {
+                return selected;
+            }
+
+            return _viewerOpen &&
+                   string.Equals(selected.FullPath, _pendingViewerPath, StringComparison.OrdinalIgnoreCase)
+                ? selected
+                : null;
+        }
     }
 
     private void TreeViewItem_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -17081,10 +17105,9 @@ public partial class MainWindow : Window
     // answer there - see FilmstripMenuItem.
     private void RevealInExplorer_Click(object sender, RoutedEventArgs e)
     {
-        // The tree's selection only where the tree is on screen - see
-        // GetEffectiveSelection.
-        if ((FilmstripMenuItem ?? (_isSearchViewActive ? null : ExplorerTree.SelectedItem as FileSystemItem))
-            is { IsPlaceholder: false } item)
+        // The tree's selection only where it is on screen - see
+        // TreeSelectionOnScreen.
+        if ((FilmstripMenuItem ?? TreeSelectionOnScreen) is { IsPlaceholder: false } item)
         {
             ShellFileService.RevealInExplorer(item.FullPath);
         }
@@ -22541,10 +22564,9 @@ public partial class MainWindow : Window
     // which, for a list showing a folder's pictures, is that folder.
     private void FilmstripProperties_Click(object sender, RoutedEventArgs e)
     {
-        // The tree's selection only where the tree is on screen - see
-        // GetEffectiveSelection.
-        if ((_filmstripMenuTarget ?? (_isSearchViewActive ? null : ExplorerTree.SelectedItem as FileSystemItem))
-            is { IsPlaceholder: false } target)
+        // The tree's selection only where it is on screen - see
+        // TreeSelectionOnScreen.
+        if ((_filmstripMenuTarget ?? TreeSelectionOnScreen) is { IsPlaceholder: false } target)
         {
             OpenPropertiesSheet(target.FullPath, sender);
         }
