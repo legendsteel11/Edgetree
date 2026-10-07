@@ -34953,6 +34953,10 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Read back on the release, which tells a click from a pan or a flick
+        // - see ViewerImageHost_MouseLeftButtonUp.
+        _viewerClickOrigin = e.GetPosition(ViewerImageHost);
+
         if (!ViewerCanPan)
         {
             // Nothing to pan, so the same drag can mean the other obvious
@@ -35376,17 +35380,41 @@ public partial class MainWindow : Window
         UpdateViewerNavigator();
     }
 
+    // A CLICK ON THE PICTURE BRINGS ITS THUMBNAIL BACK INTO VIEW (2026-10-07,
+    // on request). Scrolling the list away to look along the folder leaves the
+    // cell on show off screen, and the picture is where the eye already is -
+    // so clicking it is the way back, instead of hunting for the cell. Same
+    // landing as the arrow keys get (ScrollFilmstripTo): onto the edge the
+    // cell went off, never centred, and nothing at all when it is in view.
+    //
+    // ONLY A CLICK, told from a drag by where the press and the release
+    // happened: the same press begins a pan of a zoomed picture or a flick to
+    // the next one, and neither of those asked for the list to move. A
+    // double-click's first half counts, which is harmless - the list settles
+    // and the second half then zooms.
+    private System.Windows.Point? _viewerClickOrigin;
+
     private void ViewerImageHost_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        var release = e.GetPosition(ViewerImageHost);
+        bool wasClick = _viewerClickOrigin is { } press &&
+            Math.Abs(release.X - press.X) < SystemParameters.MinimumHorizontalDragDistance &&
+            Math.Abs(release.Y - press.Y) < SystemParameters.MinimumVerticalDragDistance;
+        _viewerClickOrigin = null;
+
         EndViewerFlick();
-        if (!_viewerPanning)
+        if (_viewerPanning)
         {
-            return;
+            _viewerPanning = false;
+            ViewerImageHost.ReleaseMouseCapture();
+            ViewerImageHost.Cursor = ViewerCanPan ? System.Windows.Input.Cursors.SizeAll : null;
         }
 
-        _viewerPanning = false;
-        ViewerImageHost.ReleaseMouseCapture();
-        ViewerImageHost.Cursor = ViewerCanPan ? System.Windows.Input.Cursors.SizeAll : null;
+        if (wasClick && ViewerFilmstripHost.Visibility == Visibility.Visible &&
+            ViewerFilmstrip.SelectedItem is FilmstripCell onShow)
+        {
+            ScrollFilmstripTo(onShow);
+        }
     }
 
     // SAFETY DEVICE: capture can end without a mouse-up ever arriving - another
@@ -35407,6 +35435,10 @@ public partial class MainWindow : Window
         // mouse-up while the vertical stayed, which is what read as the old
         // grab-and-drag effect having moved onto the pan (2026-08-11).
         _viewerFlicking = false;
+
+        // A press whose release went somewhere else is no click, and must not
+        // pair with a later release that never had a press of its own here.
+        _viewerClickOrigin = null;
 
         if (!_viewerPanning)
         {
