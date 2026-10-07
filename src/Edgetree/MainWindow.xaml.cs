@@ -33589,16 +33589,26 @@ public partial class MainWindow : Window
         // tree, on a folder picked there - and the file rows stand down when
         // the menu names neither a cell nor any marks. Set both ways every
         // time: the same menu serves the tree.
+        //
+        // 탐색기에서 위치 열기 AND 속성 ASK FOR A CELL, NOT JUST MARKS (2026-10-07
+        // review). They act on one file - the right-clicked cell - and never
+        // read the marks, so with marks kept and a right-click between cells
+        // they stood enabled and did nothing.
         if (sender is ContextMenu menu)
         {
             ShowMultiSelectionInfo(menu);
 
             bool searching = _isSearchViewActive;
-            bool namesFiles = _multiSelection.Count > 0 || _filmstripMenuTarget is not null;
+            bool namesCell = _filmstripMenuTarget is not null;
+            bool namesFiles = _multiSelection.Count > 0 || namesCell;
             SetMenuItemEnabled(menu, "paste", !searching);
-            foreach (string tag in new[] { "cut", "copy", "delete", "reveal", "properties" })
+            foreach (string tag in new[] { "cut", "copy", "delete" })
             {
                 SetMenuItemEnabled(menu, tag, !searching || namesFiles);
+            }
+            foreach (string tag in new[] { "reveal", "properties" })
+            {
+                SetMenuItemEnabled(menu, tag, !searching || namesCell);
             }
         }
     }
