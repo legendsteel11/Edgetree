@@ -418,6 +418,9 @@
         <!-- The text view's find row, lined up with the path bar's top seat -
              see where both are set in ApplyLayoutMetrics. -->
         <Thickness x:Key="ViewerTextFindBarMargin">6,3,6,2</Thickness>
+        <!-- The text view's own size (AppSettings.ViewerTextFontSize), written
+             at startup and on every step by ApplyViewerTextFontSize. -->
+        <system:Double x:Key="ViewerTextFontSize">12</system:Double>
         <Thickness x:Key="FolderRowIconMargin">0,0,6,0</Thickness>
         <Thickness x:Key="FileRowIconMargin">0,0,6,0</Thickness>
         <Thickness x:Key="FileNameMargin">0,0,0,0</Thickness>
@@ -8695,7 +8698,8 @@
                     <Border x:Name="ViewerTextHost"
                             Grid.Row="0"
                             Visibility="Collapsed"
-                            Background="{DynamicResource ViewerBackground}">
+                            Background="{DynamicResource ViewerBackground}"
+                            PreviewMouseWheel="ViewerTextHost_PreviewMouseWheel">
                         <DockPanel x:Name="ViewerTextDock"
                                 LastChildFill="True">
                             <!-- THE FIND ROW (2026-10-11): a strip across the top

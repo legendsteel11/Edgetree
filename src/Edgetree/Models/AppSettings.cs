@@ -378,6 +378,12 @@ public class AppSettings
     public double DockedHeightRatio { get; set; } = 1.0;
     public double DockedTopRatio { get; set; } = 0.0;
     public double TreeFontSize { get; set; } = 12;
+    // The panel's text view keeps its own size (2026-10-11, on request), moved
+    // by Ctrl+wheel over the text - or Ctrl +/- with the keyboard in it - and
+    // never by the tree's Ctrl +/-. A file is read at a size of its own; the
+    // tree's size is chosen to fit rows into a sidebar. Starts where the tree
+    // does by default, so the first look is unchanged.
+    public double ViewerTextFontSize { get; set; } = 12;
     // 즐겨찾기가 있던 자리. 목록은 북마크로 합쳐졌고(MergeFavoritesIntoBookmarks)
     // 이 배열은 비우지 않는다 - 합치기는 한 번뿐이라 되돌릴 길이 여기 말고 없다.
     // 새로 담기는 것은 없으므로 여기 있는 것은 합치기 이전에 담아 둔 것 그대로다.
@@ -1161,6 +1167,7 @@ public class AppSettings
         AutoHideHandleWidth = Sane(AutoHideHandleWidth, 8, min: 1);
         SlideshowSeconds = (int)Sane(SlideshowSeconds, 5, min: 3);
         TreeFontSize = Sane(TreeFontSize, 12, min: 1);
+        ViewerTextFontSize = Sane(ViewerTextFontSize, 12, min: 1);
         // 배수라 0이 곧 글자 없음이다 - 0은 FontSize에서 예외이고, 그 앞의
         // Math.Clamp는 NaN을 NaN 그대로 통과시킨다. 범위는 쓰는 자리가 정한다.
         ViewerClockScale = Sane(ViewerClockScale, DefaultViewerClockScale, min: 0.1);

@@ -844,6 +844,7 @@ public partial class MainWindow : Window
         }
 
         ExplorerTree.FontSize = SaneTreeFontSize(_settings.TreeFontSize);
+        ApplyViewerTextFontSize();
 
         ReloadRoots();
 
@@ -2439,6 +2440,22 @@ public partial class MainWindow : Window
 
         switch (e.Key)
         {
+            // With the keyboard in the text view, the size keys are the TEXT's
+            // (2026-10-11) - the same steps Ctrl+wheel takes there - and the
+            // tree keeps its own size. First, so they win over the tree's three
+            // below; ViewerTextFontSize's own note says why the two are apart.
+            case Key.OemPlus or Key.Add when ViewerTextHost.IsKeyboardFocusWithin:
+                SetViewerTextFontSize(_settings.ViewerTextFontSize + 1);
+                e.Handled = true;
+                break;
+            case Key.OemMinus or Key.Subtract when ViewerTextHost.IsKeyboardFocusWithin:
+                SetViewerTextFontSize(_settings.ViewerTextFontSize - 1);
+                e.Handled = true;
+                break;
+            case Key.D0 or Key.NumPad0 when ViewerTextHost.IsKeyboardFocusWithin:
+                SetViewerTextFontSize(DefaultTreeFontSize);
+                e.Handled = true;
+                break;
             case Key.OemPlus or Key.Add:
                 StepTreeFontSize(+1);
                 e.Handled = true;
@@ -36483,6 +36500,46 @@ public partial class MainWindow : Window
             ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex);
         _viewerTextEditor = editor;
         return editor;
+    }
+
+    // ----- The text view's size ----------------------------------------------
+    //
+    // Its own, apart from the tree's (2026-10-11, on request): Ctrl+wheel over
+    // the text, or Ctrl +/- / Ctrl+0 with the keyboard in it, one point a step
+    // and saved on each, the way the subtitle size is. The tree's Ctrl +/-
+    // never reaches it. Markdown's headings follow, being a ratio of it.
+    private const double MinViewerTextFontSize = 8;
+    private const double MaxViewerTextFontSize = 36;
+
+    private void ApplyViewerTextFontSize()
+        => Resources["ViewerTextFontSize"] = Math.Clamp(
+            _settings.ViewerTextFontSize, MinViewerTextFontSize, MaxViewerTextFontSize);
+
+    private void SetViewerTextFontSize(double size)
+    {
+        size = Math.Clamp(Math.Round(size), MinViewerTextFontSize, MaxViewerTextFontSize);
+        if (size == _settings.ViewerTextFontSize)
+        {
+            return;
+        }
+
+        _settings.ViewerTextFontSize = size;
+        _settingsService.Save(_settings);
+        ApplyViewerTextFontSize();
+    }
+
+    // On the host, not the editor, so no AvalonEdit type is named here; and
+    // Preview, so the wheel is taken before the editor's ScrollViewer scrolls
+    // with it. Without Ctrl the wheel goes on to scroll as it always did.
+    private void ViewerTextHost_PreviewMouseWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+    {
+        if (!Keyboard.Modifiers.HasFlag(ModifierKeys.Control) || e.Delta == 0)
+        {
+            return;
+        }
+
+        SetViewerTextFontSize(_settings.ViewerTextFontSize + Math.Sign(e.Delta));
+        e.Handled = true;
     }
 
     // ----- The text view's find row ------------------------------------------

@@ -83,10 +83,11 @@ public sealed class ViewerTextEditor : TextEditor
         TextArea.SelectionForeground = null;
         TextArea.SetResourceReference(EditingTextArea.SelectionBrushProperty, "TreeRowSelectedActiveBackground");
 
-        // The file-name ink and the app's own font size, both by reference so
-        // a colour change or Ctrl+/- reaches the text without being told.
+        // The file-name ink and the text view's own size, both by reference so
+        // a colour change or a size step reaches the text without being told.
+        // Its own size, not the tree's: see AppSettings.ViewerTextFontSize.
         SetResourceReference(ForegroundProperty, "FileNameForeground");
-        SetResourceReference(FontSizeProperty, "MenuFontSize");
+        SetResourceReference(FontSizeProperty, "ViewerTextFontSize");
 
         // The app's overlay scroll bar rather than Windows' own. The editor's
         // template names its ScrollViewer without a style, so an implicit one
