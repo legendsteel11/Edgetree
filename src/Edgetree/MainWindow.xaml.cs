@@ -1543,6 +1543,16 @@ public partial class MainWindow : Window
         // cut and it said nothing, because a heading that is always loud is
         // just a heading.
         SetLocalBrush(resources, "FileNamePlayingForeground", useLightInk ? lightInk : darkInk);
+        // THE TEXT VIEW'S LINE NUMBERS (2026-10-11), a step under the text
+        // above, which is this panel's FileNameForeground. They first took the
+        // app's SecondaryForeground, which is drawn against the TREE's ground
+        // and knows nothing of this panel's, and read a touch strong beside
+        // the text ("살짝 더 흐리게"). Quieted the way this method quiets the
+        // caption - a backed-off ink, no opacity - and derived like the rest,
+        // so a panel colour the user picks cannot swallow them. About 4:1
+        // against the default dark ground, 3.4:1 against white.
+        SetLocalBrush(resources, "ViewerTextLineNumberForeground",
+            useLightInk ? Color.FromRgb(0x7A, 0x7D, 0x84) : Color.FromRgb(0x8A, 0x8D, 0x94));
         var hoverFill = useLightInk
             ? Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x24, 0x00, 0x00, 0x00);
@@ -9103,6 +9113,11 @@ public partial class MainWindow : Window
                 filmstripNames.IsChecked = _settings.ViewerFilmstripNames;
             }
 
+            if (FindMenuItem(imageViewer, "viewerTextLineNumbers") is { } textLineNumbers)
+            {
+                textLineNumbers.IsChecked = _settings.ViewerTextLineNumbers;
+            }
+
             if (FindMenuItem(imageViewer, "thumbnailSizeRow") is { } thumbnailSizeRow)
             {
                 UpdateStepperRow(thumbnailSizeRow, FilmstripMaxFetchSize,
@@ -12914,6 +12929,10 @@ public partial class MainWindow : Window
             _filmstripBuiltFor = default;
             UpdateViewerCarousel();
             ApplyFilmstripLayout();
+            if (_viewerTextEditor is not null)
+            {
+                ApplyViewerTextLineNumbers();
+            }
 
             // 화면에 있는 그림을 프리셋이 말한 크기로 다시 맞춘다. ByHand가 아닌
             // 것은 이것이 손이 아니라 프리셋이고, 값은 ApplyTo가 이미 적었기
@@ -36462,7 +36481,9 @@ public partial class MainWindow : Window
 
     private void ShowViewerText(string path, ViewerTextEditor.LoadedText loaded)
     {
-        EnsureViewerTextEditor().Show(loaded, IsViewerMarkdown(path), _settings.IsLightMode);
+        var editor = EnsureViewerTextEditor();
+        editor.SetLineNumbers(_settings.ViewerTextLineNumbers);
+        editor.Show(loaded, IsViewerMarkdown(path), _settings.IsLightMode);
         _viewerTextPath = path;
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
         // Show closed the search with the old document; the row goes with it.
@@ -36527,6 +36548,29 @@ public partial class MainWindow : Window
         _settingsService.Save(_settings);
         ApplyViewerTextFontSize();
     }
+
+    // 텍스트 줄 번호 표시 (2026-10-11). Written to the editor only if one exists;
+    // one made later reads the setting as each file is shown (ShowViewerText).
+    private void ViewerTextLineNumbersMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem item)
+        {
+            return;
+        }
+
+        _settings.ViewerTextLineNumbers = item.IsChecked;
+        _settingsService.Save(_settings);
+        if (_viewerTextEditor is not null)
+        {
+            ApplyViewerTextLineNumbers();
+        }
+    }
+
+    // NoInlining for the text view section's reason: the preset path calls
+    // this, and must not pull AvalonEdit in by inlining it.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ApplyViewerTextLineNumbers()
+        => (_viewerTextEditor as ViewerTextEditor)?.SetLineNumbers(_settings.ViewerTextLineNumbers);
 
     // On the host, not the editor, so no AvalonEdit type is named here; and
     // Preview, so the wheel is taken before the editor's ScrollViewer scrolls

@@ -134,6 +134,10 @@ public class AppPreset
         // 패널의 표시 스위치이고 적용에 값이 안 들고, 사진을 보려고 만든 프리셋이
         // 자름맞춤으로 열리는 것은 그 프리셋이 하려던 말 그 자체다.
         nameof(AppSettings.ViewerRest),
+
+        // The text view's line numbers (2026-10-11): a display switch on the
+        // panel like the name line and the clock, and as free to apply.
+        nameof(AppSettings.ViewerTextLineNumbers),
     };
 
     internal static readonly string[] LookFields =

@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -6,8 +7,10 @@ using System.Windows.Media;
 using System.Xml;
 using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Document;
+using ICSharpCode.AvalonEdit.Editing;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Highlighting.Xshd;
+using ICSharpCode.AvalonEdit.Rendering;
 using ICSharpCode.AvalonEdit.Search;
 using SidebarExplorer.App.Services;
 // The project also references WinForms, whose namespaces name the same
@@ -17,6 +20,7 @@ using Binding = System.Windows.Data.Binding;
 using TextBox = System.Windows.Controls.TextBox;
 using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
+using Control = System.Windows.Controls.Control;
 using FontFamily = System.Windows.Media.FontFamily;
 // Inside a TextEditor, TextArea names the instance property, not the type.
 using EditingTextArea = ICSharpCode.AvalonEdit.Editing.TextArea;
@@ -223,11 +227,106 @@ public sealed class ViewerTextEditor : TextEditor
     {
         base.OnPropertyChanged(e);
 
+        if (e.Property != FontSizeProperty)
+        {
+            return;
+        }
+
         // Heading sizes are a ratio of this, written into the definition when
         // it is built - so a font step rebuilds it.
-        if (e.Property == FontSizeProperty && _markdown)
+        if (_markdown)
         {
             ApplyHighlighting();
+        }
+        SizeLineNumbers();
+    }
+
+    // ----- Line numbers (2026-10-11) -------------------------------------------
+    //
+    // Smaller than the text and in a quieter ink, on request, with a gap
+    // after them instead of AvalonEdit's dotted rule. Not ShowLineNumbers:
+    // that adds the stock margin at the text's own size, and binds its own
+    // brush. The margin is ours (SmallLineNumberMargin) so the smaller numbers
+    // can sit on the text's baseline rather than float at its top.
+    private SmallLineNumberMargin? _lineNumbers;
+    private Border? _lineNumberGap;
+
+    public void SetLineNumbers(bool show)
+    {
+        if (show == _lineNumbers is not null)
+        {
+            return;
+        }
+
+        if (show)
+        {
+            _lineNumbers = new SmallLineNumberMargin();
+            // Derived against the panel's own ground in MainWindow's
+            // ApplyEdgeInkOverrides, a step under the text's ink.
+            _lineNumbers.SetResourceReference(Control.ForegroundProperty, "ViewerTextLineNumberForeground");
+            _lineNumberGap = new Border();
+            SizeLineNumbers();
+            TextArea.LeftMargins.Insert(0, _lineNumbers);
+            TextArea.LeftMargins.Insert(1, _lineNumberGap);
+        }
+        else
+        {
+            TextArea.LeftMargins.Remove(_lineNumbers);
+            TextArea.LeftMargins.Remove(_lineNumberGap!);
+            _lineNumbers = null;
+            _lineNumberGap = null;
+        }
+    }
+
+    // 85% of the text, whole points, and a gap of most of an em - both from
+    // the text's size, so a Ctrl+wheel step moves the margin with it.
+    private void SizeLineNumbers()
+    {
+        if (_lineNumbers is null || _lineNumberGap is null)
+        {
+            return;
+        }
+
+        _lineNumbers.SetValue(TextBlock.FontSizeProperty, Math.Max(6.0, Math.Round(FontSize * 0.85)));
+        _lineNumberGap.Width = Math.Max(6.0, Math.Round(FontSize * 0.8));
+    }
+
+    // AvalonEdit's margin with one change: each number is placed on the
+    // BASELINE of its line's first row. The stock margin aligns the numbers'
+    // top with the text's top, which is right only while both are the same
+    // size - smaller numbers would ride high, and beside a Markdown heading
+    // (drawn larger) they would sit at its top edge. A wrapped line keeps one
+    // number, on its first row, as the stock margin does.
+    private sealed class SmallLineNumberMargin : LineNumberMargin
+    {
+        protected override void OnRender(DrawingContext drawingContext)
+        {
+            var textView = TextView;
+            if (textView is null || !textView.VisualLinesValid)
+            {
+                return;
+            }
+
+            var foreground = (System.Windows.Media.Brush)GetValue(Control.ForegroundProperty);
+            // The stock margin builds these through AvalonEdit's internal
+            // TextFormatterFactory; this is the same text with the same
+            // formatting mode and DPI, built directly.
+            var mode = TextOptions.GetTextFormattingMode(this);
+            double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+            double right = RenderSize.Width;
+            foreach (VisualLine line in textView.VisualLines)
+            {
+                var text = new FormattedText(
+                    line.FirstDocumentLine.LineNumber.ToString(CultureInfo.CurrentCulture),
+                    CultureInfo.CurrentCulture,
+                    System.Windows.FlowDirection.LeftToRight,
+                    typeface, emSize, foreground,
+                    null, mode, pixelsPerDip);
+                double baseline = line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.Baseline);
+                drawingContext.DrawText(
+                    text,
+                    new System.Windows.Point(right - text.Width, baseline - text.Baseline - textView.VerticalOffset));
+            }
         }
     }
 

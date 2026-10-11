@@ -2259,6 +2259,13 @@
                         </Grid>
                     </MenuItem.Header>
                 </MenuItem>
+                <!-- The text view's own group, after the thumbnails: the only
+                     switch it has so far (2026-10-11). -->
+                <Separator/>
+                <MenuItem Header="{x:Static services:Strings.MenuViewerTextLineNumbers}"
+                        IsCheckable="True"
+                        AutomationProperties.AutomationId="viewerTextLineNumbers"
+                        Click="ViewerTextLineNumbersMenuItem_Click"/>
             </MenuItem>
             <!-- Everything about the panel beside the tree in one place:
                  WHETHER it is there, then WHERE it sits. The position toggle

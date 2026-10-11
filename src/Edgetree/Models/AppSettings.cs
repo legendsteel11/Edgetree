@@ -384,6 +384,10 @@ public class AppSettings
     // tree's size is chosen to fit rows into a sidebar. Starts where the tree
     // does by default, so the first look is unchanged.
     public double ViewerTextFontSize { get; set; } = 12;
+    // Line numbers down the text view's left edge, smaller than the text and
+    // in a quieter ink (2026-10-11, on request: on by default, the switch
+    // under 멀티미디어 패널 options).
+    public bool ViewerTextLineNumbers { get; set; } = true;
     // 즐겨찾기가 있던 자리. 목록은 북마크로 합쳐졌고(MergeFavoritesIntoBookmarks)
     // 이 배열은 비우지 않는다 - 합치기는 한 번뿐이라 되돌릴 길이 여기 말고 없다.
     // 새로 담기는 것은 없으므로 여기 있는 것은 합치기 이전에 담아 둔 것 그대로다.

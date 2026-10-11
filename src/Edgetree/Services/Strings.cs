@@ -526,6 +526,9 @@ public static class Strings
     // `썸네일 아래 파일 이름 표시` until the author shortened it (2026-09-28);
     // the English was left as it was.
     public static string MenuFilmstripNames = "썸네일 파일명 표시";
+    // The text view's line numbers. `텍스트` for the reason the two rows above
+    // carry `썸네일`: nothing in this menu supplies the subject.
+    public static string MenuViewerTextLineNumbers = "텍스트 줄 번호 표시";
     // 앱 전체화면이 창 모드에서 어디까지 가는지. 사용자가 고른 말이고, "화면 전체"
     // 대신 `바탕화면`인 것이 요점 - 앱 전체화면 자체가 이미 "화면"을 쓰고 있어서
     // 그 말로는 둘이 구분되지 않는다.
@@ -1237,6 +1240,7 @@ public static class Strings
         ViewerFilmstrip = "Thumbnail bar";
         MenuFilmstripGrid = "Thumbnail grid";
         MenuFilmstripNames = "File names under thumbnails";
+        MenuViewerTextLineNumbers = "Line numbers in text";
         ViewerFullscreen = "Full screen";
         GestureWheelClick = "Wheel click";
         ViewerFullDesktop = "Fill desktop";
