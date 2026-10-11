@@ -1,0 +1,65 @@
+<?xml version="1.0"?>
+<!--
+  Markdown source highlighting for the panel's text view (2026-10-11).
+
+  Started from AvalonEdit's own MarkDownWithFontSize-Mode.xshd (MIT, the same
+  licence as the editor) and changed where the original did not fit a sidebar:
+
+  - NO COLOURS OR SIZES HERE. Both are written in by ViewerTextEditor at load
+    time - colours per theme (the original's Maroon headings and DarkBlue
+    quotes were drawn for a white page only), sizes as a ratio of the editor's
+    own font, so Ctrl+/- scales a heading with the text around it. The
+    original's 30..15 were absolute and did not move.
+  - Fenced code blocks (```) are recognised. The original knew only inline
+    `code` and indented blocks, so a heading inside a fence was drawn as one.
+  - Indented blocks are NOT code here. The original handed every line starting
+    with four spaces to the C# highlighter, which caught every nested list.
+  - Emphasis needs a non-space inside both markers, and _ needs a word
+    boundary outside them, so snake_case_names and a "* item" bullet stay
+    plain text. The original's `_.*_` italicised both.
+  - Inline code is no longer "Footlight MT Light"; the editor's own monospace
+    face carries it.
+-->
+<SyntaxDefinition name="EdgetreeMarkdown" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
+    <Color name="Heading1" fontWeight="bold" />
+    <Color name="Heading2" fontWeight="bold" />
+    <Color name="Heading3" fontWeight="bold" />
+    <Color name="Heading4" fontWeight="bold" />
+    <Color name="Heading5" fontWeight="bold" />
+    <Color name="Heading6" fontWeight="bold" />
+    <Color name="Emphasis" fontStyle="italic" />
+    <Color name="StrongEmphasis" fontWeight="bold" />
+    <Color name="Code" />
+    <Color name="BlockQuote" />
+    <Color name="ListMarker" />
+    <Color name="Link" />
+
+    <RuleSet>
+        <Span color="Code" multiline="true">
+            <Begin>^[ ]{0,3}```</Begin>
+            <End>^[ ]{0,3}```</End>
+        </Span>
+        <Span color="Code" multiline="true">
+            <Begin>^[ ]{0,3}~~~</Begin>
+            <End>^[ ]{0,3}~~~</End>
+        </Span>
+
+        <Rule color="Heading1">^[ ]{0,3}\#[ \t].*</Rule>
+        <Rule color="Heading2">^[ ]{0,3}\#{2}[ \t].*</Rule>
+        <Rule color="Heading3">^[ ]{0,3}\#{3}[ \t].*</Rule>
+        <Rule color="Heading4">^[ ]{0,3}\#{4}[ \t].*</Rule>
+        <Rule color="Heading5">^[ ]{0,3}\#{5}[ \t].*</Rule>
+        <Rule color="Heading6">^[ ]{0,3}\#{6}[ \t].*</Rule>
+
+        <Rule color="BlockQuote">^[ ]{0,3}&gt;.*</Rule>
+        <Rule color="ListMarker">^[ \t]*([-*+]|\d{1,9}[.)])(?=[ \t])</Rule>
+
+        <Rule color="Code">`[^`]+`</Rule>
+        <Rule color="StrongEmphasis">\*\*(?=\S).+?(?&lt;=\S)\*\*</Rule>
+        <Rule color="StrongEmphasis">(?&lt;!\w)__(?=\S).+?(?&lt;=\S)__(?!\w)</Rule>
+        <Rule color="Emphasis">(?&lt;![\w*])\*(?=[^\s*]).*?(?&lt;=[^\s*])\*(?!\*)</Rule>
+        <Rule color="Emphasis">(?&lt;!\w)_(?=[^\s_]).*?(?&lt;=[^\s_])_(?!\w)</Rule>
+        <Rule color="Link">!?\[[^\]]*\]\([^)]*\)</Rule>
+        <Rule color="Link">!?\[[^\]]*\]\[[^\]]*\]</Rule>
+    </RuleSet>
+</SyntaxDefinition>

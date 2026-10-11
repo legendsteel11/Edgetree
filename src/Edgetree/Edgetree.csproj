@@ -58,12 +58,25 @@
     <!-- Compiled ps_2_0 bytecode for the HDR tone map, committed rather than
          built: WPF's ShaderEffect wants a .ps blob, and producing one needs an
          HLSL compiler that is not part of this toolchain (no Windows SDK on the
-         build machine, and this project carries no package dependencies).
+         build machine, and the project carried no package dependencies when
+         this was decided - AvalonEdit below, added later, is a runtime one).
          The .hlsl beside it is the source of truth for a human; regenerate the
          blob with tools\compile-shader.ps1, which borrows the D3DCompile that
          already ships inside Windows. -->
     <Resource Include="Resources\HdrToneMap.ps" />
     <None Include="Resources\HdrToneMap.hlsl" />
+    <!-- The panel's Markdown highlighting; colours and sizes are written in at
+         load time (see the file's header and ViewerTextEditor). -->
+    <Resource Include="Resources\Markdown.xshd" />
+  </ItemGroup>
+
+  <!-- THE PROJECT'S FIRST PACKAGE (2026-10-11), for the panel's TXT/MD view.
+       AvalonEdit draws only the lines on screen, where a WPF TextBox lays out
+       the whole text - the sluggishness on long files that started the round.
+       MIT, no dependencies of its own, one 622,592-byte DLL; the light exe
+       grows by about that much. -->
+  <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
   </ItemGroup>
 
   <!-- Microsoft.VisualBasic.FileIO.FileSystem.Delete*(..., RecycleOption.SendToRecycleBin)

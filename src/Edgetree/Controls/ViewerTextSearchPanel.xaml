@@ -1,0 +1,51 @@
+<!--
+  AvalonEdit's find panel with NOTHING TO SEE (2026-10-11).
+
+  The text view's find row is the app's own (ViewerTextFindBar in
+  MainWindow.xaml), a full-width strip above the text that looks like the path
+  bar. AvalonEdit's panel cannot be that row: it lives in an adorner laid OVER
+  the text area, so it can cover the first lines but never push them down. Its
+  first redraw here was a floating box in the app's colours, and it still sat
+  on the text.
+
+  So the panel keeps the work and gives up the face. It still runs the search,
+  marks every match, and moves between them (FindNext / FindPrevious, F3);
+  the row binds to its SearchPattern, MatchCase, WholeWords and UseRegex.
+
+  What has to remain is PART_searchTextBox, invisible: the panel's code
+  validates the pattern through that box's binding (ValidationRules[0] when a
+  regex does not compile), and anchors its "no matches" tooltip to it - which
+  puts the tooltip at the text's top-left corner, right under the row.
+  Not focusable, so the panel's own Reactivate can never move the keyboard
+  into a box nobody can see.
+
+  A separate dictionary, loaded by ViewerTextEditor when the editor is first
+  made: naming a SearchPanel type in MainWindow.xaml would load AvalonEdit with
+  the window.
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:search="clr-namespace:ICSharpCode.AvalonEdit.Search;assembly=ICSharpCode.AvalonEdit">
+    <ControlTemplate x:Key="ViewerTextSearchPanelTemplate"
+            TargetType="search:SearchPanel">
+        <TextBox Name="PART_searchTextBox"
+                Width="0"
+                Height="0"
+                HorizontalAlignment="Left"
+                VerticalAlignment="Top"
+                Focusable="False"
+                IsTabStop="False"
+                IsHitTestVisible="False"
+                Opacity="0">
+            <TextBox.Text>
+                <Binding Path="SearchPattern"
+                        RelativeSource="{RelativeSource TemplatedParent}"
+                        UpdateSourceTrigger="PropertyChanged">
+                    <Binding.ValidationRules>
+                        <ExceptionValidationRule/>
+                    </Binding.ValidationRules>
+                </Binding>
+            </TextBox.Text>
+        </TextBox>
+    </ControlTemplate>
+</ResourceDictionary>

@@ -673,6 +673,21 @@ public static class Strings
     // Playing, but the picture has stopped moving - the file is not arriving
     // fast enough to decode. Named for the cause rather than for the symptom.
     public static string ViewerMediaStalled = "파일을 기다리는 중…";
+    // The panel's text view (2026-10-11). The button under a text file's icon
+    // says the row menu's word because it is the same request.
+    public static string ViewerTextOpen = "보기";
+    // Past TextFileReader.WholeFileLimit only the head is read; {0} is its size.
+    public static string ViewerTextTruncated = "앞부분 {0}만 표시";
+    public static string ViewerTextReadFailed = "파일을 읽을 수 없습니다";
+    // The text view's find box (AvalonEdit's SearchPanel). ErrorText is
+    // followed by the regex engine's own message.
+    public static string TextFindMatchCase = "대/소문자 구분";
+    public static string TextFindWholeWords = "단어 단위로";
+    public static string TextFindRegex = "정규식";
+    public static string TextFindNext = "다음 찾기";
+    public static string TextFindPrevious = "이전 찾기";
+    public static string TextFindError = "오류: ";
+    public static string TextFindNoMatches = "일치하는 항목 없음";
     public static string ViewerPlay = "재생";
     public static string ViewerPause = "일시정지";
     public static string ViewerStop = "정지";
@@ -1260,6 +1275,16 @@ public static class Strings
         ViewerMediaOpeningSlow = "Opening… this is taking a while";
         ViewerMediaOpenGaveUp = "No response — playback canceled";
         ViewerMediaStalled = "Waiting for the file…";
+        ViewerTextOpen = "View";
+        ViewerTextTruncated = "Showing the first {0}";
+        ViewerTextReadFailed = "The file could not be read";
+        TextFindMatchCase = "Match case";
+        TextFindWholeWords = "Whole words";
+        TextFindRegex = "Regular expression";
+        TextFindNext = "Find next";
+        TextFindPrevious = "Find previous";
+        TextFindError = "Error: ";
+        TextFindNoMatches = "No matches";
         ViewerPlay = "Play";
         ViewerPause = "Pause";
         ViewerStop = "Stop";

@@ -1218,6 +1218,15 @@ public partial class MainWindow : Window
                 BlurRadius = 8,
                 Opacity = light ? 0.15 : 0.4
             };
+
+            // Markdown's token colours are written into its highlighting
+            // definition, not drawn from brushes, so a theme flip has to
+            // rebuild it. Only once the text view exists - see its section for
+            // why the editor is not touched before then.
+            if (_viewerTextEditor is not null)
+            {
+                ApplyViewerTextTheme(light);
+            }
         }
 
         SetBrushColor("SidebarBackground", light ? _settings.LightBackgroundColorHex : _settings.BackgroundColorHex);
@@ -1805,14 +1814,40 @@ public partial class MainWindow : Window
         }
     }
 
+    // "A key pressed now is typing" - the test every window-level key branch
+    // below asks before taking a key for itself. Each of them spelled it out
+    // as "the focus is a TextBoxBase" until the panel's text view (2026-10-11):
+    // AvalonEdit's text area is not a TextBoxBase, so with the keyboard in it
+    // Space would have changed files, ←→ walked the strip, Backspace closed
+    // the panel and Ctrl+A marked every thumbnail. Asked in one place, the
+    // next text surface is one line here instead of twenty-odd.
+    //
+    // The host, not the editor: naming the editor's type would make the JIT
+    // load AvalonEdit on the first key press of every session.
+    private bool KeyboardInTextField =>
+        Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+        || ViewerTextHost.IsKeyboardFocusWithin;
+
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // Esc puts the text view's find row away, from the row or from the
+        // text under it. First, because AvalonEdit's own Esc in the text would
+        // close only the search behind the row and leave the row standing.
+        if (e.Key == Key.Escape &&
+            ViewerTextFindBar.IsVisible &&
+            ViewerTextHost.IsKeyboardFocusWithin)
+        {
+            CloseViewerTextFind();
+            e.Handled = true;
+            return;
+        }
+
         // Esc leaves the viewer's full cover. Middle-clicking again does too,
         // but a mode that fills the screen has no visible way out of its own,
         // and Esc is what a hand reaches for. Narrow enough not to disturb the
         // tree's own Esc (which calls off a multi-selection or a pending cut).
         if (_viewerFullscreen && e.Key == Key.Escape &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             SetViewerFullscreen(false);
             e.Handled = true;
@@ -1837,7 +1872,7 @@ public partial class MainWindow : Window
             !_viewerFullscreen &&
             Keyboard.Modifiers == ModifierKeys.None &&
             e.Key == Key.Back &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             CloseViewer();
             e.Handled = true;
@@ -1860,13 +1895,13 @@ public partial class MainWindow : Window
         // options, and a chord is already deliberate. A dialog on a keyboard
         // shortcut would also make the fast path the slow one.
         //
-        // The TextBoxBase guard is not optional here the way it might look.
+        // The text-field guard is not optional here the way it might look.
         // Shift+Backspace is an ORDINARY EDITING KEY inside a text box, so
         // without it renaming a row or typing in the path bar would fold the
         // tree instead of deleting a character.
         if (e.Key == Key.Back &&
             Keyboard.Modifiers == ModifierKeys.Shift &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             CollapseEverything();
             e.Handled = true;
@@ -1892,7 +1927,7 @@ public partial class MainWindow : Window
             HasSubtitles &&
             (Keyboard.Modifiers & ~ModifierKeys.Shift) == ModifierKeys.None &&
             e.Key is Key.OemComma or Key.OemPeriod &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             StepSubtitleOffset(e.Key == Key.OemComma ? -SubtitleOffsetStep : SubtitleOffsetStep);
             e.Handled = true;
@@ -1918,7 +1953,7 @@ public partial class MainWindow : Window
             ViewerImage.Source is not null &&
             Keyboard.Modifiers == ModifierKeys.None &&
             e.Key is Key.Enter or Key.Return &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             SetViewerFullscreen(!_viewerFullscreen);
             e.Handled = true;
@@ -1938,7 +1973,7 @@ public partial class MainWindow : Window
             _viewerOpen &&
             e.Key == Key.Space &&
             _viewerVideoPath is not null &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             ViewerMediaPlayPause_Click(this, new RoutedEventArgs());
             e.Handled = true;
@@ -1956,7 +1991,7 @@ public partial class MainWindow : Window
             e.Key == Key.Space &&
             _viewerVideoPath is null &&
             _pendingViewerPath is { } playable && IsViewerPlayable(playable) &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             ViewerPlayOverlay_Click(this, new RoutedEventArgs());
             e.Handled = true;
@@ -1976,7 +2011,7 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == ModifierKeys.Control &&
             (e.Key == Key.Left || e.Key == Key.Right) &&
             !_isSearchViewActive &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             GoTreeHistory(e.Key == Key.Left ? -1 : +1);
             e.Handled = true;
@@ -2005,7 +2040,7 @@ public partial class MainWindow : Window
         // not start, the same as the menu row.
         if (e.Key == Key.F8 && Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             if (IsSlideshowRunning)
             {
@@ -2050,7 +2085,7 @@ public partial class MainWindow : Window
         // through to 프리셋 추가 - a save key that saves nothing is a broken
         // key, and naming a new slot is the only thing left for it to mean.
         if (e.Key == Key.S && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             SaveActivePreset();
             e.Handled = true;
@@ -2074,7 +2109,7 @@ public partial class MainWindow : Window
         // the alternative is a press that appears to fail.
         if (Keyboard.Modifiers == ModifierKeys.Control &&
             PresetSlotForKey(e.Key) is { } slot &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             GoToPresetSlot(slot);
             e.Handled = true;
@@ -2091,7 +2126,7 @@ public partial class MainWindow : Window
         // silently does nothing in a window with no picture in it.
         if (e.Key == Key.F9 && Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             SetViewerClock(!_settings.ViewerClock);
             e.Handled = true;
@@ -2113,7 +2148,7 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
             _viewerVideoPath is not null &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             if (e.Key == Key.Home)
             {
@@ -2133,7 +2168,7 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
             e.Key == Key.Space &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             // Moves the SELECTION, not the focus. Asking focus to travel down
             // was the original implementation and it only worked while the
@@ -2161,7 +2196,7 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
             (e.Key == Key.Left || e.Key == Key.Right) &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             // ViewerMediaIsSelection, not "something is loaded": music left
             // running in another folder must not take the arrow keys away from
@@ -2201,7 +2236,7 @@ public partial class MainWindow : Window
             ViewerMediaIsSelection &&
             _viewerVideoPlaying &&
             e.Key == Key.M &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             SetViewerMediaMuted(!_viewerMediaMuted);
             e.Handled = true;
@@ -2232,7 +2267,7 @@ public partial class MainWindow : Window
             _viewerOpen &&
             ViewerMediaIsSelection &&
             (e.Key == Key.Up || e.Key == Key.Down) &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             if (_viewerVideoPlaying)
             {
@@ -2303,7 +2338,7 @@ public partial class MainWindow : Window
             _viewerListOverride is null &&
             ViewerFilmstripHost.Visibility == Visibility.Visible &&
             (e.Key == Key.Up || e.Key == Key.Down) &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            !KeyboardInTextField &&
             ViewerItem is { } gridRow && IsViewerCarouselItem(gridRow) &&
             PanelHoldsArrows(gridRow))
         {
@@ -2330,7 +2365,7 @@ public partial class MainWindow : Window
             _viewerOpen &&
             ViewerFilmstripHost.Visibility == Visibility.Visible &&
             _filmstripCells.Count > 0 &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            !KeyboardInTextField &&
             !TreeHoldsSelectAll)
         {
             FilmstripSelectAll_Click(sender, e);
@@ -2345,7 +2380,7 @@ public partial class MainWindow : Window
         // can take it at all.
         if (e.Key == Key.F2 &&
             Keyboard.Modifiers == ModifierKeys.None &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+            !KeyboardInTextField &&
             FilmstripCellForRenameKey() is { } renameCell)
         {
             // Brought into view first, as Explorer does for F2 on an item that
@@ -2364,7 +2399,7 @@ public partial class MainWindow : Window
         if (Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
             _viewerPixelWidth > 0 &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             switch (e.Key)
             {
@@ -2414,6 +2449,17 @@ public partial class MainWindow : Window
                 break;
             case Key.D0 or Key.NumPad0:
                 SetTreeFontSize(DefaultTreeFontSize);
+                e.Handled = true;
+                break;
+            // Ctrl+F INSIDE THE TEXT VIEW is the view's own find row
+            // (2026-10-11); everywhere else the key is still the app's search.
+            // The keyboard being in the text (or in the row) is the whole test,
+            // the way it is for an editor in any other program. Taken here
+            // rather than left to AvalonEdit's own Ctrl+F binding, which would
+            // open its overlay panel - see ViewerTextSearchPanel.xaml.
+            case Key.F when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerTextHost.IsKeyboardFocusWithin:
+                OpenViewerTextFind();
                 e.Handled = true;
                 break;
             // Ctrl+Shift+F: search the place the tree is on (2026-09-16).
@@ -13523,6 +13569,14 @@ public partial class MainWindow : Window
         // under it and has nothing to do with the text.
         Resources["PathBarRowMargin"] = new Thickness(
             6, Math.Round(5.0 * CompactScale), 6, Math.Round(2.0 * CompactScale));
+        // The text view's find row wears the same strip, and is meant to sit
+        // level with it when the path bar takes its top seat (2026-10-11, on
+        // request): both seats start on the same grid row, so the find row's
+        // top is the path bar's less the 2 the viewer panel already pads its
+        // top with (ViewerPanel's Padding in the XAML - change one, change
+        // both). Its bottom line then meets the top seat's divider.
+        Resources["ViewerTextFindBarMargin"] = new Thickness(
+            6, Math.Max(0.0, Math.Round(5.0 * CompactScale) - 2.0), 6, Math.Round(2.0 * CompactScale));
 
         double tabSpacing = Math.Clamp(_settings.TabSpacing, 4, 24);
         Resources["TabSpacingWidth"] = new GridLength(tabSpacing);
@@ -14827,7 +14881,7 @@ public partial class MainWindow : Window
         bool navigationKey = e.Key is Key.Up or Key.Down or Key.Left or Key.Right
             or Key.PageUp or Key.PageDown or Key.Home or Key.End;
         if (navigationKey &&
-            Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase)
+            !KeyboardInTextField)
         {
             _arrowsInPanel = false;
         }
@@ -17168,10 +17222,14 @@ public partial class MainWindow : Window
             // here rather than bound in the XAML: a picture is looked at, a
             // track or a film is played, and one row saying both is one row less
             // in a menu that is already long.
+            // A TEXT FILE HAS THE ROW TOO since the panel's text view (2026-10-11),
+            // and it is that view's only door from a closed panel: the text is
+            // not one of the preview kinds (see the text view's section), so the
+            // panel does not open for it by itself.
             if (viewHereItem is not null)
             {
                 bool canShow = ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } row
-                               && HasViewerPreview(row.FullPath);
+                               && (HasViewerPreview(row.FullPath) || IsViewerText(row.FullPath));
                 viewHereItem.Visibility = canShow ? Visibility.Visible : Visibility.Collapsed;
                 if (canShow && ExplorerTree.SelectedItem is FileSystemItem selectedRow)
                 {
@@ -17194,7 +17252,13 @@ public partial class MainWindow : Window
                     // absent means this menu can never do it, greyed means it is
                     // already done. Two different facts deserve two different
                     // looks.
-                    viewHereItem.IsEnabled = playable || !_viewerOpen;
+                    //
+                    // A text file is 재생's case, not a picture's: with the panel
+                    // open it shows the offer, not the text, so 보기 is still a
+                    // real request - until its text is the one on screen.
+                    bool textToShow = IsViewerText(selectedRow.FullPath)
+                        && !string.Equals(_viewerTextPath, selectedRow.FullPath, StringComparison.OrdinalIgnoreCase);
+                    viewHereItem.IsEnabled = playable || textToShow || !_viewerOpen;
                 }
             }
 
@@ -20919,15 +20983,16 @@ public partial class MainWindow : Window
     }
 
     // Ctrl+Alt+K/L/J work anywhere in the window. With Alt held WPF reports
-    // Key.System and hides the real key in SystemKey. Skipped while a TextBox
-    // has focus (inline rename, the search box) so typing never triggers a
-    // toggle or jump.
+    // Key.System and hides the real key in SystemKey. Skipped while the
+    // keyboard is in a text field (inline rename, the search box, the panel's
+    // text view) so typing never triggers a toggle or jump - Ctrl+Alt is AltGr
+    // on many European layouts, and AltGr+L is a character there.
     protected override void OnPreviewKeyDown(System.Windows.Input.KeyEventArgs e)
     {
         base.OnPreviewKeyDown(e);
 
         if (Keyboard.Modifiers != (ModifierKeys.Control | ModifierKeys.Alt) ||
-            Keyboard.FocusedElement is TextBox)
+            KeyboardInTextField)
         {
             return;
         }
@@ -23821,6 +23886,7 @@ public partial class MainWindow : Window
         }
         ReleaseFilmstripCells();
         ViewerPlayOverlay.Visibility = Visibility.Collapsed;
+        HideViewerText();
         ViewerImage.Source = null;
         ViewerIconImage.Source = null;
 
@@ -24179,6 +24245,7 @@ public partial class MainWindow : Window
                 StopViewerVideo();
             }
             ViewerPlayOverlay.Visibility = Visibility.Collapsed;
+            HideViewerText();
             ViewerImage.Source = null;
             _viewerShowingDecodedImage = false;
             ViewerIconImage.Source = null;
@@ -24222,6 +24289,9 @@ public partial class MainWindow : Window
         }
 
         ViewerPlayOverlay.Visibility = Visibility.Collapsed;
+        // Back to the offer even when the next file is text too - see the
+        // text view's own section.
+        HideViewerText();
 
         ViewerFileName.Text = item.Name;
         // A NEW name is a new answer to "am I hearing this one", and this path
@@ -24244,6 +24314,10 @@ public partial class MainWindow : Window
             {
                 QueueViewerImageLoad(path, ViewerDecodeWidth());
             }
+        }
+        else if (!item.IsDirectory && IsViewerText(path))
+        {
+            ShowViewerTextOffer(path);
         }
         else
         {
@@ -26346,7 +26420,9 @@ public partial class MainWindow : Window
     // preview this opens follows the SELECTION, not the argument.
     private void ViewHere(FileSystemItem item)
     {
-        if (!HasViewerPreview(item.FullPath))
+        // Text from the row menu only: the gesture above asks HasViewerPreview
+        // alone, so a double-clicked .txt still goes to its default program.
+        if (!HasViewerPreview(item.FullPath) && !IsViewerText(item.FullPath))
         {
             return;
         }
@@ -26371,6 +26447,12 @@ public partial class MainWindow : Window
         if (IsViewerPlayable(item.FullPath))
         {
             ViewerPlayOverlay_Click(this, new RoutedEventArgs());
+        }
+        // The same for text: the preview above put up the offer, and the menu
+        // row is the press on it.
+        else if (IsViewerText(item.FullPath))
+        {
+            ViewerTextOpenButton_Click(this, new RoutedEventArgs());
         }
     }
 
@@ -35968,9 +36050,20 @@ public partial class MainWindow : Window
     // restricted to WIC's own decodes: a SHELL preview's "decoded width" is
     // its thumbnail's, and that is exactly the number a wider panel asks the
     // shell to grow, so a PSD or a video's still frame must keep asking.
+    //
+    // A TEXT FILE has nothing at any width to read again (2026-10-11): its
+    // icon is icon-sized and its wrapping follows the panel live. And the
+    // reload below is the path a new file takes, which puts the text view
+    // back to its 보기 offer - so releasing a width drag closed the file being
+    // read, and cancelled one still being fetched.
     private void ReloadViewerAtSettledWidth()
     {
         if (_viewerGifDecoder is not null || _viewerVideoPath is not null)
+        {
+            return;
+        }
+
+        if (_pendingViewerPath is { } shown && IsViewerText(shown))
         {
             return;
         }
@@ -36167,6 +36260,289 @@ public partial class MainWindow : Window
             ViewerIconImage.Source = icon;
         });
     }
+
+    // ----- The text view (TXT / MD) ---------------------------------------
+    //
+    // A text file shows its icon with a small 보기 under it, and its text only
+    // once that is pressed (2026-10-11). Moving to another file - another text
+    // file included - goes back to the icon and the button: the text is asked
+    // for per file, the way a film's play is, and never follows the selection
+    // by itself. ↓ through a folder of logs on a share therefore reads
+    // nothing, which is what retired the "read the first screen, cancel on
+    // leave, finish on stay" design this round started with.
+    //
+    // NOT ONE OF THE PANEL'S PREVIEW KINDS. HasViewerPreview is untouched, so a
+    // text file does not open the panel by itself, does not light the expand
+    // chevron, does not take a double-click from the default program and is
+    // not a cell in the thumbnail list. Its doors are the button and the row
+    // menu's 보기 (ViewHere), both explicit.
+    //
+    // THE EDITOR IS TYPED AS A PLAIN FrameworkElement HERE ON PURPOSE. Every
+    // method below that names ViewerTextEditor runs only after a press, and
+    // the two reached from hot paths - the release (every selection change)
+    // and the theme refresh - are NoInlining, so the JIT never meets an
+    // AvalonEdit type while compiling the code every session runs. A session
+    // that opens no text file never loads the assembly.
+    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".txt", ".md", ".markdown"
+    };
+
+    private static bool IsViewerText(string path)
+        => TextExtensions.Contains(Path.GetExtension(path));
+
+    private static bool IsViewerMarkdown(string path)
+        => !string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase);
+
+    private FrameworkElement? _viewerTextEditor;
+    private CancellationTokenSource? _viewerTextLoad;
+    // The file whose text is on screen. Null while the offer is up, while a
+    // read is still out, and for every other kind of file.
+    private string? _viewerTextPath;
+
+    private void ShowViewerTextOffer(string path)
+    {
+        ShowViewerFileTypeIcon(path, besideButton: false);
+        ViewerTextOpenButton.IsEnabled = true;
+        ViewerTextOpenButton.Visibility = Visibility.Visible;
+    }
+
+    // Called on every way the panel leaves a file: a new selection, an empty
+    // one, the panel closing. Cheap when there was nothing to hide.
+    private void HideViewerText()
+    {
+        _viewerTextLoad?.Cancel();
+        _viewerTextLoad = null;
+        ViewerTextOpenButton.Visibility = Visibility.Collapsed;
+
+        if (_viewerTextPath is null)
+        {
+            return;
+        }
+
+        _viewerTextPath = null;
+        bool hadKeyboard = ViewerTextHost.IsKeyboardFocusWithin;
+        ViewerTextHost.Visibility = Visibility.Collapsed;
+        ViewerTextNotice.Visibility = Visibility.Collapsed;
+        // Release closes the search; the row is ours to put away.
+        ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        ReleaseViewerTextDocument();
+
+        // A collapsed element keeps nothing, so the keyboard would be left
+        // with no owner and ↑↓ would answer nothing until something was
+        // clicked. Handed back to the row the panel follows instead - after
+        // the layout this selection change is about to run, since the row may
+        // only be realised by it.
+        if (hadKeyboard)
+        {
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+            {
+                if (_isSearchViewActive)
+                {
+                    if (SearchResultsList.SelectedItem is { } row &&
+                        SearchResultsList.ItemContainerGenerator.ContainerFromItem(row) is ListBoxItem item)
+                    {
+                        item.Focus();
+                    }
+                    return;
+                }
+
+                if (ExplorerTree.SelectedItem is FileSystemItem selected &&
+                    FindRealizedContainer(selected) is { } container)
+                {
+                    container.Focus();
+                    return;
+                }
+                ExplorerTree.Focus();
+            }));
+        }
+    }
+
+    private void ViewerTextOpenButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingViewerPath is { } path && IsViewerText(path))
+        {
+            OpenViewerText(path);
+        }
+    }
+
+    private async void OpenViewerText(string path)
+    {
+        _viewerTextLoad?.Cancel();
+        var load = new CancellationTokenSource();
+        _viewerTextLoad = load;
+        // Greyed while the read is out, which is the whole of the feedback a
+        // slow share gets: the button cannot be pressed twice, and the text
+        // replaces it the moment it arrives.
+        ViewerTextOpenButton.IsEnabled = false;
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+
+        ViewerTextEditor.LoadedText loaded;
+        try
+        {
+            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token), load.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException
+                                       or OutOfMemoryException)
+        {
+            if (ReferenceEquals(_viewerTextLoad, load))
+            {
+                _viewerTextLoad = null;
+                ViewerTextOpenButton.IsEnabled = true;
+                SetViewerCaption(Strings.ViewerTextReadFailed);
+            }
+            ViewerLoadLog($"text FAILED {Path.GetFileName(path)}: {ex.GetType().Name} {ex.Message}");
+            return;
+        }
+
+        // The selection may have moved while the read was out; HideViewerText
+        // cancels it then, and this is the check that the cancel arrived too
+        // late to stop the read itself.
+        if (load.IsCancellationRequested ||
+            !ReferenceEquals(_viewerTextLoad, load) ||
+            !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _viewerTextLoad = null;
+        ShowViewerText(path, loaded);
+
+        // What the head limit will be settled from: how long a read takes, at
+        // what size, from where. Debug only, written with the rest of the log.
+        double ms = (System.Diagnostics.Stopwatch.GetTimestamp() - started) * 1000.0
+                    / System.Diagnostics.Stopwatch.Frequency;
+        ViewerLoadLog(
+            $"text {ms,7:F0} ms  {FormatFileSize(loaded.FileLength),9}  {loaded.EncodingName}" +
+            $"{(loaded.Truncated ? "  HEAD ONLY" : "")}  {path}");
+    }
+
+    private void ShowViewerText(string path, ViewerTextEditor.LoadedText loaded)
+    {
+        EnsureViewerTextEditor().Show(loaded, IsViewerMarkdown(path), _settings.IsLightMode);
+        _viewerTextPath = path;
+        ViewerTextOpenButton.Visibility = Visibility.Collapsed;
+        // Show closed the search with the old document; the row goes with it.
+        ViewerTextFindBar.Visibility = Visibility.Collapsed;
+
+        if (loaded.Truncated)
+        {
+            ViewerTextNotice.Text = string.Format(
+                Strings.ViewerTextTruncated, FormatFileSize(TextFileReader.HeadBytes));
+            ViewerTextNotice.Visibility = Visibility.Visible;
+        }
+        else
+        {
+            ViewerTextNotice.Visibility = Visibility.Collapsed;
+        }
+
+        ViewerTextHost.Visibility = Visibility.Visible;
+    }
+
+    // Made once, on the first press, and kept: the control is the expensive
+    // part to build and the cheap part to keep, and only its document is
+    // dropped between files (Release).
+    private ViewerTextEditor EnsureViewerTextEditor()
+    {
+        if (_viewerTextEditor is ViewerTextEditor existing)
+        {
+            return existing;
+        }
+
+        var editor = new ViewerTextEditor();
+        // Last child of the dock, so it fills what the find row and the notice
+        // line leave.
+        ViewerTextDock.Children.Add(editor);
+        editor.BindFindBar(
+            ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex);
+        _viewerTextEditor = editor;
+        return editor;
+    }
+
+    // ----- The text view's find row ------------------------------------------
+    //
+    // Ctrl+F with the keyboard in the text (or already in the row) opens it;
+    // Esc from either closes it and hands the keyboard back to the text.
+    // Enter / Shift+Enter and F3 / Shift+F3 step through the matches from the
+    // field, and F3 keeps working from the text through AvalonEdit's own
+    // binding while the row is open. The row closes with the file, like
+    // everything else in the view.
+    //
+    // NoInlining on the two the key handler calls, for the reason the section
+    // above gives: MainWindow_PreviewKeyDown runs on every key of every
+    // session, and must not pull AvalonEdit in by inlining a call that names it.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void OpenViewerTextFind()
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        editor.OpenFind();
+        ViewerTextFindBar.Visibility = Visibility.Visible;
+        // After the row has been laid out, or the field it has just shown may
+        // not take the focus yet.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            ViewerTextFindBox.Focus();
+            ViewerTextFindBox.SelectAll();
+        }));
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void CloseViewerTextFind()
+    {
+        bool hadKeyboard = ViewerTextFindBar.IsKeyboardFocusWithin;
+        ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        if (_viewerTextEditor is ViewerTextEditor editor)
+        {
+            editor.CloseFind();
+            if (hadKeyboard)
+            {
+                editor.TextArea.Focus();
+            }
+        }
+    }
+
+    private void ViewerTextFindBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return or Key.F3) ||
+            _viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            editor.FindPreviousMatch();
+        }
+        else
+        {
+            editor.FindNextMatch();
+        }
+        e.Handled = true;
+    }
+
+    private void ViewerTextFindPrevious_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.FindPreviousMatch();
+
+    private void ViewerTextFindNext_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.FindNextMatch();
+
+    private void ViewerTextFindClose_Click(object sender, RoutedEventArgs e)
+        => CloseViewerTextFind();
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ReleaseViewerTextDocument() => (_viewerTextEditor as ViewerTextEditor)?.Release();
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ApplyViewerTextTheme(bool light) => (_viewerTextEditor as ViewerTextEditor)?.SetTheme(light);
 
     // Size · date, with the pixel dimensions in front when they are actually
     // known. Files get size · date; a folder just its date.

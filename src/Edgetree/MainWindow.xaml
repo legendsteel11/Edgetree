@@ -415,6 +415,9 @@
         <system:Double x:Key="PathBarGlyphSize">12</system:Double>
         <system:Double x:Key="PathBarListGlyphSize">15</system:Double>
         <Thickness x:Key="PathBarRowMargin">6,5,6,2</Thickness>
+        <!-- The text view's find row, lined up with the path bar's top seat -
+             see where both are set in ApplyLayoutMetrics. -->
+        <Thickness x:Key="ViewerTextFindBarMargin">6,3,6,2</Thickness>
         <Thickness x:Key="FolderRowIconMargin">0,0,6,0</Thickness>
         <Thickness x:Key="FileRowIconMargin">0,0,6,0</Thickness>
         <Thickness x:Key="FileNameMargin">0,0,0,0</Thickness>
@@ -553,6 +556,73 @@
                                         Value="0.45"/>
                                 <Setter Property="Cursor"
                                         Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- The path-bar button above, as a SWITCH: the text view's find row
+             puts its three options (Aa, ab, .*) beside the chevron-sized
+             buttons, and they have to look like the same family while saying
+             on or off (2026-10-11). Same box, outline and hover; ON borrows the
+             lit chip's two colours, which is what "this option is on" already
+             looks like in the footer and the viewer's strips. A ToggleButton
+             cannot take a Button style, hence the copy rather than BasedOn. -->
+        <Style x:Key="PathBarToggleStyle"
+                TargetType="ToggleButton">
+            <Setter Property="Background"
+                    Value="Transparent"/>
+            <Setter Property="Foreground"
+                    Value="{DynamicResource ForegroundText}"/>
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource ControlBorder}"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="FontSize"
+                    Value="{DynamicResource PathBarFontSize}"/>
+            <Setter Property="Width"
+                    Value="{DynamicResource PathBarButtonSize}"/>
+            <Setter Property="Height"
+                    Value="{DynamicResource PathBarButtonSize}"/>
+            <Setter Property="Focusable"
+                    Value="False"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd"
+                                Background="{TemplateBinding Background}"
+                                BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}"
+                                CornerRadius="3">
+                            <ContentPresenter x:Name="Content"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Opacity="0.85"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver"
+                                    Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource HoverBackground}"/>
+                                <Setter TargetName="Content"
+                                        Property="Opacity"
+                                        Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsChecked"
+                                    Value="True">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="{DynamicResource FooterChipCheckedBackground}"/>
+                                <Setter Property="Foreground"
+                                        Value="{DynamicResource FooterChipCheckedForeground}"/>
+                                <Setter TargetName="Content"
+                                        Property="Opacity"
+                                        Value="1"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -8548,6 +8618,179 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
                             Visibility="Collapsed"/>
+                    <!-- A TEXT FILE'S OFFER (2026-10-11): a small 보기 under its
+                         icon, and the text only once that is pressed. The same
+                         rule a film follows - selection never starts the
+                         expensive thing, because ↓ walks every row of a folder
+                         and each one would be a read from a share - but not the
+                         film's 64px disc: a document has no still frame to hang
+                         a disc on, and a plain button under the icon is what was
+                         asked for.
+                         The icon keeps its place and the button sits below it,
+                         so walking between a text file and anything else does
+                         not move the icon. 124 = the icon's half height plus a
+                         gap, doubled, since a centred element moves by half its
+                         margin. Full ink rather than the chip's 0.65 rest, for
+                         FooterNowPlayingChipStyle's reason: it is the one control
+                         in front of you. Not focusable (the style's), so the
+                         keyboard stays in the tree after the press. -->
+                    <Button x:Name="ViewerTextOpenButton"
+                            Grid.Row="0"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Margin="0,124,0,0"
+                            Visibility="Collapsed"
+                            Content="{x:Static services:Strings.ViewerTextOpen}"
+                            Click="ViewerTextOpenButton_Click">
+                        <Button.Style>
+                            <Style TargetType="Button"
+                                    BasedOn="{StaticResource FooterActionChipStyle}">
+                                <Setter Property="Opacity"
+                                        Value="1"/>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                    <!-- The text itself, over the picture's cell. A SIBLING of
+                         ViewerImageHost, not a child: the host's mouse handlers
+                         are the picture's pan, flick and wheel zoom, and none of
+                         them may run over text that is being selected or
+                         scrolled. Opaque for the same reason - it has to take
+                         the pointer everywhere inside it.
+                         The editor is added in code on the first 보기 (see
+                         EnsureViewerTextEditor), so XAML never loads AvalonEdit. -->
+                    <Border x:Name="ViewerTextHost"
+                            Grid.Row="0"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource ViewerBackground}">
+                        <DockPanel x:Name="ViewerTextDock"
+                                LastChildFill="True">
+                            <!-- THE FIND ROW (2026-10-11): a strip across the top
+                                 that the text starts below, built like the path
+                                 bar - outlined field, outlined square buttons,
+                                 the path bar's own size resources so Ctrl+/-
+                                 moves it with that row. Its margins and the line
+                                 under it are the path bar's top seat's too
+                                 (PathBarTopHost), so with the path bar up there
+                                 the two read as one strip across the window.
+                                 First built flush with no margin; on screen that
+                                 sat a few pixels off the path bar beside it, and
+                                 matching it was asked for the same day.
+                                 AvalonEdit's find panel could not be this: it is
+                                 an overlay on the text and covered the first
+                                 lines. It still does the searching, unseen, and
+                                 these controls are bound to it in code
+                                 (ViewerTextEditor.BindFindBar) - nothing here
+                                 names an AvalonEdit type, which keeps the
+                                 assembly out of the window's load.
+                                 The buttons take no focus, so a press leaves the
+                                 keyboard in the field. -->
+                            <Border x:Name="ViewerTextFindBar"
+                                    DockPanel.Dock="Top"
+                                    Visibility="Collapsed"
+                                    BorderThickness="0,0,0,1"
+                                    BorderBrush="{DynamicResource PanelDividerBrush}">
+                            <Grid Margin="{DynamicResource ViewerTextFindBarMargin}"
+                                    Height="{DynamicResource PathBarRowHeight}">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Background="Transparent"
+                                        BorderBrush="{DynamicResource ControlBorder}"
+                                        BorderThickness="1"
+                                        CornerRadius="3"/>
+                                <TextBox x:Name="ViewerTextFindBox"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        Foreground="{DynamicResource DialogForeground}"
+                                        CaretBrush="{DynamicResource ForegroundText}"
+                                        FontSize="{DynamicResource PathBarFontSize}"
+                                        Padding="6,0"
+                                        VerticalContentAlignment="Center"
+                                        PreviewKeyDown="ViewerTextFindBox_PreviewKeyDown"/>
+                                <ToggleButton x:Name="ViewerTextFindMatchCase"
+                                        Grid.Column="1"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        Margin="4,0,0,0"
+                                        Content="Aa"
+                                        ToolTip="{x:Static services:Strings.TextFindMatchCase}"/>
+                                <ToggleButton x:Name="ViewerTextFindWholeWords"
+                                        Grid.Column="2"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        Margin="2,0,0,0"
+                                        Content="ab"
+                                        ToolTip="{x:Static services:Strings.TextFindWholeWords}"/>
+                                <ToggleButton x:Name="ViewerTextFindRegex"
+                                        Grid.Column="3"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        Margin="2,0,0,0"
+                                        Content=".*"
+                                        ToolTip="{x:Static services:Strings.TextFindRegex}"/>
+                                <!-- Material Symbols arrow_upward / arrow_downward /
+                                     close, the path bar's glyph size. -->
+                                <Button Grid.Column="4"
+                                        Style="{StaticResource ToggleButtonStyle}"
+                                        BorderBrush="{DynamicResource ControlBorder}"
+                                        BorderThickness="1"
+                                        Width="{DynamicResource PathBarButtonSize}"
+                                        Height="{DynamicResource PathBarButtonSize}"
+                                        Margin="4,0,0,0"
+                                        Focusable="False"
+                                        Click="ViewerTextFindPrevious_Click"
+                                        ToolTip="{x:Static services:Strings.TextFindPrevious}">
+                                    <Path Data="M440-160v-487L216-423l-56-57 320-320 320 320-56 57-224-224v487h-80Z"
+                                            Fill="{DynamicResource ForegroundText}"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarGlyphSize}"
+                                            Height="{DynamicResource PathBarGlyphSize}"/>
+                                </Button>
+                                <Button Grid.Column="5"
+                                        Style="{StaticResource ToggleButtonStyle}"
+                                        BorderBrush="{DynamicResource ControlBorder}"
+                                        BorderThickness="1"
+                                        Width="{DynamicResource PathBarButtonSize}"
+                                        Height="{DynamicResource PathBarButtonSize}"
+                                        Margin="2,0,0,0"
+                                        Focusable="False"
+                                        Click="ViewerTextFindNext_Click"
+                                        ToolTip="{x:Static services:Strings.TextFindNext}">
+                                    <Path Data="M440-800v487L216-537l-56 57 320 320 320-320-56-57-224 224v-487h-80Z"
+                                            Fill="{DynamicResource ForegroundText}"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarGlyphSize}"
+                                            Height="{DynamicResource PathBarGlyphSize}"/>
+                                </Button>
+                                <Button Grid.Column="6"
+                                        Style="{StaticResource ToggleButtonStyle}"
+                                        BorderBrush="{DynamicResource ControlBorder}"
+                                        BorderThickness="1"
+                                        Width="{DynamicResource PathBarButtonSize}"
+                                        Height="{DynamicResource PathBarButtonSize}"
+                                        Margin="2,0,0,0"
+                                        Focusable="False"
+                                        Click="ViewerTextFindClose_Click">
+                                    <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+                                            Fill="{DynamicResource ForegroundText}"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarGlyphSize}"
+                                            Height="{DynamicResource PathBarGlyphSize}"/>
+                                </Button>
+                            </Grid>
+                            </Border>
+                            <TextBlock x:Name="ViewerTextNotice"
+                                    DockPanel.Dock="Top"
+                                    Visibility="Collapsed"
+                                    Margin="8,4,8,2"
+                                    TextTrimming="CharacterEllipsis"
+                                    Foreground="{DynamicResource ForegroundText}"
+                                    FontSize="{DynamicResource MenuThumbnailInfoFontSize}"/>
+                        </DockPanel>
+                    </Border>
                     <!-- 잠금 화면의 시계, over whatever the panel is showing (F9).
                          Sized in code from the panel rather than the app's font:
                          it is not text the app is telling you, it is the shape
