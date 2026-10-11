@@ -75,7 +75,10 @@ public sealed class ViewerTextEditor : TextEditor
         AllowDrop = false;
 
         Options.HighlightCurrentLine = false;
-        Options.AllowScrollBelowDocument = false;
+        // A view's height of room past the end, as VS Code has by default, so
+        // the LAST line can be brought to the top of the view - which is where
+        // RevealCaret puts a line it has to reach (see there).
+        Options.AllowScrollBelowDocument = true;
         Options.EnableTextDragDrop = false;
         Options.EnableEmailHyperlinks = false;
         // Links open on Ctrl+click only (AvalonEdit's default, kept): a plain
@@ -118,6 +121,77 @@ public sealed class ViewerTextEditor : TextEditor
         var searchLook = (ResourceDictionary)Application.LoadComponent(
             new Uri("/Edgetree;component/Controls/ViewerTextSearchPanel.xaml", UriKind.Relative));
         _search.Template = (ControlTemplate)searchLook["ViewerTextSearchPanelTemplate"];
+
+        TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
+    }
+
+    // ----- Bringing a far caret into view (2026-10-11) -------------------------
+    //
+    // AvalonEdit scrolls a caret into view by putting its line at the BOTTOM of
+    // the view, measured against estimated heights - one row each - for every
+    // line above it that has not been drawn yet. With wrapping, a line that is
+    // really many rows tall is drawn as it comes into view and pushes the
+    // target straight back out. Measured in a harness: a find landing on line
+    // 106 of a split one-line file left lines 51-52 on screen, and every
+    // further F3 crept one line closer - which is exactly how it was reported
+    // ("엔터를 눌러도 한줄씩 스크롤"). Not the split file's own problem: 2,000
+    // ordinary 1,200-character paragraphs did the same, finishing 23 lines
+    // short of the last one.
+    //
+    // So once the caret has moved and the layout has settled, a caret still out
+    // of view has its row put at the TOP of the view instead. Nothing above the
+    // top has to be right for that, and the target's own line has just been
+    // measured, so it lands where it says. A few rows of the same line are kept
+    // above it for context - never rows of the line before, whose real height
+    // is the thing nobody knows.
+    //
+    // It only ever answers the caret MOVING, so a wheel or a scroll bar drag -
+    // which leave the caret where it is - is never fought; and a caret already
+    // in view (a click, an arrow key) is left alone.
+    private bool _revealPending;
+
+    private void ScheduleRevealCaret()
+    {
+        if (_revealPending)
+        {
+            return;
+        }
+
+        _revealPending = true;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            _revealPending = false;
+            RevealCaret();
+        }));
+    }
+
+    private void RevealCaret()
+    {
+        var textView = TextArea.TextView;
+        if (Document is null || !IsVisible)
+        {
+            return;
+        }
+
+        // A couple of passes at most: the first lands, the second only confirms
+        // or nudges once the landing line has been drawn.
+        for (int pass = 0; pass < 3; pass++)
+        {
+            textView.EnsureVisualLines();
+            var caret = TextArea.Caret.Position;
+            double rowTop = textView.GetVisualPosition(caret, VisualYPosition.LineTop).Y;
+            double rowBottom = textView.GetVisualPosition(caret, VisualYPosition.LineBottom).Y;
+            double viewTop = textView.VerticalOffset;
+            if (rowTop >= viewTop && rowBottom <= viewTop + textView.ActualHeight)
+            {
+                return;
+            }
+
+            double lineTop = textView.GetVisualTopByDocumentLine(caret.Line);
+            double context = Math.Min(rowTop - lineTop, 2 * textView.DefaultLineHeight);
+            ScrollToVerticalOffset(Math.Max(0, rowTop - context));
+            UpdateLayout();
+        }
     }
 
     // The find row's controls drive the panel through its own properties.
