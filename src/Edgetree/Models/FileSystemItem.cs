@@ -504,6 +504,17 @@ public class FileSystemItem : INotifyPropertyChanged
         set => SetField(ref _isCut, value);
     }
 
+    private bool _isTextUnsaved;
+
+    // Edited in the panel's text view and not saved (2026-10-11). Turns the
+    // row's 보기 mark into a dot, the way an editor's tab says it. Initialized
+    // from FileSystemService.UnsavedTextPaths, like IsCut.
+    public bool IsTextUnsaved
+    {
+        get => _isTextUnsaved;
+        set => SetField(ref _isTextUnsaved, value);
+    }
+
     public FileSystemItem(string name, string fullPath, bool isDirectory, FileSystemItem? parent = null)
     {
         Name = name;
@@ -518,6 +529,8 @@ public class FileSystemItem : INotifyPropertyChanged
         _isNetworkDriveOffline = parent?.IsNetworkDriveOffline ?? false;
         _isBookmarked = FileSystemService.BookmarkedPaths.Contains(fullPath);
         _isCut = FileSystemService.CutPaths.Count > 0 && FileSystemService.CutPaths.Contains(fullPath);
+        _isTextUnsaved = FileSystemService.UnsavedTextPaths.Count > 0 &&
+            FileSystemService.UnsavedTextPaths.Contains(fullPath);
         // Built at all while hidden means it is being shown deliberately - the
         // filter in ReadChildrenFromDisk is what keeps the other case out.
         _isHiddenFolderShown = isDirectory &&

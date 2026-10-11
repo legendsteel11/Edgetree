@@ -27,6 +27,8 @@ public static class TextFileReader
     // the file - 53MB held at 10MB, 105MB at 20MB, 262MB at 50MB - and that is
     // what keeps the line at 10MB. The share adds little: the NAS read 161MB/s
     // when measured for films (2026-08), about 60ms per 10MB.
+    // The number is also in words in Strings.TextEditOffHeadOnly (both
+    // languages); change one, change both.
     public const long WholeFileLimit = 10L * 1024 * 1024;
     public const int HeadBytes = 1024 * 1024;
 
@@ -40,8 +42,8 @@ public static class TextFileReader
     // one-line file is a one-megabyte line.
     //
     // So a line past LongLineLimit is shown in SplitLength pieces, each its
-    // own display line (the view says so, and it is read-only: the text on
-    // screen is no longer the file's, so it must never be saved back). 20K
+    // own display line (and the file cannot be edited: the text on screen is
+    // no longer the file's, so it must never be saved back). 20K
     // keeps every ordinary text untouched; 10K pieces cost about 22ms each,
     // and only the ones on screen are ever laid out.
     public const int LongLineLimit = 20_000;
@@ -57,12 +59,17 @@ public static class TextFileReader
 
     public static bool IsTextFile(string path) => Extensions.Contains(Path.GetExtension(path));
 
+    // FileLength and LastWriteUtc are read from the open handle before a byte
+    // of the text is, and are what a save compares the file against to tell
+    // whether something else has written to it since (TextFileWriter). Taken
+    // first so a write that lands DURING the read still shows as newer.
     public sealed record Result(
         string Text,
         Encoding Encoding,
         bool HasBom,
         bool Truncated,
         long FileLength,
+        DateTime LastWriteUtc,
         bool LongLinesSplit);
 
     static TextFileReader()
@@ -88,6 +95,7 @@ public static class TextFileReader
             FileOptions.SequentialScan);
 
         long length = stream.Length;
+        DateTime lastWrite = File.GetLastWriteTimeUtc(stream.SafeFileHandle);
         bool truncated = length > WholeFileLimit;
         int toRead = truncated ? HeadBytes : (int)length;
 
@@ -114,7 +122,7 @@ public static class TextFileReader
         cancellation.ThrowIfCancellationRequested();
 
         string? split = SplitLongLines(text);
-        return new Result(split ?? text, encoding, bomLength > 0, truncated, length, split is not null);
+        return new Result(split ?? text, encoding, bomLength > 0, truncated, length, lastWrite, split is not null);
     }
 
     // Null when no line is past LongLineLimit, which is nearly every file:

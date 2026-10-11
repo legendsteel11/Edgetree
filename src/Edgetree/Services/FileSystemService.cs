@@ -247,6 +247,12 @@ public static class FileSystemService
     // persisted - it dies with the paste, with Esc, or with the next copy.
     public static readonly HashSet<string> CutPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    // Text files with edits the panel's text view has not saved yet
+    // (2026-10-11), for the same reason again: a row rebuilt while the edit is
+    // pending comes back marked. MainWindow keeps it equal to what the editor
+    // holds (SyncViewerTextUnsavedMarks).
+    public static readonly HashSet<string> UnsavedTextPaths = new(StringComparer.OrdinalIgnoreCase);
+
     // Mirror of AppSettings.NetworkLocations, kept in step by MainWindow the
     // same way the two sets above are. A LIST, not a set: these are rows in a
     // tree and the order they were added in is the order they appear.

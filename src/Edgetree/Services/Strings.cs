@@ -689,6 +689,32 @@ public static class Strings
     public static string TextFindPrevious = "이전 찾기";
     public static string TextFindError = "오류: ";
     public static string TextFindNoMatches = "일치하는 항목 없음";
+    // The text view's edit bar (2026-10-11). The commands are icons, so these
+    // are their tooltips, each with its key where it has one.
+    public static string ViewerTextEdit = "편집";
+    public static string TextEditCancel = "편집 취소";
+    public static string TextEditSave = "저장 (Ctrl+S)";
+    public static string TextEditReload = "다시 불러오기";
+    public static string TextEditUndo = "실행 취소 (Ctrl+Z)";
+    public static string TextEditRedo = "다시 실행 (Ctrl+Y)";
+    public static string TextEditCopy = "복사 (Ctrl+C)";
+    public static string TextEditPaste = "붙여넣기 (Ctrl+V)";
+    // 편집's tooltip while it is disabled. Says where such a file CAN be
+    // edited, in the row menu's own words (MenuOpen), and gives the size as a
+    // number - "앞부분만 표시한 파일은 편집할 수 없습니다" read as vague, since
+    // nothing on screen says the text is only the head (2026-10-11). The
+    // 10MB is TextFileReader.WholeFileLimit; change one, change both.
+    public static string TextEditOffHeadOnly = "10MB가 넘는 파일은 기본 프로그램에서 편집할 수 있습니다";
+    public static string TextEditOffSplit = "줄이 아주 긴 파일은 기본 프로그램에서 편집할 수 있습니다";
+    // A save that found the file not as it was read, or could not write it.
+    // The changed-on-disk question borrows OverwriteConfirmTitle.
+    public static string TextSaveTitle = "저장";
+    public static string TextSaveChangedBody = "'{0}'이(가) 다른 곳에서 변경되었습니다. 덮어쓸까요?";
+    public static string TextSaveMissingBody = "'{0}'을(를) 찾을 수 없습니다. 이 위치에 새로 저장할까요?";
+    public static string TextSaveUnencodableBody = "ANSI(코드 페이지 {0})로 저장할 수 없는 문자가 있습니다. UTF-8로 저장할까요?";
+    public static string TextSaveFailedTitle = "저장할 수 없습니다";
+    // The tree row's mark for a file with edits not yet saved.
+    public static string TextUnsavedMark = "저장하지 않은 변경 사항";
     public static string ViewerPlay = "재생";
     public static string ViewerPause = "일시정지";
     public static string ViewerStop = "정지";
@@ -1291,6 +1317,22 @@ public static class Strings
         TextFindPrevious = "Find previous";
         TextFindError = "Error: ";
         TextFindNoMatches = "No matches";
+        ViewerTextEdit = "Edit";
+        TextEditCancel = "Cancel editing";
+        TextEditSave = "Save (Ctrl+S)";
+        TextEditReload = "Reload";
+        TextEditUndo = "Undo (Ctrl+Z)";
+        TextEditRedo = "Redo (Ctrl+Y)";
+        TextEditCopy = "Copy (Ctrl+C)";
+        TextEditPaste = "Paste (Ctrl+V)";
+        TextEditOffHeadOnly = "Files over 10 MB can be edited in the default program";
+        TextEditOffSplit = "Files with very long lines can be edited in the default program";
+        TextSaveTitle = "Save";
+        TextSaveChangedBody = "\"{0}\" has been changed elsewhere. Overwrite it?";
+        TextSaveMissingBody = "\"{0}\" could not be found. Save it here as a new file?";
+        TextSaveUnencodableBody = "Some characters cannot be saved in ANSI (code page {0}). Save as UTF-8 instead?";
+        TextSaveFailedTitle = "Could not save";
+        TextUnsavedMark = "Unsaved changes";
         ViewerPlay = "Play";
         ViewerPause = "Pause";
         ViewerStop = "Stop";

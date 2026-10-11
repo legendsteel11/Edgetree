@@ -1,4 +1,6 @@
+using System.ComponentModel;
 using System.Globalization;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -27,8 +29,10 @@ using EditingTextArea = ICSharpCode.AvalonEdit.Editing.TextArea;
 
 namespace SidebarExplorer.App;
 
-// The panel's text view: a TXT or MD file, read-only, wrapped at the panel's
-// width (2026-10-11, the first half of the TXT/MD round).
+// The panel's text view: a TXT or MD file, wrapped at the panel's width
+// (2026-10-11, the first half of the TXT/MD round). Read-only until the edit
+// bar's 편집 is pressed, which turns editing on for that file until 편집 취소
+// or the panel moving to another (the second half, the same day).
 //
 // WHY AVALONEDIT AND NOT A WPF TEXTBOX. A TextBox lays out the whole text, so
 // a long file is slow to scroll and select in proportion to its length -
@@ -46,17 +50,86 @@ public sealed class ViewerTextEditor : TextEditor
     // what was learned about the file on the way.
     // LongLinesSplit: the text on screen has breaks the file does not (see
     // TextFileReader.LongLineLimit), so like a head-only one it must never be
-    // saved back - which phase 2's 편집 has to honour.
+    // saved back - which is why neither can be edited (CanEdit).
     public sealed record LoadedText(
         TextDocument Document,
         bool Truncated,
         long FileLength,
-        string EncodingName,
-        bool LongLinesSplit = false);
+        Encoding Encoding,
+        bool HasBom,
+        DateTime LastWriteUtc,
+        bool LongLinesSplit)
+    {
+        public string EncodingName => HasBom ? Encoding.WebName + " BOM" : Encoding.WebName;
+
+        public bool CanEdit => !Truncated && !LongLinesSplit;
+    }
+
+    // ONE FILE'S TEXT and everything a save needs to write it back: the
+    // encoding it came in, and the size and time it had, which a save checks
+    // the file against first (TextFileWriter). The undo history lives in the
+    // document, so keeping the session keeps that too.
+    internal sealed class TextSession
+    {
+        public TextSession(string path, TextDocument document)
+        {
+            Path = path;
+            Document = document;
+        }
+
+        public string Path { get; }
+        public TextDocument Document { get; }
+        public bool Markdown { get; init; }
+        public bool Truncated { get; init; }
+        public bool LongLinesSplit { get; init; }
+        public bool CanEdit => !Truncated && !LongLinesSplit;
+        public Encoding Encoding { get; set; } = Encoding.UTF8;
+        public bool HasBom { get; set; }
+        public long StampLength { get; set; }
+        public DateTime StampLastWriteUtc { get; set; }
+        // Where the view was when the panel moved away, put back when the
+        // session is.
+        public int CaretOffset { get; set; }
+        public double VerticalOffset { get; set; }
+
+        public bool IsModified => !Document.UndoStack.IsOriginalFile;
+    }
+
+    // A save, taken as a snapshot on the UI thread so the worker never reads
+    // the document. Version is how CompleteSave tells whether anything was
+    // typed while the write was out.
+    public sealed record SaveRequest(
+        string Path,
+        string Text,
+        Encoding Encoding,
+        bool HasBom,
+        long ExpectedLength,
+        DateTime ExpectedLastWriteUtc)
+    {
+        internal TextSession Session { get; init; } = null!;
+        internal ITextSourceVersion? Version { get; init; }
+    }
 
     private readonly SearchPanel _search;
     private bool _markdown;
     private bool _light;
+
+    // The text on screen. Null while the view shows nothing.
+    private TextSession? _session;
+
+    // EDITED TEXT THE PANEL HAS MOVED AWAY FROM (2026-10-11, the VS Code way,
+    // decided with the author 09-28). Leaving a file never asks and never
+    // drops an edit: the session waits here, the tree row says so, and coming
+    // back to the file opens it again exactly as it was left - undo history
+    // included. It leaves this list when it is saved or reloaded.
+    // Memory only for now; keeping it on disk across a crash or a restart is
+    // the next step of the round.
+    private readonly Dictionary<string, TextSession> _unsaved = new(StringComparer.OrdinalIgnoreCase);
+
+    // Anything the edit bar shows has changed: editing began or ended, the
+    // text went modified or back, undo or redo became possible or not, or a
+    // different file came up. MainWindow re-reads the state when it fires.
+    public event EventHandler? EditStateChanged;
 
     public ViewerTextEditor()
     {
@@ -259,36 +332,298 @@ public sealed class ViewerTextEditor : TextEditor
             document,
             file.Truncated,
             file.FileLength,
-            file.HasBom ? file.Encoding.WebName + " BOM" : file.Encoding.WebName,
+            file.Encoding,
+            file.HasBom,
+            file.LastWriteUtc,
             file.LongLinesSplit);
     }
 
-    public void Show(LoadedText loaded, bool markdown, bool light)
+    // A file just read, shown read-only from its top.
+    public void Show(string path, LoadedText loaded, bool markdown, bool light)
     {
         loaded.Document.SetOwnerThread(Thread.CurrentThread);
-        _search.Close();
-        _markdown = markdown;
-        _light = light;
-        // Highlighting off while the document changes hands, so the old file's
-        // rules are never run over the new file's lines.
-        SyntaxHighlighting = null;
-        Document = loaded.Document;
-        ApplyHighlighting();
+        var session = new TextSession(path, loaded.Document)
+        {
+            Markdown = markdown,
+            Truncated = loaded.Truncated,
+            LongLinesSplit = loaded.LongLinesSplit,
+            Encoding = loaded.Encoding,
+            HasBom = loaded.HasBom,
+            StampLength = loaded.FileLength,
+            StampLastWriteUtc = loaded.LastWriteUtc,
+        };
+        Attach(session, light, editing: false);
         TextArea.Caret.Offset = 0;
         ScrollToHome();
     }
 
-    // The document goes when the panel moves on. The view is offered again
-    // on the next text file rather than kept, so holding the last file's text
-    // would only be memory spent on something no longer on screen.
+    public bool HasUnsaved(string path) => _unsaved.ContainsKey(path);
+
+    // Every file with edits not yet written: the one on screen if it has
+    // any, and every one waiting in _unsaved. What the tree marks.
+    public IEnumerable<string> UnsavedPaths
+    {
+        get
+        {
+            if (_session is { IsModified: true } current)
+            {
+                yield return current.Path;
+            }
+            foreach (string path in _unsaved.Keys)
+            {
+                yield return path;
+            }
+        }
+    }
+
+    // An edited file the panel has come back to: straight into editing, with
+    // the caret and the scroll where they were left. False when there is no
+    // such session (it was saved from elsewhere in between, say).
+    public bool Restore(string path, bool light)
+    {
+        if (!_unsaved.Remove(path, out var session))
+        {
+            return false;
+        }
+
+        Attach(session, light, editing: true);
+        TextArea.Caret.Offset = Math.Min(session.CaretOffset, session.Document.TextLength);
+        // After the layout the new document is about to get, and after the
+        // caret's own reveal (queued by the caret move above at the same
+        // priority), so this is the position that stays.
+        double offset = session.VerticalOffset;
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (ReferenceEquals(_session, session))
+            {
+                ScrollToVerticalOffset(offset);
+            }
+        }));
+        return true;
+    }
+
+    private void Attach(TextSession session, bool light, bool editing)
+    {
+        if (_session is not null)
+        {
+            Release();
+        }
+
+        _search.Close();
+        _session = session;
+        _markdown = session.Markdown;
+        _light = light;
+        // Highlighting off while the document changes hands, so the old file's
+        // rules are never run over the new file's lines.
+        SyntaxHighlighting = null;
+        Document = session.Document;
+        session.Document.UndoStack.PropertyChanged += UndoStack_PropertyChanged;
+        IsReadOnly = !editing;
+        ApplyHighlighting();
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The panel has moved on. Unedited text is dropped - the view is offered
+    // again on the next visit rather than kept, so holding it would only be
+    // memory spent on something no longer on screen. EDITED text is kept in
+    // _unsaved, never dropped: see there.
     public void Release()
     {
         _search.Close();
+        if (_session is { } session)
+        {
+            session.Document.UndoStack.PropertyChanged -= UndoStack_PropertyChanged;
+            if (session.IsModified)
+            {
+                session.CaretOffset = TextArea.Caret.Offset;
+                session.VerticalOffset = VerticalOffset;
+                _unsaved[session.Path] = session;
+            }
+            _session = null;
+        }
+
         // Cleared with the document, or a font step or a theme flip would go on
         // rebuilding Markdown rules for an empty page.
         _markdown = false;
         SyntaxHighlighting = null;
+        IsReadOnly = true;
         Document = new TextDocument();
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void UndoStack_PropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(UndoStack.IsOriginalFile)
+                           or nameof(UndoStack.CanUndo)
+                           or nameof(UndoStack.CanRedo))
+        {
+            EditStateChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // ----- Editing (2026-10-11) ---------------------------------------------
+    //
+    // Off until 편집 is pressed, and only for a file shown whole: a head-only
+    // or split text is not the file (LoadedText.CanEdit). Editing lasts until
+    // 편집 취소 or the end of the visit - the panel moving to another file ends
+    // it, and an edited file comes back already editing (Restore).
+    public bool CanEdit => _session is { CanEdit: true };
+
+    // Why CanEdit is false, for the tooltip on the disabled 편집.
+    public bool IsHeadOnly => _session is { Truncated: true };
+
+    public bool IsEditing => _session is not null && !IsReadOnly;
+
+    public bool HasUnsavedEdits => _session is { IsModified: true };
+
+    public bool CanUndoEdit => IsEditing && Document.UndoStack.CanUndo;
+
+    public bool CanRedoEdit => IsEditing && Document.UndoStack.CanRedo;
+
+    public void BeginEdit()
+    {
+        if (_session is not { CanEdit: true } || !IsReadOnly)
+        {
+            return;
+        }
+
+        IsReadOnly = false;
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // 편집 취소 with nothing to drop. With unsaved edits it goes through
+    // Reload(..., endEditing: true) instead.
+    public void EndEdit()
+    {
+        if (_session is null || IsReadOnly)
+        {
+            return;
+        }
+
+        IsReadOnly = true;
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // Null when there is nothing to write.
+    public SaveRequest? CreateSaveRequest()
+    {
+        if (_session is not { } session || IsReadOnly)
+        {
+            return null;
+        }
+
+        return new SaveRequest(
+            session.Path,
+            session.Document.Text,
+            session.Encoding,
+            session.HasBom,
+            session.StampLength,
+            session.StampLastWriteUtc)
+        {
+            Session = session,
+            Version = session.Document.Version,
+        };
+    }
+
+    // The write went through. The session may no longer be on screen - the
+    // panel can move on while a save to a slow share is out - so it is the
+    // request's session that is updated, wherever it now is.
+    public void CompleteSave(SaveRequest request, TextFileWriter.Result result)
+    {
+        var session = request.Session;
+        session.Encoding = request.Encoding;
+        session.HasBom = request.HasBom;
+        session.StampLength = result.FileLength;
+        session.StampLastWriteUtc = result.LastWriteUtc;
+
+        // Marked as saved only if the text is still the text that was written.
+        // Anything typed while the write was out is not on disk, and the file
+        // has to go on saying so.
+        if (request.Version is { } written &&
+            session.Document.Version is { } now &&
+            now.BelongsToSameDocumentAs(written) &&
+            now.CompareAge(written) == 0)
+        {
+            session.Document.UndoStack.MarkAsOriginalFile();
+        }
+
+        if (!session.IsModified &&
+            _unsaved.TryGetValue(session.Path, out var waiting) &&
+            ReferenceEquals(waiting, session))
+        {
+            _unsaved.Remove(session.Path);
+        }
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // 다시 불러오기: the file as it now is on disk, in place of the edits.
+    // ONE UNDO STEP rather than a fresh document, so a press by mistake is
+    // taken back with 실행 취소 like any other change - which is what lets the
+    // button drop edits without asking first. Afterwards the text counts as
+    // saved: it is what the file holds.
+    //
+    // endEditing is 편집 취소 with edits to drop (author's choice, 2026-10-11:
+    // drop them, do not ask): the same replace, then back to reading. The step
+    // is still on the undo stack, so 편집 and then 실행 취소 bring the edits
+    // back for as long as the panel stays on the file.
+    //
+    // A file that has meanwhile grown past what can be edited (over the size
+    // limit, or with a line too long to show whole) comes back as a fresh
+    // read-only view instead: its text on screen would no longer be the file.
+    public void Reload(string path, LoadedText loaded, bool light, bool endEditing = false)
+    {
+        loaded.Document.SetOwnerThread(Thread.CurrentThread);
+        if (_session is not { } session ||
+            !string.Equals(session.Path, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (!loaded.CanEdit)
+        {
+            Discard();
+            Show(path, loaded, session.Markdown, light);
+            return;
+        }
+
+        string text = loaded.Document.Text;
+        int caret = TextArea.Caret.Offset;
+        double offset = VerticalOffset;
+        if (!string.Equals(session.Document.Text, text, StringComparison.Ordinal))
+        {
+            session.Document.Replace(0, session.Document.TextLength, text);
+        }
+        session.Document.UndoStack.MarkAsOriginalFile();
+        session.Encoding = loaded.Encoding;
+        session.HasBom = loaded.HasBom;
+        session.StampLength = loaded.FileLength;
+        session.StampLastWriteUtc = loaded.LastWriteUtc;
+        if (endEditing)
+        {
+            IsReadOnly = true;
+        }
+
+        TextArea.Caret.Offset = Math.Min(caret, session.Document.TextLength);
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Loaded, new Action(() =>
+        {
+            if (ReferenceEquals(_session, session))
+            {
+                ScrollToVerticalOffset(offset);
+            }
+        }));
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The session on screen, dropped without being kept - only for the reload
+    // above, which is the one request to throw edits away.
+    private void Discard()
+    {
+        if (_session is { } session)
+        {
+            session.Document.UndoStack.PropertyChanged -= UndoStack_PropertyChanged;
+            _session = null;
+        }
+        Release();
     }
 
     public void SetTheme(bool light)

@@ -415,9 +415,9 @@
         <system:Double x:Key="PathBarGlyphSize">12</system:Double>
         <system:Double x:Key="PathBarListGlyphSize">15</system:Double>
         <Thickness x:Key="PathBarRowMargin">6,5,6,2</Thickness>
-        <!-- The text view's find row, lined up with the path bar's top seat -
-             see where both are set in ApplyLayoutMetrics. -->
-        <Thickness x:Key="ViewerTextFindBarMargin">6,3,6,2</Thickness>
+        <!-- The text view's edit bar and find row, the bar lined up with the
+             path bar's top seat - see where both are set in ApplyLayoutMetrics. -->
+        <Thickness x:Key="ViewerTextBarMargin">6,3,6,2</Thickness>
         <!-- The text view's own size (AppSettings.ViewerTextFontSize), written
              at startup and on every step by ApplyViewerTextFontSize. -->
         <system:Double x:Key="ViewerTextFontSize">12</system:Double>
@@ -631,6 +631,38 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- The text view's edit bar: the find row's outlined square button,
+             written once instead of nine times. Disabled reads through
+             ToggleButtonStyle's own trigger. That template never binds
+             Padding - a worded 편집 tried one and it was silently dropped, the
+             outline tight on the word (2026-10-11) - so room inside one of
+             these has to be the content's own Margin. -->
+        <Style x:Key="ViewerTextBarButtonStyle"
+                TargetType="Button"
+                BasedOn="{StaticResource ToggleButtonStyle}">
+            <Setter Property="BorderBrush"
+                    Value="{DynamicResource ControlBorder}"/>
+            <Setter Property="BorderThickness"
+                    Value="1"/>
+            <Setter Property="Width"
+                    Value="{DynamicResource PathBarButtonSize}"/>
+            <Setter Property="Height"
+                    Value="{DynamicResource PathBarButtonSize}"/>
+            <Setter Property="Focusable"
+                    Value="False"/>
+        </Style>
+        <Style x:Key="ViewerTextBarGlyphStyle"
+                TargetType="Path">
+            <Setter Property="Fill"
+                    Value="{DynamicResource ForegroundText}"/>
+            <Setter Property="Stretch"
+                    Value="Uniform"/>
+            <Setter Property="Width"
+                    Value="{DynamicResource PathBarListGlyphSize}"/>
+            <Setter Property="Height"
+                    Value="{DynamicResource PathBarListGlyphSize}"/>
         </Style>
 
         <!-- Overriding the system selection/hover brushes is the reliable way to
@@ -4478,7 +4510,8 @@
                         Padding="{DynamicResource SortOverrideIconPadding}"
                         Cursor="Hand"
                         ToolTip="{x:Static services:Strings.MenuViewHere}">
-                    <Path Data="M288-288h288v-72H288v72Zm0-156h384v-72H288v72Zm0-156h384v-72H288v72Zm-72 456q-29.7 0-50.85-21.15Q144-186.3 144-216v-528q0-29.7 21.15-50.85Q186.3-816 216-816h528q29.7 0 50.85 21.15Q816-773.7 816-744v528q0 29.7-21.15 50.85Q773.7-144 744-144H216Zm0-72h528v-528H216v528Zm0-528v528-528Z"
+                    <Path x:Name="ViewTextIcon"
+                            Data="M288-288h288v-72H288v72Zm0-156h384v-72H288v72Zm0-156h384v-72H288v72Zm-72 456q-29.7 0-50.85-21.15Q144-186.3 144-216v-528q0-29.7 21.15-50.85Q186.3-816 216-816h528q29.7 0 50.85 21.15Q816-773.7 816-744v528q0 29.7-21.15 50.85Q773.7-144 744-144H216Zm0-72h528v-528H216v528Zm0-528v528-528Z"
                             Fill="{DynamicResource FileNameForeground}"
                             Width="{DynamicResource SortOverrideIconWidth}"
                             Height="{DynamicResource SortOverrideIconHeight}"
@@ -4644,6 +4677,24 @@
                     <Setter TargetName="ViewTextIconBorder"
                             Property="Visibility"
                             Value="Visible"/>
+                </DataTrigger>
+                <!-- UNSAVED EDITS turn the 보기 mark into a dot (2026-10-11),
+                     the mark an editor's tab wears for the same thing - in the
+                     same place and still the same press, which now opens the
+                     file straight back into its edits. A circle 640 of the 960
+                     box across, boxed so it draws at two thirds of the box
+                     rather than filling it the way the unboxed page glyph
+                     does - a filled disc as wide as an outline glyph would be
+                     the heaviest thing down the column. A judgement still to
+                     be confirmed on screen. -->
+                <DataTrigger Binding="{Binding IsTextUnsaved}"
+                        Value="True">
+                    <Setter TargetName="ViewTextIcon"
+                            Property="Data"
+                            Value="M160,-480 a320,320 0 1 1 640,0 a320,320 0 1 1 -640,0 Z M0,-960 H960 M0,0 H960"/>
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="ToolTip"
+                            Value="{x:Static services:Strings.TextUnsavedMark}"/>
                 </DataTrigger>
                 <!-- The network dot rides the folder icon: folder rows on a
                      network drive only, and only while the icon itself is
@@ -8709,17 +8760,149 @@
                             PreviewMouseWheel="ViewerTextHost_PreviewMouseWheel">
                         <DockPanel x:Name="ViewerTextDock"
                                 LastChildFill="True">
-                            <!-- THE FIND ROW (2026-10-11): a strip across the top
-                                 that the text starts below, built like the path
-                                 bar - outlined field, outlined square buttons,
-                                 the path bar's own size resources so Ctrl+/-
-                                 moves it with that row. Its margins and the line
-                                 under it are the path bar's top seat's too
-                                 (PathBarTopHost), so with the path bar up there
-                                 the two read as one strip across the window.
-                                 First built flush with no margin; on screen that
-                                 sat a few pixels off the path bar beside it, and
-                                 matching it was asked for the same day.
+                            <!-- THE EDIT BAR (2026-10-11): the strip across the
+                                 top, always there while text is shown. Reading,
+                                 it holds 편집; editing, 편집 취소 in the same
+                                 spot and the six commands after it. The close at
+                                 the right end is there in both states.
+                                 Placed here, with the find row moved to the line
+                                 under it, by the author's call.
+                                 It inherits what the find row had worked out for
+                                 this seat: built like the path bar - outlined
+                                 square buttons on the path bar's own size
+                                 resources, so Ctrl+/- moves it with that row -
+                                 and its margins and the line under it are the
+                                 path bar's top seat's (PathBarTopHost), so with
+                                 the path bar up there the two read as one strip
+                                 across the window.
+                                 Icons with names in their tooltips rather than
+                                 words: six worded buttons are wider than a narrow
+                                 panel. 편집 itself was a word at first and became
+                                 a pencil once 편집 취소 took the same spot as an
+                                 icon (on request, the same day). Material Symbols
+                                 edit / edit_off / save / refresh / undo / redo /
+                                 content_copy / content_paste, each boxed to the
+                                 family's 960 square (M0-960H960M0 0H960) so their
+                                 own sizes survive Stretch; the box is the path
+                                 bar's list-glyph size, which puts their ink at
+                                 about the find row's arrows below.
+                                 No button takes focus: a press leaves the
+                                 keyboard in the text, where the typing is. -->
+                            <Border x:Name="ViewerTextEditBar"
+                                    DockPanel.Dock="Top"
+                                    BorderThickness="0,0,0,1"
+                                    BorderBrush="{DynamicResource PanelDividerBrush}">
+                                <Grid Margin="{DynamicResource ViewerTextBarMargin}"
+                                        Height="{DynamicResource PathBarRowHeight}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Disabled, with the reason on hover, for a
+                                         file shown only in part (head only, or long
+                                         lines split): the text on screen is not the
+                                         file, so it can never be written back. The
+                                         tooltip is set in UpdateViewerTextEditBar,
+                                         which picks 편집 or the reason. -->
+                                    <Button x:Name="ViewerTextEditButton"
+                                            Style="{StaticResource ViewerTextBarButtonStyle}"
+                                            HorizontalAlignment="Left"
+                                            ToolTipService.ShowOnDisabled="True"
+                                            Click="ViewerTextEditButton_Click">
+                                        <Path Data="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z M0-960H960M0 0H960"
+                                                Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                    </Button>
+                                    <StackPanel x:Name="ViewerTextEditCommands"
+                                            Orientation="Horizontal"
+                                            Visibility="Collapsed">
+                                        <!-- 편집 취소, where 편집 was, so the same
+                                             spot turns editing on and off. Drops
+                                             unsaved edits without asking (see
+                                             ViewerTextCancelEdit_Click for why that
+                                             is safe). -->
+                                        <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Click="ViewerTextCancelEdit_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditCancel}">
+                                            <Path Data="m622-453-56-56 82-82-57-57-82 82-56-56 195-195q12-12 26.5-17.5T705-840q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L622-453ZM200-200h57l195-195-28-29-29-28-195 195v57ZM792-56 509-338 290-120H120v-169l219-219L56-792l57-57 736 736-57 57Zm-32-648-56-56 56 56Zm-169 56 57 57-57-57ZM424-424l-29-28 57 57-28-29Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button x:Name="ViewerTextSaveButton"
+                                                Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="ViewerTextSave_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditSave}">
+                                            <Path Data="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM565-275q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="2,0,0,0"
+                                                Click="ViewerTextReload_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditReload}">
+                                            <Path Data="M480-160q-134 0-227-93t-93-227q0-134 93-227t227-93q69 0 132 28.5T720-690v-110h80v280H520v-80h168q-32-56-87.5-88T480-720q-100 0-170 70t-70 170q0 100 70 170t170 70q77 0 139-44t87-116h84q-28 106-114 173t-196 67Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button x:Name="ViewerTextUndoButton"
+                                                Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="ViewerTextUndo_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditUndo}">
+                                            <Path Data="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button x:Name="ViewerTextRedoButton"
+                                                Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="2,0,0,0"
+                                                Click="ViewerTextRedo_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditRedo}">
+                                            <Path Data="M396-200q-97 0-166.5-63T160-420q0-94 69.5-157T396-640h252L544-744l56-56 200 200-200 200-56-56 104-104H396q-63 0-109.5 40T240-420q0 60 46.5 100T396-280h284v80H396Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="8,0,0,0"
+                                                Click="ViewerTextCopy_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditCopy}">
+                                            <Path Data="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                        <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                                Margin="2,0,0,0"
+                                                Click="ViewerTextPaste_Click"
+                                                ToolTip="{x:Static services:Strings.TextEditPaste}">
+                                            <Path Data="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h167q11-35 43-57.5t70-22.5q40 0 71.5 22.5T594-840h166q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560h-80v120H280v-120h-80v560Zm308.5-571.5Q520-783 520-800t-11.5-28.5Q497-840 480-840t-28.5 11.5Q440-817 440-800t11.5 28.5Q463-760 480-760t28.5-11.5Z M0-960H960M0 0H960"
+                                                    Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                        </Button>
+                                    </StackPanel>
+                                    <!-- CLOSES THE PANEL (2026-10-11, on request),
+                                         reading or editing - the same CloseViewer
+                                         the divider's chevron runs, so unsaved
+                                         edits are kept as they are on any other
+                                         way out. The find row's own X (closes find)
+                                         sits right under it when that row is open;
+                                         the glyph and its size are that X's, so the
+                                         pair line up.
+                                         A panel X was tried once before and taken
+                                         out (2026-08-10): at the panel's top corner
+                                         it sat under the window's X and the two read
+                                         as ambiguous. This one is inside the text's
+                                         own bar and closes from there. -->
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource ViewerTextBarButtonStyle}"
+                                            Margin="4,0,0,0"
+                                            Click="ViewerTextClosePanel_Click"
+                                            ToolTip="{x:Static services:Strings.ViewerClose}">
+                                        <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+                                                Fill="{DynamicResource ForegroundText}"
+                                                Stretch="Uniform"
+                                                Width="{DynamicResource PathBarGlyphSize}"
+                                                Height="{DynamicResource PathBarGlyphSize}"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <!-- THE FIND ROW (2026-10-11), under the edit bar since
+                                 that took the top seat, and only while find is
+                                 open. The same strip as the bar above - same
+                                 margins, height and rule - so the two stack as
+                                 a pair.
                                  AvalonEdit's find panel could not be this: it is
                                  an overlay on the text and covered the first
                                  lines. It still does the searching, unseen, and
@@ -8734,7 +8917,7 @@
                                     Visibility="Collapsed"
                                     BorderThickness="0,0,0,1"
                                     BorderBrush="{DynamicResource PanelDividerBrush}">
-                            <Grid Margin="{DynamicResource ViewerTextFindBarMargin}"
+                            <Grid Margin="{DynamicResource ViewerTextBarMargin}"
                                     Height="{DynamicResource PathBarRowHeight}">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>

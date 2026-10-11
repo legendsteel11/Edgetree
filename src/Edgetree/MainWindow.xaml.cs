@@ -2489,6 +2489,13 @@ public partial class MainWindow : Window
                 OpenViewerTextFind();
                 e.Handled = true;
                 break;
+            // Ctrl+S saves the text being edited (2026-10-11), with the keyboard
+            // in the text or its find row. The app had no Ctrl+S of its own.
+            case Key.S when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerTextHost.IsKeyboardFocusWithin:
+                SaveViewerText();
+                e.Handled = true;
+                break;
             // Ctrl+Shift+F: search the place the tree is on (2026-09-16).
             // FIRST, and guarded, because the check above only asks whether
             // Control is down - so until this case existed Ctrl+Shift+F fell
@@ -13605,13 +13612,15 @@ public partial class MainWindow : Window
         // under it and has nothing to do with the text.
         Resources["PathBarRowMargin"] = new Thickness(
             6, Math.Round(5.0 * CompactScale), 6, Math.Round(2.0 * CompactScale));
-        // The text view's find row wears the same strip, and is meant to sit
+        // The text view's edit bar wears the same strip, and is meant to sit
         // level with it when the path bar takes its top seat (2026-10-11, on
-        // request): both seats start on the same grid row, so the find row's
+        // request - first for the find row, which held that seat until the
+        // bar took it): both seats start on the same grid row, so the bar's
         // top is the path bar's less the 2 the viewer panel already pads its
         // top with (ViewerPanel's Padding in the XAML - change one, change
-        // both). Its bottom line then meets the top seat's divider.
-        Resources["ViewerTextFindBarMargin"] = new Thickness(
+        // both). Its bottom line then meets the top seat's divider. The find
+        // row under it takes the same margins, so the pair stack evenly.
+        Resources["ViewerTextBarMargin"] = new Thickness(
             6, Math.Max(0.0, Math.Round(5.0 * CompactScale) - 2.0), 6, Math.Round(2.0 * CompactScale));
 
         double tabSpacing = Math.Clamp(_settings.TabSpacing, 4, 24);
@@ -36360,6 +36369,15 @@ public partial class MainWindow : Window
     private void ShowViewerTextOffer(string path)
     {
         ShowViewerFileTypeIcon(path, besideButton: false);
+
+        // A file with unsaved edits is not offered: its text is already in
+        // memory, so there is no read to hold back, and it opens straight
+        // back into its edits (decided with the author, 2026-10-11).
+        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path))
+        {
+            return;
+        }
+
         ViewerTextOpenButton.IsEnabled = true;
         ViewerTextOpenButton.Visibility = Visibility.Visible;
     }
@@ -36424,6 +36442,13 @@ public partial class MainWindow : Window
 
     private async void OpenViewerText(string path)
     {
+        // Never read over unsaved edits: the offer is not shown for such a
+        // file, and this keeps any other way in from replacing them.
+        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path))
+        {
+            return;
+        }
+
         _viewerTextLoad?.Cancel();
         var load = new CancellationTokenSource();
         _viewerTextLoad = load;
@@ -36482,18 +36507,43 @@ public partial class MainWindow : Window
     {
         var editor = EnsureViewerTextEditor();
         editor.SetLineNumbers(_settings.ViewerTextLineNumbers);
-        editor.Show(loaded, IsViewerMarkdown(path), _settings.IsLightMode);
-        _viewerTextPath = path;
-        ViewerTextOpenButton.Visibility = Visibility.Collapsed;
-        // Show closed the search with the old document; the row goes with it.
-        ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        editor.Show(path, loaded, IsViewerMarkdown(path), _settings.IsLightMode);
 
         // NO NOTICE LINE for a head-only or long-line-split file (taken out
         // 2026-10-11, on request, to be tried without): one said "앞부분 1 MB만
         // 표시" / "긴 줄은 나눠서 표시", first above the text and then small over
         // the file name. Split lines all scroll into view anyway; a head-only
-        // file's text simply ends at its first megabyte. Both facts still ride
-        // on LoadedText for 편집 to honour, and the Debug log names them.
+        // file's text simply ends at its first megabyte. The one place either
+        // fact now shows is 편집 - disabled, with the reason as its tooltip -
+        // and the Debug log names them.
+        RevealViewerText(editor, path);
+    }
+
+    // An edited file the panel has come back to (ShowViewerTextOffer), shown
+    // from memory as it was left. False if the editor turns out not to hold
+    // it, in which case the marks are put right and the offer goes up.
+    // NoInlining: reached from the selection path, see the section's note.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private bool RestoreViewerText(string path)
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor || !editor.Restore(path, _settings.IsLightMode))
+        {
+            SyncViewerTextUnsavedMarks();
+            return false;
+        }
+
+        RevealViewerText(editor, path);
+        return true;
+    }
+
+    private void RevealViewerText(ViewerTextEditor editor, string path)
+    {
+        _viewerTextPath = path;
+        ViewerTextOpenButton.Visibility = Visibility.Collapsed;
+        // The editor closed the search with the old document; the row goes
+        // with it.
+        ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        UpdateViewerTextEditBar();
         ViewerTextHost.Visibility = Visibility.Visible;
 
         // THE KEYBOARD GOES TO THE TEXT that was just asked for (2026-10-11, on
@@ -36531,6 +36581,11 @@ public partial class MainWindow : Window
         ViewerTextDock.Children.Add(editor);
         editor.BindFindBar(
             ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex);
+        editor.EditStateChanged += (_, _) =>
+        {
+            UpdateViewerTextEditBar();
+            SyncViewerTextUnsavedMarks();
+        };
         _viewerTextEditor = editor;
         return editor;
     }
@@ -36671,6 +36726,252 @@ public partial class MainWindow : Window
 
     private void ViewerTextFindClose_Click(object sender, RoutedEventArgs e)
         => CloseViewerTextFind();
+
+    // ----- The text view's edit bar (2026-10-11) -------------------------------
+    //
+    // Across the top of the text, with the find row under it (the author's
+    // layout). Reading, it holds 편집; once that is pressed, 편집 취소 in its
+    // place and the six commands. A close at the right end shuts the panel in
+    // either state. Editing lasts until 편집 취소 or the end of the visit: a
+    // file left with unsaved edits is kept by the editor, marked on its tree
+    // row, and comes back already editing (RestoreViewerText).
+    //
+    // Everything here runs after a press, or from the editor's own event, so
+    // naming ViewerTextEditor costs nothing at startup; the one method the key
+    // handler calls (SaveViewerText) is NoInlining for the section's reason.
+    private bool _viewerTextSaving;
+
+    private void UpdateViewerTextEditBar()
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        bool editing = editor.IsEditing;
+        ViewerTextEditButton.Visibility = editing ? Visibility.Collapsed : Visibility.Visible;
+        ViewerTextEditCommands.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        ViewerTextEditButton.IsEnabled = editor.CanEdit;
+        ViewerTextEditButton.ToolTip = editor.CanEdit
+            ? Strings.ViewerTextEdit
+            : editor.IsHeadOnly ? Strings.TextEditOffHeadOnly : Strings.TextEditOffSplit;
+        // 저장 lights only with something to save, so the button itself says
+        // whether the file on disk is the text on screen.
+        ViewerTextSaveButton.IsEnabled = editor.HasUnsavedEdits && !_viewerTextSaving;
+        ViewerTextUndoButton.IsEnabled = editor.CanUndoEdit;
+        ViewerTextRedoButton.IsEnabled = editor.CanRedoEdit;
+    }
+
+    // Keeps FileSystemService.UnsavedTextPaths, and the tree rows' marks, equal
+    // to what the editor holds. Called on every state change the editor
+    // reports, so it compares first and walks the loaded rows only when the
+    // set has actually changed - a file going modified or back, not a key.
+    private void SyncViewerTextUnsavedMarks()
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        var unsaved = new HashSet<string>(editor.UnsavedPaths, StringComparer.OrdinalIgnoreCase);
+        if (unsaved.SetEquals(FileSystemService.UnsavedTextPaths))
+        {
+            return;
+        }
+
+        FileSystemService.UnsavedTextPaths.Clear();
+        FileSystemService.UnsavedTextPaths.UnionWith(unsaved);
+        foreach (var item in EnumerateLoadedItems(_roots))
+        {
+            item.IsTextUnsaved = unsaved.Count > 0 && unsaved.Contains(item.FullPath);
+        }
+    }
+
+    private void ViewerTextEditButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewerTextEditor is ViewerTextEditor editor)
+        {
+            editor.BeginEdit();
+            Keyboard.Focus(editor.TextArea);
+        }
+    }
+
+    // 편집 취소. Nothing to drop: straight back to reading. Edits to drop: the
+    // file read again and put in their place as one undo step, then reading -
+    // so nothing is asked, and a press by mistake is undone with 편집 then
+    // 실행 취소 (see ViewerTextEditor.Reload). Not while a save is out: the
+    // read could land on a half-written file.
+    private void ViewerTextCancelEdit_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewerTextSaving || _viewerTextEditor is not ViewerTextEditor { IsEditing: true } editor)
+        {
+            return;
+        }
+
+        if (editor.HasUnsavedEdits)
+        {
+            ReloadViewerText(endEditing: true);
+        }
+        else
+        {
+            editor.EndEdit();
+        }
+    }
+
+    private void ViewerTextClosePanel_Click(object sender, RoutedEventArgs e) => CloseViewer();
+
+    private void ViewerTextSave_Click(object sender, RoutedEventArgs e) => SaveViewerText();
+
+    private void ViewerTextReload_Click(object sender, RoutedEventArgs e) => ReloadViewerText(endEditing: false);
+
+    private void ViewerTextUndo_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.Undo();
+
+    private void ViewerTextRedo_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.Redo();
+
+    // With nothing selected AvalonEdit copies the caret's whole line (its
+    // CutCopyWholeLine, on by default), so 복사 always has something to do
+    // and stays lit.
+    private void ViewerTextCopy_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.Copy();
+
+    private void ViewerTextPaste_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.Paste();
+
+    // 저장, and Ctrl+S in the text. The write goes to a worker - a share can
+    // take seconds - and the text stays editable meanwhile; CompleteSave only
+    // marks it saved if nothing was typed while the write was out.
+    //
+    // Three answers come back without writing, each turned into one question:
+    // the file changed on disk since it was read (another program saved it),
+    // it is gone, or it is in a code page that cannot hold a character now in
+    // the text. The last offers UTF-8, which can hold anything; refusing any
+    // of them leaves the file and the edits as they were.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private async void SaveViewerText()
+    {
+        if (_viewerTextSaving ||
+            _viewerTextEditor is not ViewerTextEditor editor ||
+            editor.CreateSaveRequest() is not { } request)
+        {
+            return;
+        }
+
+        _viewerTextSaving = true;
+        UpdateViewerTextEditBar();
+        string name = Path.GetFileName(request.Path);
+        try
+        {
+            bool overwrite = false;
+            while (true)
+            {
+                var attempt = request;
+                bool force = overwrite;
+                var result = await Task.Run(() => TextFileWriter.Save(
+                    attempt.Path, attempt.Text, attempt.Encoding, attempt.HasBom,
+                    attempt.ExpectedLength, attempt.ExpectedLastWriteUtc, force));
+
+                switch (result.Outcome)
+                {
+                    case TextFileWriter.Outcome.Saved:
+                        editor.CompleteSave(request, result);
+                        ViewerLoadLog($"text saved  {FormatFileSize(result.FileLength),9}  {request.Encoding.WebName}" +
+                                      $"{(request.HasBom ? " BOM" : "")}  {request.Path}");
+                        return;
+                    case TextFileWriter.Outcome.ChangedOnDisk:
+                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveChangedBody, name), Strings.OverwriteConfirmTitle))
+                        {
+                            return;
+                        }
+                        overwrite = true;
+                        break;
+                    case TextFileWriter.Outcome.Missing:
+                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveMissingBody, name), Strings.TextSaveTitle))
+                        {
+                            return;
+                        }
+                        overwrite = true;
+                        break;
+                    case TextFileWriter.Outcome.Unencodable:
+                        if (!ConfirmViewerTextSave(
+                                string.Format(Strings.TextSaveUnencodableBody, request.Encoding.CodePage), Strings.TextSaveTitle))
+                        {
+                            return;
+                        }
+                        request = request with
+                        {
+                            Encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                            HasBom = false,
+                        };
+                        break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException)
+        {
+            ViewerLoadLog($"text save FAILED {name}: {ex.GetType().Name} {ex.Message}");
+            MessageBox.Show(this, ex.Message, Strings.TextSaveFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            _viewerTextSaving = false;
+            UpdateViewerTextEditBar();
+        }
+    }
+
+    private bool ConfirmViewerTextSave(string body, string title)
+        => MessageBox.Show(this, body, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    // 다시 불러오기, and 편집 취소 with edits to drop (see ViewerTextEditor.Reload).
+    // Through _viewerTextLoad like an open, so the panel moving on cancels it
+    // the same way.
+    private async void ReloadViewerText(bool endEditing)
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor ||
+            _viewerTextPath is not { } path ||
+            !editor.IsEditing)
+        {
+            return;
+        }
+
+        _viewerTextLoad?.Cancel();
+        var load = new CancellationTokenSource();
+        _viewerTextLoad = load;
+
+        ViewerTextEditor.LoadedText loaded;
+        try
+        {
+            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token), load.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException
+                                       or OutOfMemoryException)
+        {
+            if (ReferenceEquals(_viewerTextLoad, load))
+            {
+                _viewerTextLoad = null;
+                SetViewerCaption(Strings.ViewerTextReadFailed);
+            }
+            ViewerLoadLog($"text reload FAILED {Path.GetFileName(path)}: {ex.GetType().Name} {ex.Message}");
+            return;
+        }
+
+        if (load.IsCancellationRequested ||
+            !ReferenceEquals(_viewerTextLoad, load) ||
+            !string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _viewerTextLoad = null;
+        editor.Reload(path, loaded, _settings.IsLightMode, endEditing);
+    }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private void ReleaseViewerTextDocument() => (_viewerTextEditor as ViewerTextEditor)?.Release();
