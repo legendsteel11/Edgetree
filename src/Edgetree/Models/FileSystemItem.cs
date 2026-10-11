@@ -42,6 +42,12 @@ public class FileSystemItem : INotifyPropertyChanged
     // this one is about the row being the drive itself.
     public DriveType? DriveKind { get; set; }
 
+    // A TXT/MD file the panel's text view opens, which puts a 보기 mark at the
+    // row's right end (2026-10-11). Name never changes on an item - a rename
+    // makes a new one - so a plain computed property is all this needs.
+    public bool IsViewableText =>
+        !IsDirectory && !IsPlaceholder && !IsShowMore && TextFileReader.IsTextFile(Name);
+
     // Also called by MainWindow.ApplyIconStyle when the icon mode toggles, so
     // every realized row re-reads Icon under the new mode without a reload.
     public void RefreshIcon() => OnPropertyChanged(nameof(Icon));

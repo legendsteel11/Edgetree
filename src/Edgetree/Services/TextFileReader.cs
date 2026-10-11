@@ -23,6 +23,16 @@ public static class TextFileReader
     public const long WholeFileLimit = 10L * 1024 * 1024;
     public const int HeadBytes = 1024 * 1024;
 
+    // The kinds the text view opens - one list, read by the panel and by the
+    // tree row's 보기 mark alike, so the mark can never offer a file the panel
+    // would then refuse. .log, .ini, .json and the like are one line each here.
+    private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".txt", ".md", ".markdown"
+    };
+
+    public static bool IsTextFile(string path) => Extensions.Contains(Path.GetExtension(path));
+
     public sealed record Result(
         string Text,
         Encoding Encoding,

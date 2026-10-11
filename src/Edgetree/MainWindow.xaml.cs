@@ -15951,6 +15951,27 @@ public partial class MainWindow : Window
             return;
         }
 
+        // 보기 on a TXT/MD row (2026-10-11): select the row as a plain click
+        // would, then open the panel straight into its text - ViewHere, the row
+        // menu's 보기, which follows the selection and so needs it set first.
+        // Handled, so the press is not also a row click: the row is already
+        // selected by then, and a second selection pass would only re-run the
+        // panel's debounce for the same file.
+        if ((e.OriginalSource as DependencyObject)?.FindAncestor<Border>() is { Name: "ViewTextIconBorder" } &&
+            treeViewItem.DataContext is FileSystemItem { IsViewableText: true } textRow)
+        {
+            ClearMultiSelection();
+            _multiSelectAnchor = textRow;
+            treeViewItem.IsSelected = true;
+            treeViewItem.Focus();
+            ViewHere(textRow);
+
+            _itemDragStart = null;
+            _itemDragCandidate = null;
+            e.Handled = true;
+            return;
+        }
+
             // The bookmark ribbon releases the bookmark instead of selecting the
         // row - matched by name for the same reason as the sort icon below.
         // Handled, so the press never reaches the row: a click that both
@@ -17223,9 +17244,9 @@ public partial class MainWindow : Window
             // track or a film is played, and one row saying both is one row less
             // in a menu that is already long.
             // A TEXT FILE HAS THE ROW TOO since the panel's text view (2026-10-11),
-            // and it is that view's only door from a closed panel: the text is
-            // not one of the preview kinds (see the text view's section), so the
-            // panel does not open for it by itself.
+            // and it opens straight into the text, like the row's 보기 mark: the
+            // text is not one of the preview kinds (see the text view's
+            // section), so the panel does not open for it by itself.
             if (viewHereItem is not null)
             {
                 bool canShow = ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } row
@@ -23720,11 +23741,13 @@ public partial class MainWindow : Window
     // and a control that does nothing is worse than no control.
     private void UpdateViewerExpandButton()
     {
+        // A text file earns the chevron too (2026-10-11, on request): the panel
+        // has something to show it now, even if that is the 보기 offer first.
         bool show =
             !_viewerOpen &&
             !(_settings.IsAutoHidden && !_isAutoHideRevealed) &&
             ViewerItem is { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } item &&
-            HasViewerPreview(item.FullPath);
+            (HasViewerPreview(item.FullPath) || IsViewerText(item.FullPath));
 
         ViewerExpandButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         if (!show)
@@ -26449,8 +26472,11 @@ public partial class MainWindow : Window
             ViewerPlayOverlay_Click(this, new RoutedEventArgs());
         }
         // The same for text: the preview above put up the offer, and the menu
-        // row is the press on it.
-        else if (IsViewerText(item.FullPath))
+        // row (or the tree row's 보기 mark) is the press on it. Not again for
+        // the text already on screen - that would read the file a second time
+        // to show what is showing.
+        else if (IsViewerText(item.FullPath) &&
+                 !string.Equals(_viewerTextPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
         {
             ViewerTextOpenButton_Click(this, new RoutedEventArgs());
         }
@@ -36272,10 +36298,11 @@ public partial class MainWindow : Window
     // leave, finish on stay" design this round started with.
     //
     // NOT ONE OF THE PANEL'S PREVIEW KINDS. HasViewerPreview is untouched, so a
-    // text file does not open the panel by itself, does not light the expand
-    // chevron, does not take a double-click from the default program and is
-    // not a cell in the thumbnail list. Its doors are the button and the row
-    // menu's 보기 (ViewHere), both explicit.
+    // text file does not open the panel by itself, does not take a
+    // double-click from the default program and is not a cell in the
+    // thumbnail list. Its doors are all explicit: the button, the row menu's
+    // 보기 and the tree row's own 보기 mark (both through ViewHere), and the
+    // expand chevron, which a text file lights since the same day.
     //
     // THE EDITOR IS TYPED AS A PLAIN FrameworkElement HERE ON PURPOSE. Every
     // method below that names ViewerTextEditor runs only after a press, and
@@ -36283,13 +36310,7 @@ public partial class MainWindow : Window
     // and the theme refresh - are NoInlining, so the JIT never meets an
     // AvalonEdit type while compiling the code every session runs. A session
     // that opens no text file never loads the assembly.
-    private static readonly HashSet<string> TextExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".txt", ".md", ".markdown"
-    };
-
-    private static bool IsViewerText(string path)
-        => TextExtensions.Contains(Path.GetExtension(path));
+    private static bool IsViewerText(string path) => TextFileReader.IsTextFile(path);
 
     private static bool IsViewerMarkdown(string path)
         => !string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase);
