@@ -18458,15 +18458,20 @@ public partial class MainWindow : Window
     //    redraw.log showed dozens of external-refresh passes around the
     //    blank, so redraw-after-teardown demonstrably doesn't win.
     // 3. Diff-merge (current): MergeChildrenFromDisk keeps surviving rows'
-    //    instances and containers, so expanded descendants and the scroll
-    //    position are structurally undisturbed, and a no-op change (hidden
-    //    file, attribute flip) performs zero collection operations. No
-    //    expanded-path replay is needed - state never leaves the surviving
-    //    instances. Reselect logic stays deliberately absent (the old
-    //    NavigateToPath reselect was its own bug saga - see git history).
+    //    instances, so expanded descendants and the scroll position are
+    //    structurally undisturbed, and a no-op change (hidden file, attribute
+    //    flip) performs zero collection operations. No expanded-path replay
+    //    is needed - state never leaves the surviving instances. Reselect
+    //    logic stays deliberately absent (the old NavigateToPath reselect was
+    //    its own bug saga - see git history).
+    //    Instances, not always CONTAINERS: a row the merge MOVES gets a new
+    //    container, and when that row held the selection the tree later
+    //    handed it to an ancestor by itself (2026-10-11). Hence the selected
+    //    item passed in - the merge keeps that one row from being moved,
+    //    rather than this code selecting anything back.
     private void RefreshFolderPreservingState(FileSystemItem item)
     {
-        item.MergeChildrenFromDisk();
+        item.MergeChildrenFromDisk(ExplorerTree.SelectedItem as FileSystemItem);
         NoteFolderChangedForViewer(item);
     }
 

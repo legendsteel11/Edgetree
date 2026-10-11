@@ -993,7 +993,11 @@ public class FileSystemItem : INotifyPropertyChanged
     // external-refresh passes AROUND the blank, proving redraw-after-rebuild
     // was the wrong altitude for the fix). A no-op change (hidden file,
     // attribute flip) now results in zero collection operations.
-    public void MergeChildrenFromDisk()
+    //
+    // selected is the tree's selected item. The row of this folder that holds
+    // it - the item itself or its ancestor - is never the one MOVED; see the
+    // move pass below for why.
+    public void MergeChildrenFromDisk(FileSystemItem? selected = null)
     {
         if (!IsDirectory || !_childrenLoaded)
         {
@@ -1066,6 +1070,37 @@ public class FileSystemItem : INotifyPropertyChanged
                 Children.RemoveAt(i);
             }
         }
+
+        // THE ROW HOLDING THE SELECTION IS NEVER MOVED (2026-10-11). A Move
+        // costs the moved row its container: the virtualizing tree unlinks it
+        // and builds a new one, and the new one does not come up selected -
+        // TreeViewItem.IsSelected is not bound to the model - so the tree is
+        // left pointing at a detached container. The next Remove anywhere in
+        // an ancestor folder then makes WPF hand the selection to the nearest
+        // ancestor whose container survived. Seen as the selection jumping to
+        // %TEMP% with nobody touching the app: under a date sort, a folder
+        // inside Temp that some program writes into becomes the newest and is
+        // moved to the top, and the next temp file deleted in Temp does the
+        // rest (scrolljump.log: selected=<file> at 19:06:53, the chain's rows
+        // rebuilt at 19:08:05, selected=Temp at 19:08:42 with no navigation).
+        // Reproduced in a bare virtualized TreeView; without virtualization
+        // the container survives the Move and nothing happens.
+        //
+        // So when that row has to come forward, the rows in front of it are
+        // moved behind it instead - the same final order, and only rows that
+        // do not hold the selection lose their containers. Measured in the
+        // same harness: bringing the 9,000th of 10,000 rows to the top this way
+        // took 9,000 Moves in 29ms, 54ms with the layout, selection intact.
+        FileSystemItem? anchor = null;
+        for (var row = selected; row is not null; row = row.Parent)
+        {
+            if (ReferenceEquals(row.Parent, this))
+            {
+                anchor = row;
+                break;
+            }
+        }
+
         for (int i = 0; i < visibleTarget.Count; i++)
         {
             var wanted = visibleTarget[i];
@@ -1074,7 +1109,17 @@ public class FileSystemItem : INotifyPropertyChanged
                 continue;
             }
             int currentIndex = Children.IndexOf(wanted);
-            if (currentIndex >= 0)
+            if (currentIndex >= 0 && ReferenceEquals(wanted, anchor))
+            {
+                // Each step takes the row at i to just behind the anchor, which
+                // slides the anchor one place forward; the rows keep their
+                // relative order, and later steps of this loop place them.
+                for (int n = currentIndex - i; n > 0; n--)
+                {
+                    Children.Move(i, currentIndex);
+                }
+            }
+            else if (currentIndex >= 0)
             {
                 Children.Move(currentIndex, i);
             }
