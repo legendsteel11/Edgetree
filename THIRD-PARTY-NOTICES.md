@@ -16,6 +16,42 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
+## AvalonEdit
+
+멀티미디어 패널의 텍스트 뷰어(TXT·MD 보기)는 [AvalonEdit](https://github.com/icsharpcode/AvalonEdit)
+6.3.1로 그립니다. Markdown 강조 정의([src/Edgetree/Resources/Markdown.xshd](src/Edgetree/Resources/Markdown.xshd))는
+AvalonEdit의 `MarkDownWithFontSize-Mode.xshd`를 고쳐 쓴 것입니다. 패키지 저작권 표기는
+"2000-2025 AlphaSierraPapa for the SharpDevelop Team"입니다.
+
+```
+MIT License
+
+Copyright (c) AvalonEdit Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+**위의 두 MIT 고지는 배포물에도 들어갑니다.** 실행 파일 안에 담겨 있고, 앱 정보 창의
+"MIT 라이선스 고지 보기"로 열 수 있습니다. 저장소에서는
+[src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt](src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt)에
+있습니다.
+
 ## Material Symbols (Google)
 
 화면 글리프 일부는 [Material Symbols](https://github.com/google/material-design-icons)

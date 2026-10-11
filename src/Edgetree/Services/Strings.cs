@@ -911,6 +911,11 @@ public static class Strings
         "파일·폴더 아이콘: Material Icon Theme (MIT)\n" +
         "화면 글리프: Material Symbols, Google (Apache License 2.0)";
     public static string AboutIconLicenseOpen = "Apache License 2.0 전문 보기";
+    // The text view's component, and the MIT notices the exe carries for it
+    // and for the icon theme (Resources/THIRD-PARTY-NOTICES.txt).
+    public static string AboutTextViewerLabel = "텍스트 뷰어";
+    public static string AboutTextViewerValue = "AvalonEdit (MIT)";
+    public static string AboutMitNoticesOpen = "MIT 라이선스 고지 보기";
 
     // Tray
     public static string TrayOpen = "열기";
@@ -1401,6 +1406,9 @@ public static class Strings
             "File and folder icons: Material Icon Theme (MIT)\n" +
             "Interface glyphs: Material Symbols, Google (Apache License 2.0)";
         AboutIconLicenseOpen = "Read the Apache License 2.0";
+        AboutTextViewerLabel = "Text viewer";
+        AboutTextViewerValue = "AvalonEdit (MIT)";
+        AboutMitNoticesOpen = "Read the MIT notices";
 
         TrayOpen = "Open";
         TrayHide = "Send to tray";

@@ -55,6 +55,10 @@
          folder to drop a text file into. So it rides inside the exe, and the
          About window writes it out and opens it on request. -->
     <Resource Include="Resources\APACHE-2.0.txt" />
+    <!-- The same reasoning for MIT, which asks for the copyright and permission
+         notice in every copy: AvalonEdit's (the text view) and the icon theme's,
+         opened from the About window the same way. -->
+    <Resource Include="Resources\THIRD-PARTY-NOTICES.txt" />
     <!-- Compiled ps_2_0 bytecode for the HDR tone map, committed rather than
          built: WPF's ShaderEffect wants a .ps blob, and producing one needs an
          HLSL compiler that is not part of this toolchain (no Windows SDK on the

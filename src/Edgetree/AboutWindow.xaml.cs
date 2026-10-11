@@ -95,20 +95,26 @@ public partial class AboutWindow : Window
         });
     }
 
-    // Hands over the licence copy the exe carries: extracted next to the other
+    private void IconLicenseLink_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        => OpenCarriedText("APACHE-2.0.txt");
+
+    private void MitNoticesLink_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        => OpenCarriedText("THIRD-PARTY-NOTICES.txt");
+
+    // Hands over a licence text the exe carries: extracted next to the other
     // app data (not %TEMP%, which cleaners empty) and opened in whatever reads
     // .txt. Rewritten each time so a stale copy can't outlive an update.
-    private void IconLicenseLink_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    private static void OpenCarriedText(string fileName)
     {
         try
         {
             string dir = System.IO.Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Edgetree");
             System.IO.Directory.CreateDirectory(dir);
-            string path = System.IO.Path.Combine(dir, "APACHE-2.0.txt");
+            string path = System.IO.Path.Combine(dir, fileName);
 
             var resource = System.Windows.Application.GetResourceStream(
-                new Uri("Resources/APACHE-2.0.txt", UriKind.Relative));
+                new Uri("Resources/" + fileName, UriKind.Relative));
             if (resource is not null)
             {
                 using var stream = resource.Stream;
