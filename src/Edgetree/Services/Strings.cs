@@ -679,8 +679,6 @@ public static class Strings
     // The panel's text view (2026-10-11). The button under a text file's icon
     // says the row menu's word because it is the same request.
     public static string ViewerTextOpen = "보기";
-    // Past TextFileReader.WholeFileLimit only the head is read; {0} is its size.
-    public static string ViewerTextTruncated = "앞부분 {0}만 표시";
     public static string ViewerTextReadFailed = "파일을 읽을 수 없습니다";
     // The text view's find box (AvalonEdit's SearchPanel). ErrorText is
     // followed by the regex engine's own message.
@@ -1285,7 +1283,6 @@ public static class Strings
         ViewerMediaOpenGaveUp = "No response — playback canceled";
         ViewerMediaStalled = "Waiting for the file…";
         ViewerTextOpen = "View";
-        ViewerTextTruncated = "Showing the first {0}";
         ViewerTextReadFailed = "The file could not be read";
         TextFindMatchCase = "Match case";
         TextFindWholeWords = "Whole words";

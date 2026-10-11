@@ -36380,7 +36380,6 @@ public partial class MainWindow : Window
         _viewerTextPath = null;
         bool hadKeyboard = ViewerTextHost.IsKeyboardFocusWithin;
         ViewerTextHost.Visibility = Visibility.Collapsed;
-        ViewerTextNotice.Visibility = Visibility.Collapsed;
         // Release closes the search; the row is ours to put away.
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
         ReleaseViewerTextDocument();
@@ -36489,18 +36488,14 @@ public partial class MainWindow : Window
         // Show closed the search with the old document; the row goes with it.
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
 
-        if (loaded.Truncated)
-        {
-            ViewerTextNotice.Text = string.Format(
-                Strings.ViewerTextTruncated, FormatFileSize(TextFileReader.HeadBytes));
-            ViewerTextNotice.Visibility = Visibility.Visible;
-        }
-        else
-        {
-            ViewerTextNotice.Visibility = Visibility.Collapsed;
-        }
-
+        // NO NOTICE LINE for a head-only or long-line-split file (taken out
+        // 2026-10-11, on request, to be tried without): one said "앞부분 1 MB만
+        // 표시" / "긴 줄은 나눠서 표시", first above the text and then small over
+        // the file name. Split lines all scroll into view anyway; a head-only
+        // file's text simply ends at its first megabyte. Both facts still ride
+        // on LoadedText for 편집 to honour, and the Debug log names them.
         ViewerTextHost.Visibility = Visibility.Visible;
+
     }
 
     // Made once, on the first press, and kept: the control is the expensive
@@ -36514,8 +36509,7 @@ public partial class MainWindow : Window
         }
 
         var editor = new ViewerTextEditor();
-        // Last child of the dock, so it fills what the find row and the notice
-        // line leave.
+        // Last child of the dock, so it fills what the find row leaves.
         ViewerTextDock.Children.Add(editor);
         editor.BindFindBar(
             ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex);

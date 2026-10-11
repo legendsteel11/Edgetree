@@ -8827,13 +8827,6 @@
                                 </Button>
                             </Grid>
                             </Border>
-                            <TextBlock x:Name="ViewerTextNotice"
-                                    DockPanel.Dock="Top"
-                                    Visibility="Collapsed"
-                                    Margin="8,4,8,2"
-                                    TextTrimming="CharacterEllipsis"
-                                    Foreground="{DynamicResource ForegroundText}"
-                                    FontSize="{DynamicResource MenuThumbnailInfoFontSize}"/>
                         </DockPanel>
                     </Border>
                     <!-- 잠금 화면의 시계, over whatever the panel is showing (F9).
