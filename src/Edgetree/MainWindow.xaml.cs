@@ -36496,6 +36496,24 @@ public partial class MainWindow : Window
         // on LoadedText for 편집 to honour, and the Debug log names them.
         ViewerTextHost.Visibility = Visibility.Visible;
 
+        // THE KEYBOARD GOES TO THE TEXT that was just asked for (2026-10-11, on
+        // report: Ctrl+F right after 보기 opened the tree's search, because the
+        // focus was still in the tree). It first stayed in the tree on purpose,
+        // so ↓ would go on walking files; the text view is a place you read in,
+        // though, and its keys - find, Ctrl+A/C, arrows and PgDn through the
+        // text - are what the hand reaches for next. A click on the tree takes
+        // the keyboard back, and leaving the file hands it back by itself
+        // (HideViewerText).
+        //
+        // At Input priority, after the layout that makes the host visible: a
+        // collapsed element cannot take focus.
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            if (string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                Keyboard.Focus(editor.TextArea);
+            }
+        }));
     }
 
     // Made once, on the first press, and kept: the control is the expensive

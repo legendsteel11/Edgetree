@@ -8676,8 +8676,8 @@
                          gap, doubled, since a centred element moves by half its
                          margin. Full ink rather than the chip's 0.65 rest, for
                          FooterNowPlayingChipStyle's reason: it is the one control
-                         in front of you. Not focusable (the style's), so the
-                         keyboard stays in the tree after the press. -->
+                         in front of you. Not focusable (the style's); once the
+                         text arrives the keyboard goes to it (ShowViewerText). -->
                     <Button x:Name="ViewerTextOpenButton"
                             Grid.Row="0"
                             HorizontalAlignment="Center"
