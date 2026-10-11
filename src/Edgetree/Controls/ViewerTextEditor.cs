@@ -24,6 +24,7 @@ using Brushes = System.Windows.Media.Brushes;
 using Color = System.Windows.Media.Color;
 using Control = System.Windows.Controls.Control;
 using FontFamily = System.Windows.Media.FontFamily;
+using Pen = System.Windows.Media.Pen;
 // Inside a TextEditor, TextArea names the instance property, not the type.
 using EditingTextArea = ICSharpCode.AvalonEdit.Editing.TextArea;
 
@@ -195,7 +196,128 @@ public sealed class ViewerTextEditor : TextEditor
             new Uri("/Edgetree;component/Controls/ViewerTextSearchPanel.xaml", UriKind.Relative));
         _search.Template = (ControlTemplate)searchLook["ViewerTextSearchPanelTemplate"];
 
+        // EVERY MATCH IN THE SELECTION COLOUR (2026-10-11, on request), square
+        // like the selection, where AvalonEdit's default is a rounded yellow:
+        // a found word is marked the way a selected one is, as Notepad does,
+        // instead of in a colour of its own. Bound rather than copied, so the
+        // active / inactive swap of that brush (UpdateSelectionBrushForActivation)
+        // reaches the marks too.
+        //
+        // That makes the current match - the selection, drawn over the marks -
+        // the same colour as the rest, so it alone gets an outline in the
+        // text's ink while the marks are up (_findOutline).
+        BindingOperations.SetBinding(_search, SearchPanel.MarkerBrushProperty, MarkerBinding());
+        _search.MarkerCornerRadius = 0;
+        _findOutline = new Pen { Thickness = 1 };
+        BindingOperations.SetBinding(_findOutline, Pen.BrushProperty,
+            new Binding(nameof(Foreground)) { Source = this });
+
+        TextArea.SelectionChanged += (_, _) => OnSelectionChangedForFind();
+        // F3 in the text, taken here rather than left to the panel's own
+        // binding, so it goes through DriveFind like the row's arrows do.
+        TextArea.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.F3 && FindIsOpen)
+            {
+                if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift))
+                {
+                    FindPreviousMatch();
+                }
+                else
+                {
+                    FindNextMatch();
+                }
+                e.Handled = true;
+            }
+        };
+
         TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
+    }
+
+    // ----- Find marks give way to a selection (2026-10-11) --------------------
+    //
+    // A selection made by hand while find is open is shown ALONE: the marks
+    // and the current match's outline go, so what is selected is not lost
+    // among same-coloured matches. Stepping through the matches again - the
+    // row's arrows, Enter or F3 - or changing the pattern or an option brings
+    // the marks back, with the found match selected. Asked for once the marks
+    // took the selection colour, the same day.
+    //
+    // Telling the two apart: a selection the find made happens either inside
+    // DriveFind (a step, or OpenFind seeding the pattern) or while the
+    // keyboard is in the find row (typing there searches live). Anything else
+    // that leaves a non-empty selection is the hand. A caret move that only
+    // clears the selection leaves the marks as they are.
+    private readonly Pen _findOutline;
+    private bool _findDriving;
+    private bool _marksShown = true;
+
+    private Binding MarkerBinding()
+        => new(nameof(EditingTextArea.SelectionBrush)) { Source = TextArea };
+
+    private void OnSelectionChangedForFind()
+    {
+        if (!FindIsOpen)
+        {
+            return;
+        }
+
+        if (_findDriving || !TextArea.IsKeyboardFocusWithin)
+        {
+            ShowFindMarks();
+        }
+        else if (!TextArea.Selection.IsEmpty)
+        {
+            HideFindMarks();
+        }
+    }
+
+    private void ShowFindMarks()
+    {
+        if (!_marksShown)
+        {
+            _marksShown = true;
+            BindingOperations.SetBinding(_search, SearchPanel.MarkerBrushProperty, MarkerBinding());
+        }
+        TextArea.SelectionBorder = FindIsOpen ? _findOutline : null;
+    }
+
+    // Transparent rather than taken away: the panel keeps its matches, so
+    // bringing them back is a colour, not a search.
+    private void HideFindMarks()
+    {
+        if (!_marksShown)
+        {
+            return;
+        }
+
+        _marksShown = false;
+        BindingOperations.ClearBinding(_search, SearchPanel.MarkerBrushProperty);
+        _search.MarkerBrush = Brushes.Transparent;
+        TextArea.SelectionBorder = null;
+    }
+
+    private void DriveFind(Action step)
+    {
+        _findDriving = true;
+        try
+        {
+            ShowFindMarks();
+            step();
+        }
+        finally
+        {
+            _findDriving = false;
+        }
+    }
+
+    // Every way find closes: the row's X or Esc, a new document, the panel
+    // leaving the file. The outline goes with it, and the marks are put back
+    // to shown for the next open.
+    private void CloseSearch()
+    {
+        _search.Close();
+        ShowFindMarks();
     }
 
     // ----- Bringing a far caret into view (2026-10-11) -------------------------
@@ -284,6 +406,22 @@ public sealed class ViewerTextEditor : TextEditor
         matchCase.SetBinding(ToggleButton.IsCheckedProperty, SearchBinding(nameof(SearchPanel.MatchCase)));
         wholeWords.SetBinding(ToggleButton.IsCheckedProperty, SearchBinding(nameof(SearchPanel.WholeWords)));
         regex.SetBinding(ToggleButton.IsCheckedProperty, SearchBinding(nameof(SearchPanel.UseRegex)));
+
+        // A new pattern or option is a new search: the marks come back even
+        // if the selection happens not to move (see ShowFindMarks).
+        box.TextChanged += (_, _) => ShowFindMarksIfOpen();
+        foreach (var option in new[] { matchCase, wholeWords, regex })
+        {
+            option.Click += (_, _) => ShowFindMarksIfOpen();
+        }
+    }
+
+    private void ShowFindMarksIfOpen()
+    {
+        if (FindIsOpen)
+        {
+            ShowFindMarks();
+        }
     }
 
     private Binding SearchBinding(string property, bool live = false)
@@ -299,22 +437,23 @@ public sealed class ViewerTextEditor : TextEditor
 
     // What Ctrl+F did inside the panel's own command: open, and start from
     // the selection when it is one line of text.
-    public void OpenFind()
+    public void OpenFind() => DriveFind(() =>
     {
         _search.Open();
+        ShowFindMarks();
         if (!TextArea.Selection.IsEmpty && !TextArea.Selection.IsMultiline)
         {
             _search.SearchPattern = TextArea.Selection.GetText();
         }
-    }
+    });
 
-    public void CloseFind() => _search.Close();
+    public void CloseFind() => CloseSearch();
 
     public bool FindIsOpen => !_search.IsClosed;
 
-    public void FindNextMatch() => _search.FindNext();
+    public void FindNextMatch() => DriveFind(_search.FindNext);
 
-    public void FindPreviousMatch() => _search.FindPrevious();
+    public void FindPreviousMatch() => DriveFind(_search.FindPrevious);
 
     // WORKER THREAD. Reads the file and builds the document there, then hands
     // ownership back as nobody's - a TextDocument belongs to the thread that
@@ -409,7 +548,7 @@ public sealed class ViewerTextEditor : TextEditor
             Release();
         }
 
-        _search.Close();
+        CloseSearch();
         _session = session;
         _markdown = session.Markdown;
         _light = light;
@@ -429,7 +568,7 @@ public sealed class ViewerTextEditor : TextEditor
     // _unsaved, never dropped: see there.
     public void Release()
     {
-        _search.Close();
+        CloseSearch();
         if (_session is { } session)
         {
             session.Document.UndoStack.PropertyChanged -= UndoStack_PropertyChanged;
@@ -744,13 +883,11 @@ public sealed class ViewerTextEditor : TextEditor
         }
     }
 
+    // The find marks are not coloured here: they follow the selection colour
+    // through a binding (see the constructor), and a value written here would
+    // replace that binding.
     private void ApplyHighlighting()
-    {
-        SyntaxHighlighting = _markdown ? MarkdownDefinition(_light, FontSize) : null;
-        _search.MarkerBrush = new SolidColorBrush(_light
-            ? Color.FromArgb(0x80, 0xF8, 0xC9, 0x5A)
-            : Color.FromArgb(0x70, 0xB8, 0x86, 0x0B));
-    }
+        => SyntaxHighlighting = _markdown ? MarkdownDefinition(_light, FontSize) : null;
 
     // VS Code's preview ratios for h1..h6 (2em, 1.5em, 1.25em, 1em, .875em,
     // .85em). The source is what is on screen here, not a rendering of it, but

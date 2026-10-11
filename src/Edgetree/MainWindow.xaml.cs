@@ -36663,8 +36663,9 @@ public partial class MainWindow : Window
     // Ctrl+F with the keyboard in the text (or already in the row) opens it;
     // Esc from either closes it and hands the keyboard back to the text.
     // Enter / Shift+Enter and F3 / Shift+F3 step through the matches from the
-    // field, and F3 keeps working from the text through AvalonEdit's own
-    // binding while the row is open. The row closes with the file, like
+    // field, and F3 works from the text too while the row is open (the
+    // editor takes it, see ViewerTextEditor's find-marks section). The row
+    // closes with the file, like
     // everything else in the view.
     //
     // NoInlining on the two the key handler calls, for the reason the section
