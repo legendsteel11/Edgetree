@@ -14,14 +14,38 @@ namespace SidebarExplorer.App.Services;
 // control that draws the result.
 public static class TextFileReader
 {
-    // Whole file up to here; past it, only the head. PROVISIONAL numbers, to be
-    // settled by measuring a read over the NAS - the panel's job is "what is
-    // this file", and the first megabyte answers that for a log of any size,
-    // while reading a whole multi-gigabyte one into memory answers nothing the
-    // head did not. A head-only result is read-only by design: saving it would
-    // write the head back as the whole file.
+    // Whole file up to here; past it, only the head. The panel's job is "what
+    // is this file", and the first megabyte answers that for a log of any
+    // size, while reading a whole multi-gigabyte one into memory answers
+    // nothing the head did not. A head-only result is read-only by design:
+    // saving it would write the head back as the whole file.
+    //
+    // SETTLED BY MEASUREMENT (2026-10-11, a harness driving the built editor,
+    // ordinary many-line files, read + document + first layout): 1MB 44ms,
+    // 5MB 86ms, 10MB 153ms, 20MB 297ms, 50MB 501ms; scrolling to either end
+    // stays under 20ms at every size. What grows is MEMORY, about five times
+    // the file - 53MB held at 10MB, 105MB at 20MB, 262MB at 50MB - and that is
+    // what keeps the line at 10MB. The share adds little: the NAS read 161MB/s
+    // when measured for films (2026-08), about 60ms per 10MB.
     public const long WholeFileLimit = 10L * 1024 * 1024;
     public const int HeadBytes = 1024 * 1024;
+
+    // ONE LONG LINE IS WHAT ACTUALLY STOPS THE APP, not a big file (measured
+    // the same day). AvalonEdit lays out a whole document line at once when it
+    // wraps, so the cost of showing a line grows with its length - faster
+    // than linearly past a point: 10K characters 22ms, 20K 37ms, 100K 165ms,
+    // 500K 1.2s, 1M 4.6s with the UI frozen, 5M not done after a minute. A
+    // hundred 20K lines cost 37ms, so it is the length of a line, never the
+    // number of them. The head limit does not help - the first megabyte of a
+    // one-line file is a one-megabyte line.
+    //
+    // So a line past LongLineLimit is shown in SplitLength pieces, each its
+    // own display line (the view says so, and it is read-only: the text on
+    // screen is no longer the file's, so it must never be saved back). 20K
+    // keeps every ordinary text untouched; 10K pieces cost about 22ms each,
+    // and only the ones on screen are ever laid out.
+    public const int LongLineLimit = 20_000;
+    public const int SplitLength = 10_000;
 
     // The kinds the text view opens - one list, read by the panel and by the
     // tree row's 보기 mark alike, so the mark can never offer a file the panel
@@ -38,7 +62,8 @@ public static class TextFileReader
         Encoding Encoding,
         bool HasBom,
         bool Truncated,
-        long FileLength);
+        long FileLength,
+        bool LongLinesSplit);
 
     static TextFileReader()
     {
@@ -86,7 +111,91 @@ public static class TextFileReader
         var span = new ReadOnlySpan<byte>(bytes, 0, read);
         var (encoding, bomLength) = Detect(span, truncated);
         string text = encoding.GetString(TrimIncompleteTail(span[bomLength..], encoding, truncated));
-        return new Result(text, encoding, bomLength > 0, truncated, length);
+        cancellation.ThrowIfCancellationRequested();
+
+        string? split = SplitLongLines(text);
+        return new Result(split ?? text, encoding, bomLength > 0, truncated, length, split is not null);
+    }
+
+    // Null when no line is past LongLineLimit, which is nearly every file:
+    // those pay one scan for line breaks and nothing else. The scan is
+    // IndexOfAny over a span, which .NET vectorises, so it reads the text at
+    // memory speed rather than a character at a time.
+    private static string? SplitLongLines(string text)
+    {
+        ReadOnlySpan<char> all = text;
+        if (!HasLongLine(all))
+        {
+            return null;
+        }
+
+        var sb = new StringBuilder(text.Length + text.Length / SplitLength + 16);
+        int start = 0;
+        while (true)
+        {
+            int rel = all[start..].IndexOfAny('\r', '\n');
+            int end = rel < 0 ? all.Length : start + rel;
+            AppendSplit(sb, all[start..end]);
+            if (rel < 0)
+            {
+                break;
+            }
+            // The break itself, as it was: a CR LF pair arrives as two steps,
+            // the second an empty line between them, and is copied unchanged.
+            sb.Append(all[end]);
+            start = end + 1;
+        }
+        return sb.ToString();
+    }
+
+    private static bool HasLongLine(ReadOnlySpan<char> all)
+    {
+        int start = 0;
+        while (true)
+        {
+            int rel = all[start..].IndexOfAny('\r', '\n');
+            int end = rel < 0 ? all.Length : start + rel;
+            if (end - start > LongLineLimit)
+            {
+                return true;
+            }
+            if (rel < 0)
+            {
+                return false;
+            }
+            start = end + 1;
+        }
+    }
+
+    // A line within the limit goes through whole. A longer one is cut into
+    // pieces of at most SplitLength: after a space or tab in the last 200
+    // characters when there is one, so words are not cut where it can be
+    // helped, and never between the two halves of a surrogate pair.
+    private static void AppendSplit(StringBuilder sb, ReadOnlySpan<char> line)
+    {
+        if (line.Length <= LongLineLimit)
+        {
+            sb.Append(line);
+            return;
+        }
+
+        const int Lookback = 200;
+        while (line.Length > SplitLength)
+        {
+            int cut = SplitLength;
+            int space = line[(SplitLength - Lookback)..SplitLength].LastIndexOfAny(' ', '\t');
+            if (space >= 0)
+            {
+                cut = SplitLength - Lookback + space + 1;
+            }
+            else if (char.IsHighSurrogate(line[cut - 1]))
+            {
+                cut--;
+            }
+            sb.Append(line[..cut]).Append('\n');
+            line = line[cut..];
+        }
+        sb.Append(line);
     }
 
     // BOM first, then "is this valid UTF-8", then the PC's own ANSI code page.

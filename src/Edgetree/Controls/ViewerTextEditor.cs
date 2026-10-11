@@ -44,11 +44,15 @@ public sealed class ViewerTextEditor : TextEditor
 {
     // What the worker hands back: the document, built off the UI thread, and
     // what was learned about the file on the way.
+    // LongLinesSplit: the text on screen has breaks the file does not (see
+    // TextFileReader.LongLineLimit), so like a head-only one it must never be
+    // saved back - which phase 2's 편집 has to honour.
     public sealed record LoadedText(
         TextDocument Document,
         bool Truncated,
         long FileLength,
-        string EncodingName);
+        string EncodingName,
+        bool LongLinesSplit = false);
 
     private readonly SearchPanel _search;
     private bool _markdown;
@@ -181,7 +185,8 @@ public sealed class ViewerTextEditor : TextEditor
             document,
             file.Truncated,
             file.FileLength,
-            file.HasBom ? file.Encoding.WebName + " BOM" : file.Encoding.WebName);
+            file.HasBom ? file.Encoding.WebName + " BOM" : file.Encoding.WebName,
+            file.LongLinesSplit);
     }
 
     public void Show(LoadedText loaded, bool markdown, bool light)

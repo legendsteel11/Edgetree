@@ -36476,7 +36476,7 @@ public partial class MainWindow : Window
                     / System.Diagnostics.Stopwatch.Frequency;
         ViewerLoadLog(
             $"text {ms,7:F0} ms  {FormatFileSize(loaded.FileLength),9}  {loaded.EncodingName}" +
-            $"{(loaded.Truncated ? "  HEAD ONLY" : "")}  {path}");
+            $"{(loaded.Truncated ? "  HEAD ONLY" : "")}{(loaded.LongLinesSplit ? "  SPLIT" : "")}  {path}");
     }
 
     private void ShowViewerText(string path, ViewerTextEditor.LoadedText loaded)
