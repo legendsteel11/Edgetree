@@ -1284,11 +1284,114 @@ public sealed partial class ViewerTextEditor : TextEditor
     // number, on its first row, as the stock margin does. Since 2026-10-13 a
     // number can also take a changed line's colour (the owner's
     // LineNumberBrush, ViewerTextEditor.ChangeMarks.cs).
+    //
+    // A CLICK ON A NUMBER SELECTS THE WHOLE LINE (2026-10-13, on report): every
+    // row a wrapped line takes, and its line break, as VS Code's does. The
+    // stock margin selects the one ROW under the pointer, so a click on the
+    // number of a line wrapped to the panel's width took its first row and
+    // left the rest. Its press, drag and release are replaced here rather
+    // than corrected after them: the row it picks is private to it, and so is
+    // the anchor a drag extends from.
     private sealed class SmallLineNumberMargin : LineNumberMargin
     {
         private readonly ViewerTextEditor _owner;
 
+        // The line a press began on, as offsets: a drag selects from it to
+        // the line under the pointer, whole lines at both ends. Null when no
+        // drag is under way.
+        private (int Start, int End)? _dragAnchor;
+
         public SmallLineNumberMargin(ViewerTextEditor owner) => _owner = owner;
+
+        // The whole line drawn at the pointer's height, break included - the
+        // pointer held to the view, so a drag past an edge takes the line at
+        // that edge, as the stock margin does.
+        private (int Start, int End)? LineAt(System.Windows.Input.MouseEventArgs e)
+        {
+            var textView = TextView;
+            if (textView is null || !textView.VisualLinesValid)
+            {
+                return null;
+            }
+
+            double y = Math.Clamp(e.GetPosition(textView).Y, 0, textView.ActualHeight) + textView.VerticalOffset;
+            if (textView.GetVisualLineFromVisualTop(y) is not { } visual)
+            {
+                return null;
+            }
+
+            var last = visual.LastDocumentLine;
+            return (visual.FirstDocumentLine.Offset, last.EndOffset + last.DelimiterLength);
+        }
+
+        // From the anchor to a line, the caret at the moving end.
+        private void SelectFrom((int Start, int End) anchor, (int Start, int End) line)
+        {
+            var area = _owner.TextArea;
+            if (line.Start < anchor.Start)
+            {
+                area.Caret.Offset = line.Start;
+                area.Selection = Selection.Create(area, line.Start, anchor.End);
+            }
+            else
+            {
+                area.Caret.Offset = line.End;
+                area.Selection = Selection.Create(area, anchor.Start, line.End);
+            }
+            area.Caret.BringCaretToView();
+        }
+
+        // Not base: that is the stock margin's own row selection.
+        protected override void OnMouseLeftButtonDown(System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (e.Handled)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            var area = _owner.TextArea;
+            area.Focus();
+            if (LineAt(e) is not { } line || !CaptureMouse())
+            {
+                return;
+            }
+
+            // Shift extends what is selected, as the stock margin has it.
+            var anchor = line;
+            if (System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Shift) &&
+                !area.Selection.IsEmpty)
+            {
+                var selected = area.Selection.SurroundingSegment;
+                anchor = (selected.Offset, selected.EndOffset);
+            }
+            _dragAnchor = anchor;
+            SelectFrom(anchor, line);
+        }
+
+        protected override void OnMouseMove(System.Windows.Input.MouseEventArgs e)
+        {
+            if (_dragAnchor is { } anchor && LineAt(e) is { } line)
+            {
+                e.Handled = true;
+                SelectFrom(anchor, line);
+            }
+        }
+
+        protected override void OnMouseLeftButtonUp(System.Windows.Input.MouseButtonEventArgs e)
+        {
+            if (_dragAnchor is not null)
+            {
+                e.Handled = true;
+                ReleaseMouseCapture();
+            }
+        }
+
+        protected override void OnLostMouseCapture(System.Windows.Input.MouseEventArgs e)
+        {
+            _dragAnchor = null;
+            base.OnLostMouseCapture(e);
+        }
 
         protected override void OnRender(DrawingContext drawingContext)
         {
