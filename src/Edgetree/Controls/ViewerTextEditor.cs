@@ -143,6 +143,35 @@ public sealed partial class ViewerTextEditor : TextEditor
         internal ITextSourceVersion? Version { get; init; }
     }
 
+    // LINES SET AS FAR APART AS VS CODE SETS THEM (2026-10-13, on request:
+    // beside VS Code the text read as packed). AvalonEdit has no line-spacing
+    // option - a line is as tall as its font says - so the font says more:
+    // a composite FontFamily that is Consolas for what Consolas has and the
+    // system's own fallback (Global User Interface, which is what supplied
+    // Hangul and the other scripts before) for the rest, with LineSpacing
+    // 1.35, VS Code's ratio on Windows (14px text, 18.9px lines). The extra
+    // is split evenly above and below the text through Baseline. A named
+    // family cannot be changed (NotSupportedException), hence the composite.
+    // Measured in a probe editor: 16.39 -> 18.90 at 14px, wrapped rows
+    // spaced the same, Hangul drawn through the fallback map.
+    // Built once; WPF fonts are not per-editor state.
+    private static readonly FontFamily TextFontFamily = CreateTextFontFamily();
+
+    private static FontFamily CreateTextFontFamily()
+    {
+        const double LineSpacing = 1.35;
+        var consolas = new FontFamily("Consolas");
+        var family = new FontFamily
+        {
+            LineSpacing = LineSpacing,
+            Baseline = consolas.Baseline + (LineSpacing - consolas.LineSpacing) / 2,
+        };
+        family.FamilyNames.Add(System.Windows.Markup.XmlLanguage.GetLanguage("en-us"), "Edgetree Text");
+        family.FamilyMaps.Add(new FontFamilyMap { Target = "Consolas", Unicode = "0000-10FFFF" });
+        family.FamilyMaps.Add(new FontFamilyMap { Target = "Global User Interface", Unicode = "0000-10FFFF" });
+        return family;
+    }
+
     private readonly SearchPanel _search;
     private bool _markdown;
     private bool _light;
@@ -182,9 +211,9 @@ public sealed partial class ViewerTextEditor : TextEditor
         // No Background here: it follows IsReadOnly (OnPropertyChanged), and
         // the IsReadOnly above has already set it for reading.
         Padding = new Thickness(8, 6, 2, 6);
-        // Monospace, as Notepad and VS Code both open a text file. WPF's own
-        // font fallback supplies Hangul and the other scripts Consolas lacks.
-        FontFamily = new FontFamily("Consolas");
+        // Monospace, as Notepad and VS Code both open a text file, with VS
+        // Code's line spacing - see TextFontFamily.
+        FontFamily = TextFontFamily;
         AllowDrop = false;
 
         Options.HighlightCurrentLine = false;
