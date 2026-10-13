@@ -14052,6 +14052,14 @@ public partial class MainWindow : Window
             0, carouselTop, 0, Math.Max(0, carouselTotal - carouselTop));
         Resources["ViewerCaptionPanelMargin"] = new Thickness(
             10, 0, 10, Math.Round(10.0 * compact));
+        // THE NAME'S OWN ROOM WHEN NO CAROUSEL ROW STANDS OVER IT (2026-10-13,
+        // on report). The caption's top is 0 because the carousel row brings
+        // its own 4 above it; with that row hidden - a text file, a folder -
+        // the name sat flush against whatever was above, which the editing
+        // frame's band edge made plain. A little more than the carousel's 6,
+        // because here it is the band's whole top margin. Applied by a trigger
+        // on ViewerFileName.
+        Resources["ViewerCaptionNameAloneMargin"] = new Thickness(0, Math.Round(8.0 * compact), 0, 0);
 
         var appResources = Application.Current.Resources;
         appResources["MenuFontSize"] = ExplorerTree.FontSize;

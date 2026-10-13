@@ -10328,11 +10328,27 @@
                              on one fact - whether the transport is holding the
                              file this line names. See ApplyViewerCaptionEmphasis;
                              the values here are the resting pair. -->
+                        <!-- Room above the name only while the carousel row is
+                             hidden - see ViewerCaptionNameAloneMargin. Bound to
+                             the row itself, so every path that hides or shows
+                             it carries the name along without being told. -->
                         <TextBlock x:Name="ViewerFileName"
                                 Foreground="{DynamicResource FileNameForeground}"
                                 FontSize="{DynamicResource MenuFontSize}"
                                 TextTrimming="CharacterEllipsis"
-                                TextAlignment="Center"/>
+                                TextAlignment="Center">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Visibility, ElementName=ViewerCarouselBar}"
+                                                Value="Collapsed">
+                                            <Setter Property="Margin"
+                                                    Value="{DynamicResource ViewerCaptionNameAloneMargin}"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
                         <!-- 9 → 4 and the zoom strip's 7 → 4 below: with the
                              carousel row on top, the caption's three lines
                              read as drifting apart at the old gaps - the
