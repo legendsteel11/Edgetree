@@ -305,6 +305,18 @@ public sealed partial class ViewerTextEditor : TextEditor
 
         AttachDragOut();
 
+        // REDO ON Ctrl+Shift+Z AS WELL AS Ctrl+Y (2026-10-13, on request).
+        // AvalonEdit takes redo from WPF's ApplicationCommands.Redo, whose only
+        // gesture is Ctrl+Y (read off a live editor); Ctrl+Shift+Z is the
+        // other key VS Code, the browsers and most editors give it. Bound to
+        // the same command, so it does exactly what Ctrl+Y does. Not
+        // Ctrl+Alt+Z: that is AltGr+Z on many keyboards (ż on a Polish one),
+        // and it would fire while typing.
+        TextArea.InputBindings.Add(new System.Windows.Input.KeyBinding(
+            System.Windows.Input.ApplicationCommands.Redo,
+            System.Windows.Input.Key.Z,
+            System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift));
+
         // The changed-line marks follow the text (ViewerTextEditor.ChangeMarks.cs).
         TextChanged += (_, _) => ScheduleChangeMarks();
 
