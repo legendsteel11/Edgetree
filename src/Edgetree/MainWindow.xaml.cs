@@ -1875,6 +1875,14 @@ public partial class MainWindow : Window
 
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
+        // A key pressed while a slow-click rename is waiting calls it off
+        // (2026-10-13). The wait exists to tell a second click from a double
+        // click; a hand that has gone to the keyboard inside it is doing
+        // something else - a name box opening after a Ctrl+S is how this
+        // showed up (see TreeViewItem_PreviewMouseLeftButtonDown).
+        // F2 opens its own box, so nothing it needs is lost.
+        CancelPendingRename();
+
         // Esc puts the text view's find row away, from the row or from the
         // text under it. First, because AvalonEdit's own Esc in the text would
         // close only the search behind the row and leave the row standing.
@@ -2551,10 +2559,17 @@ public partial class MainWindow : Window
                 CloseViewer();
                 e.Handled = true;
                 break;
-            // Ctrl+S saves the text being edited (2026-10-11), with the keyboard
-            // in the text or its find row. The app had no Ctrl+S of its own.
+            // Ctrl+S saves the text being edited (2026-10-11). The app had no
+            // Ctrl+S of its own. At first only with the keyboard in the text or
+            // its find row; since 2026-10-13 (on report) from the rest of the
+            // window too, as VS Code saves the open editor from its explorer -
+            // an edited file opened by selection leaves the keyboard in the
+            // tree (FocusShownViewerText), and Ctrl+S there did nothing while
+            // the panel showed the text editing. Never from another text field:
+            // a rename box or the search box is not asking to save a document.
             case Key.S when Keyboard.Modifiers == ModifierKeys.Control
-                            && ViewerTextHost.IsKeyboardFocusWithin:
+                            && (ViewerTextHost.IsKeyboardFocusWithin
+                                || (!KeyboardInTextField && _viewerTextEditor is not null && IsViewerTextEditing())):
                 SaveViewerText();
                 e.Handled = true;
                 break;
@@ -16460,7 +16475,20 @@ public partial class MainWindow : Window
         // the foreground from doubling as a rename gesture - it lands on
         // whatever is under the cursor, often the very row that was left
         // selected (see _lastActivatedTicks).
-        if (!clickedOnExpander && e.ClickCount == 1 && selectedBeforePress &&
+        //
+        // THE SAME FOR THE KEYBOARD (2026-10-13, on report). A click that
+        // brings the keyboard back to the tree from elsewhere in the window is
+        // that click again, one level down: coming back from the text view,
+        // the row is still selected - it is the file the panel shows - so the
+        // first click on it read as the second and opened the name box ~0.6s
+        // later. click.log had two of them (14:32:13, 14:32:45), each a press
+        // on the shown file's row right after the text had the keyboard; it
+        // was seen as Ctrl+S renaming the file, the Ctrl+S having landed
+        // inside that wait (a key now also calls the wait off - see
+        // MainWindow_PreviewKeyDown). The tree still reads its pre-click focus
+        // here: no branch above that moves the focus falls through to here.
+        bool treeHadKeyboard = ExplorerTree.IsKeyboardFocusWithin;
+        if (!clickedOnExpander && e.ClickCount == 1 && selectedBeforePress && treeHadKeyboard &&
             Environment.TickCount64 - _lastActivatedTicks > ActivationClickGraceMs &&
             treeViewItem.DataContext is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false, IsEditing: false } file)
         {
@@ -37466,6 +37494,13 @@ public partial class MainWindow : Window
     // it is gone, or it is in a code page that cannot hold a character now in
     // the text. The last offers UTF-8, which can hold anything; refusing any
     // of them leaves the file and the edits as they were.
+    // For the window's Ctrl+S with the keyboard outside the text. NoInlining
+    // and asked only once the editor exists, so the key handler never makes
+    // the JIT load AvalonEdit (see the find row's section).
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private bool IsViewerTextEditing()
+        => _viewerTextPath is not null && _viewerTextEditor is ViewerTextEditor { IsEditing: true };
+
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private async void SaveViewerText()
     {
