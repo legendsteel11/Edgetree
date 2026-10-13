@@ -66,6 +66,10 @@ public sealed partial class ViewerTextEditor : TextEditor
         public string EncodingName => HasBom ? Encoding.WebName + " BOM" : Encoding.WebName;
 
         public bool CanEdit => !Truncated && !LongLinesSplit;
+
+        // The text's lines as hashed for the changed-line marks, taken on the
+        // worker with the read (ViewerTextEditor.ChangeMarks.cs).
+        public long[]? LineHashes { get; init; }
     }
 
     // ONE FILE'S TEXT and everything a save needs to write it back: the
@@ -104,6 +108,14 @@ public sealed partial class ViewerTextEditor : TextEditor
         public ITextSourceVersion? PersistedVersion { get; set; }
 
         public bool IsModified => !Document.UndoStack.IsOriginalFile;
+
+        // The saved text's lines as hashes, and the lines found to differ
+        // from it - see ViewerTextEditor.ChangeMarks.cs. Null while a new
+        // baseline is still being hashed; the generation tells a late one
+        // from the current.
+        public long[]? Baseline { get; set; }
+        public int BaselineGeneration { get; set; }
+        public Dictionary<DocumentLine, LineChange> LineChanges { get; } = new();
     }
 
     // What the disk copy needs of an edited file (UnsavedTextStore).
@@ -292,6 +304,9 @@ public sealed partial class ViewerTextEditor : TextEditor
         };
 
         AttachDragOut();
+
+        // The changed-line marks follow the text (ViewerTextEditor.ChangeMarks.cs).
+        TextChanged += (_, _) => ScheduleChangeMarks();
 
         TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
     }
@@ -536,7 +551,11 @@ public sealed partial class ViewerTextEditor : TextEditor
             file.Encoding,
             file.HasBom,
             file.LastWriteUtc,
-            file.LongLinesSplit);
+            file.LongLinesSplit)
+        {
+            // Only a text that can be edited can ever differ from its file.
+            LineHashes = file.Truncated || file.LongLinesSplit ? null : HashLines(file.Text),
+        };
     }
 
     // A file just read, shown read-only from its top.
@@ -552,6 +571,7 @@ public sealed partial class ViewerTextEditor : TextEditor
             HasBom = loaded.HasBom,
             StampLength = loaded.FileLength,
             StampLastWriteUtc = loaded.LastWriteUtc,
+            Baseline = loaded.LineHashes,
         };
         Attach(session, light, editing: false);
         TextArea.Caret.Offset = 0;
@@ -621,6 +641,10 @@ public sealed partial class ViewerTextEditor : TextEditor
         session.Document.UndoStack.PropertyChanged += UndoStack_PropertyChanged;
         IsReadOnly = !editing;
         ApplyHighlighting();
+        // A kept session brings its marks with it; they are checked again on
+        // the next pause anyway.
+        _lineNumbers?.InvalidateVisual();
+        ScheduleChangeMarks();
         EditStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -657,6 +681,8 @@ public sealed partial class ViewerTextEditor : TextEditor
         if (e.PropertyName == nameof(UndoStack.IsOriginalFile) && _session is { } session)
         {
             NoteModifiedChanged(session);
+            // Back at the saved text, the marks go at once (ScheduleChangeMarks).
+            ScheduleChangeMarks();
         }
 
         if (e.PropertyName is nameof(UndoStack.IsOriginalFile)
@@ -761,6 +787,8 @@ public sealed partial class ViewerTextEditor : TextEditor
             StampLastWriteUtc = stampLastWriteUtc,
             PersistedVersion = document.Version,
         };
+        // The text from the disk copy against the file it was edited from.
+        SetBaselineFromDisk(session);
         Attach(session, light, editing: true);
         TextArea.Caret.Offset = 0;
         ScrollToHome();
@@ -894,6 +922,9 @@ public sealed partial class ViewerTextEditor : TextEditor
         session.HasBom = request.HasBom;
         session.StampLength = result.FileLength;
         session.StampLastWriteUtc = result.LastWriteUtc;
+        // What the file now holds is what was written - also when more was
+        // typed while the write was out, which then shows as changed.
+        SetBaseline(session, request.Text);
 
         // Marked as saved only if the text is still the text that was written.
         // Anything typed while the write was out is not on disk, and the file
@@ -1014,6 +1045,9 @@ public sealed partial class ViewerTextEditor : TextEditor
         {
             session.Document.Replace(0, session.Document.TextLength, text);
         }
+        // Before the marker: its change clears the marks against this.
+        session.BaselineGeneration++;
+        session.Baseline = loaded.LineHashes;
         session.Document.UndoStack.MarkAsOriginalFile();
         session.Encoding = loaded.Encoding;
         session.HasBom = loaded.HasBom;
@@ -1057,6 +1091,8 @@ public sealed partial class ViewerTextEditor : TextEditor
 
         _light = light;
         ApplyHighlighting();
+        // The changed-line colours are per theme.
+        _lineNumbers?.InvalidateVisual();
     }
 
     protected override void OnPropertyChanged(DependencyPropertyChangedEventArgs e)
@@ -1125,7 +1161,7 @@ public sealed partial class ViewerTextEditor : TextEditor
 
         if (show)
         {
-            _lineNumbers = new SmallLineNumberMargin();
+            _lineNumbers = new SmallLineNumberMargin(this);
             // Derived against the panel's own ground in MainWindow's
             // ApplyEdgeInkOverrides, a step under the text's ink.
             _lineNumbers.SetResourceReference(Control.ForegroundProperty, "ViewerTextLineNumberForeground");
@@ -1133,6 +1169,8 @@ public sealed partial class ViewerTextEditor : TextEditor
             SizeLineNumbers();
             TextArea.LeftMargins.Insert(0, _lineNumbers);
             TextArea.LeftMargins.Insert(1, _lineNumberGap);
+            // Marks are not worked out while there are no numbers to carry them.
+            ScheduleChangeMarks();
         }
         else
         {
@@ -1161,9 +1199,15 @@ public sealed partial class ViewerTextEditor : TextEditor
     // top with the text's top, which is right only while both are the same
     // size - smaller numbers would ride high, and beside a Markdown heading
     // (drawn larger) they would sit at its top edge. A wrapped line keeps one
-    // number, on its first row, as the stock margin does.
+    // number, on its first row, as the stock margin does. Since 2026-10-13 a
+    // number can also take a changed line's colour (the owner's
+    // LineNumberBrush, ViewerTextEditor.ChangeMarks.cs).
     private sealed class SmallLineNumberMargin : LineNumberMargin
     {
+        private readonly ViewerTextEditor _owner;
+
+        public SmallLineNumberMargin(ViewerTextEditor owner) => _owner = owner;
+
         protected override void OnRender(DrawingContext drawingContext)
         {
             var textView = TextView;
@@ -1185,7 +1229,7 @@ public sealed partial class ViewerTextEditor : TextEditor
                     line.FirstDocumentLine.LineNumber.ToString(CultureInfo.CurrentCulture),
                     CultureInfo.CurrentCulture,
                     System.Windows.FlowDirection.LeftToRight,
-                    typeface, emSize, foreground,
+                    typeface, emSize, _owner.LineNumberBrush(line.FirstDocumentLine, foreground),
                     null, mode, pixelsPerDip);
                 double baseline = line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.Baseline);
                 drawingContext.DrawText(
