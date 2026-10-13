@@ -37123,7 +37123,7 @@ public partial class MainWindow : Window
     // Its own, apart from the tree's (2026-10-11, on request): Ctrl+wheel over
     // the text, or Ctrl +/- / Ctrl+0 with the keyboard in it, one point a step
     // and saved on each, the way the subtitle size is. The tree's Ctrl +/-
-    // never reaches it. Markdown's headings follow, being a ratio of it.
+    // never reaches it.
     private const double MinViewerTextFontSize = 8;
     private const double MaxViewerTextFontSize = 36;
 

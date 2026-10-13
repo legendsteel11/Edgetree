@@ -32,10 +32,13 @@ namespace SidebarExplorer.App;
 //
 // ALWAYS BLACK ON WHITE. A dark theme's inks are for a dark ground, so
 // Markdown is printed with the LIGHT theme's definition whatever is on
-// screen, at the print size - headings keep their sizes. AvalonEdit's own
-// DocumentPrinter carries colour and weight but not a highlighting colour's
-// font size (checked 2026-10-13: a "# Title" run came out at body size), so
-// the runs are built here from the highlighter's sections.
+// screen. The runs are built here from the highlighter's sections rather
+// than by AvalonEdit's own DocumentPrinter, which carries colour and weight
+// but dropped a highlighting colour's font size (checked 2026-10-13, while
+// headings still had sizes: a "# Title" run came out at body size). Headings
+// are body size now, on screen and so on paper; building the runs here still
+// keeps every property a section carries - strikethrough included - in
+// ApplyPrintColor, one place.
 //
 // The page is Notepad's: 0.75" sides, 1" top and bottom, the file name in
 // the top margin and "page / pages" in the bottom one. Lines wrap at the
@@ -113,7 +116,7 @@ public sealed partial class ViewerTextEditor
     {
         var document = new TextDocument(text);
         highlighter = markdown
-            ? new DocumentHighlighter(document, MarkdownDefinition(light: true, PrintFontSize))
+            ? new DocumentHighlighter(document, MarkdownDefinition(light: true))
             : null;
 
         var flow = new FlowDocument(BuildPrintParagraph(document, highlighter))

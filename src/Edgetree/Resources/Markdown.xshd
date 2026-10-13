@@ -5,11 +5,11 @@
   Started from AvalonEdit's own MarkDownWithFontSize-Mode.xshd (MIT, the same
   licence as the editor) and changed where the original did not fit a sidebar:
 
-  - NO COLOURS OR SIZES HERE. Both are written in by ViewerTextEditor at load
-    time - colours per theme (the original's Maroon headings and DarkBlue
-    quotes were drawn for a white page only), sizes as a ratio of the editor's
-    own font, so Ctrl+/- scales a heading with the text around it. The
-    original's 30..15 were absolute and did not move.
+  - NO COLOURS OR SIZES HERE. Colours are written in by ViewerTextEditor at
+    load time, per theme (the original's Maroon headings and DarkBlue quotes
+    were drawn for a white page only). Headings are the text's own size, bold
+    (2026-10-13, as VS Code's editor draws them); they were a ratio of the
+    editor's font until then, and the original's 30..15 were absolute.
   - Fenced code blocks (```) are recognised. The original knew only inline
     `code` and indented blocks, so a heading inside a fence was drawn as one.
   - Indented blocks are NOT code here. The original handed every line starting

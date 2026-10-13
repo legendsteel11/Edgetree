@@ -1145,12 +1145,9 @@ public sealed partial class ViewerTextEditor : TextEditor
             return;
         }
 
-        // Heading sizes are a ratio of this, written into the definition when
-        // it is built - so a font step rebuilds it.
-        if (_markdown)
-        {
-            ApplyHighlighting();
-        }
+        // The Markdown definition is not rebuilt here any more: it held heading
+        // sizes worked out from this until headings went to the text's own
+        // size (2026-10-13).
         SizeLineNumbers();
     }
 
@@ -1209,8 +1206,8 @@ public sealed partial class ViewerTextEditor : TextEditor
     // AvalonEdit's margin with one change: each number is placed on the
     // BASELINE of its line's first row. The stock margin aligns the numbers'
     // top with the text's top, which is right only while both are the same
-    // size - smaller numbers would ride high, and beside a Markdown heading
-    // (drawn larger) they would sit at its top edge. A wrapped line keeps one
+    // size - smaller numbers would ride high (and beside the larger Markdown
+    // headings drawn until 2026-10-13, at their top edge). A wrapped line keeps one
     // number, on its first row, as the stock margin does. Since 2026-10-13 a
     // number can also take a changed line's colour (the owner's
     // LineNumberBrush, ViewerTextEditor.ChangeMarks.cs).
@@ -1255,24 +1252,29 @@ public sealed partial class ViewerTextEditor : TextEditor
     // through a binding (see the constructor), and a value written here would
     // replace that binding.
     private void ApplyHighlighting()
-        => SyntaxHighlighting = _markdown ? MarkdownDefinition(_light, FontSize) : null;
+        => SyntaxHighlighting = _markdown ? MarkdownDefinition(_light) : null;
 
-    // VS Code's preview ratios for h1..h6 (2em, 1.5em, 1.25em, 1em, .875em,
-    // .85em). The source is what is on screen here, not a rendering of it, but
-    // the sizes are what make a long document's outline readable at a glance -
-    // which is the reason a sized mode was chosen over the plain one.
-    private static readonly double[] HeadingScale = { 2.0, 1.5, 1.25, 1.0, 0.875, 0.85 };
-
-    // Token colours from VS Code's Dark+ / Light+ for the same Markdown scopes
-    // (heading, inline raw, quote, list punctuation), with links in each
-    // theme's link colour. A judgement to be confirmed on screen.
-    private static IHighlightingDefinition MarkdownDefinition(bool light, double baseSize)
+    // Token colours from VS Code's default themes, Dark 2026 / Light 2026,
+    // for the same Markdown scopes: markup.heading, markup.inline.raw,
+    // markup.quote, punctuation.definition.list.begin.markdown and
+    // string.other.link - read out of the theme files of the installed VS
+    // Code (2026-10-13, on request, the text set beside VS Code's). They were
+    // Dark+ / Light+ before, which VS Code no longer opens with: code orange
+    // and list marks blue there, where its default now has them the other
+    // way round.
+    //
+    // HEADINGS AT THE TEXT'S OWN SIZE, bold and coloured, as VS Code's editor
+    // draws them (the same day, on request, beside it). They were drawn at
+    // VS Code's PREVIEW ratios (2em down to .85em) since 2026-10-11, to make a
+    // long outline readable at a glance; next to the editor the sizes read as
+    // this view's own invention.
+    private static IHighlightingDefinition MarkdownDefinition(bool light)
     {
-        var heading = light ? Color.FromRgb(0x80, 0x00, 0x00) : Color.FromRgb(0x56, 0x9C, 0xD6);
-        var code = light ? Color.FromRgb(0xA3, 0x15, 0x15) : Color.FromRgb(0xCE, 0x91, 0x78);
-        var quote = light ? Color.FromRgb(0x04, 0x51, 0xA5) : Color.FromRgb(0x6A, 0x99, 0x55);
-        var list = light ? Color.FromRgb(0x04, 0x51, 0xA5) : Color.FromRgb(0x67, 0x96, 0xE6);
-        var link = light ? Color.FromRgb(0x00, 0x6A, 0xB1) : Color.FromRgb(0x37, 0x94, 0xFF);
+        var heading = light ? Color.FromRgb(0x05, 0x50, 0xAE) : Color.FromRgb(0x79, 0xC0, 0xFF);
+        var code = light ? Color.FromRgb(0x05, 0x50, 0xAE) : Color.FromRgb(0x79, 0xC0, 0xFF);
+        var quote = light ? Color.FromRgb(0x11, 0x63, 0x29) : Color.FromRgb(0x7E, 0xE7, 0x87);
+        var list = light ? Color.FromRgb(0x95, 0x38, 0x00) : Color.FromRgb(0xFF, 0xA6, 0x57);
+        var link = light ? Color.FromRgb(0x0A, 0x30, 0x69) : Color.FromRgb(0xA5, 0xD6, 0xFF);
 
         XshdSyntaxDefinition xshd;
         var resource = Application.GetResourceStream(
@@ -1288,9 +1290,7 @@ public sealed partial class ViewerTextEditor : TextEditor
             switch (color.Name)
             {
                 case { } name when name.StartsWith("Heading", StringComparison.Ordinal):
-                    int level = name[^1] - '1';
                     color.Foreground = new SimpleHighlightingBrush(heading);
-                    color.FontSize = (int)Math.Round(baseSize * HeadingScale[level]);
                     break;
                 case "Code":
                     color.Foreground = new SimpleHighlightingBrush(code);
