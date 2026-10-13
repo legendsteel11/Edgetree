@@ -36787,6 +36787,8 @@ public partial class MainWindow : Window
             ScheduleUnsavedTextPersist();
         };
         editor.TextChanged += (_, _) => ScheduleUnsavedTextPersist();
+        // A resource rather than XAML on the editor, which XAML never names.
+        editor.ContextMenu = (ContextMenu)FindResource("ViewerTextContextMenu");
         _viewerTextEditor = editor;
         return editor;
     }
@@ -37051,6 +37053,120 @@ public partial class MainWindow : Window
     private void ViewerTextPaste_Click(object sender, RoutedEventArgs e)
         => (_viewerTextEditor as ViewerTextEditor)?.Paste();
 
+    // ----- The text view's right-click menu (2026-10-13) ------------------------
+    //
+    // Built in the XAML (ViewerTextContextMenu) and handed to the editor when
+    // it is made. Every opening decides which rows are there, by Tag: the
+    // edit-only rows are absent while reading, 서식 only for a Markdown file
+    // being edited. Its commands are the edit bar's where the bar has them.
+    private void ViewerTextContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        if (sender is ContextMenu menu && _viewerTextEditor is ViewerTextEditor editor)
+        {
+            bool editing = editor.IsEditing;
+            foreach (string tag in new[] { "undo", "redo", "undoSep", "cut", "paste", "saveSep", "save", "saveAs" })
+            {
+                if (FindTaggedMenuElement<FrameworkElement>(menu, tag) is { } row)
+                {
+                    row.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            foreach (string tag in new[] { "formatSep", "format" })
+            {
+                if (FindTaggedMenuElement<FrameworkElement>(menu, tag) is { } row)
+                {
+                    row.Visibility = editor.CanFormat ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+
+            SetMenuItemEnabled(menu, "undo", editor.CanUndoEdit);
+            SetMenuItemEnabled(menu, "redo", editor.CanRedoEdit);
+            SetMenuItemEnabled(menu, "paste", ClipboardHoldsText());
+            SetMenuItemEnabled(menu, "save", editor.HasUnsavedEdits && !_viewerTextSaving);
+            SetMenuItemEnabled(menu, "saveAs", !_viewerTextSaving);
+
+            // The line rows say what the caret's line already is, so a row
+            // that will take a format away is the one with the tick on it.
+            if (editor.CanFormat && FindTaggedMenuElement<MenuItem>(menu, "format") is { } format)
+            {
+                int level = editor.CaretHeadingLevel;
+                for (int n = 0; n <= 3; n++)
+                {
+                    SetMenuItemChecked(format, $"h{n}", level == n);
+                }
+                SetMenuItemChecked(format, "bullet", editor.CaretLineHas(ViewerTextEditor.LineFormat.Bullet));
+                SetMenuItemChecked(format, "numbered", editor.CaretLineHas(ViewerTextEditor.LineFormat.Numbered));
+                SetMenuItemChecked(format, "quote", editor.CaretLineHas(ViewerTextEditor.LineFormat.Quote));
+            }
+        }
+
+        AnyMenu_Opened(sender, e);
+    }
+
+    // Another program can hold the clipboard open for a moment, and asking
+    // then throws. 붙여넣기 stays lit in that case: AvalonEdit's own paste
+    // simply does nothing when there is no text.
+    private static bool ClipboardHoldsText()
+    {
+        try
+        {
+            return System.Windows.Clipboard.ContainsText();
+        }
+        catch (System.Runtime.InteropServices.COMException)
+        {
+            return true;
+        }
+    }
+
+    private void ViewerTextSelectAll_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.SelectAll();
+
+    private void ViewerTextCut_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.Cut();
+
+    private void ViewerTextFind_Click(object sender, RoutedEventArgs e) => OpenViewerTextFind();
+
+    private void ViewerTextFormatBold_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ToggleWrap("**");
+
+    private void ViewerTextFormatItalic_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ToggleWrap("*");
+
+    private void ViewerTextFormatStrikethrough_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ToggleWrap("~~");
+
+    private void ViewerTextFormatInlineCode_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ToggleWrap("`");
+
+    // h0 is 본문; h1-h3 the headings.
+    private void ViewerTextFormatHeading_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: string tag } && tag.Length == 2 && char.IsDigit(tag[1]))
+        {
+            (_viewerTextEditor as ViewerTextEditor)?.SetHeading(tag[1] - '0');
+        }
+    }
+
+    private void ViewerTextFormatLine_Click(object sender, RoutedEventArgs e)
+    {
+        ViewerTextEditor.LineFormat? format = (sender as MenuItem)?.Tag switch
+        {
+            "bullet" => ViewerTextEditor.LineFormat.Bullet,
+            "numbered" => ViewerTextEditor.LineFormat.Numbered,
+            "quote" => ViewerTextEditor.LineFormat.Quote,
+            _ => null,
+        };
+        if (format is { } chosen)
+        {
+            (_viewerTextEditor as ViewerTextEditor)?.ToggleLineFormat(chosen);
+        }
+    }
+
+    private void ViewerTextFormatLink_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.InsertLink();
+
+    private void ViewerTextSaveAs_Click(object sender, RoutedEventArgs e) => SaveViewerTextAs();
+
     // 저장, and Ctrl+S in the text. The write goes to a worker - a share can
     // take seconds - and the text stays editable meanwhile; CompleteSave only
     // marks it saved if nothing was typed while the write was out.
@@ -37088,19 +37204,134 @@ public partial class MainWindow : Window
         }
     }
 
+    // 다른 이름으로 저장 (2026-10-13). THE TEXT BECOMES THE NEW FILE, as it does
+    // in Notepad and VS Code: the panel stays on it, still editing, undo
+    // history and all, under the new name, and the file it came from is left
+    // as it stands on disk. The tree's selection follows to the new row,
+    // because the panel follows that selection and the two must keep naming
+    // the same file - without the keyboard, which stays in the text. Only a
+    // folder the tree has not read yet is reached by a full jump
+    // (NavigateToPath), and that one takes the keyboard to the row.
+    //
+    // The file's own encoding, as 저장 keeps it; the code-page question still
+    // comes up for a character that encoding cannot hold. The type list is
+    // the two kinds the panel opens - a file saved as anything else would not
+    // come back to the panel, and nor would edits kept for it.
+    //
+    // A file the dialog was told to write over loses any edits kept for it,
+    // here or on disk: they were edits to a text that is no longer there.
+    private async void SaveViewerTextAs()
+    {
+        if (_viewerTextSaving ||
+            _viewerTextEditor is not ViewerTextEditor editor ||
+            editor.ShownPath is not { } currentPath ||
+            editor.CreateSaveRequest() is not { } request)
+        {
+            return;
+        }
+
+        bool currentIsText = string.Equals(Path.GetExtension(currentPath), ".txt", StringComparison.OrdinalIgnoreCase);
+        var dialog = new SaveFileDialog
+        {
+            InitialDirectory = Path.GetDirectoryName(currentPath),
+            FileName = Path.GetFileName(currentPath),
+            Filter = $"{Strings.MenuNewTextFile} (*.txt)|*.txt|{Strings.MenuNewMarkdownFile} (*.md)|*.md",
+            FilterIndex = currentIsText ? 1 : 2,
+            DefaultExt = currentIsText ? ".txt" : ".md",
+            AddExtension = true,
+        };
+        if (dialog.ShowDialog(this) != true)
+        {
+            return;
+        }
+
+        string target = Path.GetFullPath(dialog.FileName);
+        bool samePath = string.Equals(target, currentPath, StringComparison.OrdinalIgnoreCase);
+
+        _viewerTextSaving = true;
+        UpdateViewerTextEditBar();
+        try
+        {
+            if (await WriteViewerTextAsync(
+                    target, request.Text, request.Encoding, request.HasBom, 0, default, overwrite: true) is not { } written)
+            {
+                return;
+            }
+
+            if (!samePath)
+            {
+                editor.DropKept(target);
+                _unsavedTextStore.Delete(target);
+            }
+            editor.CompleteSaveAs(
+                request with { Encoding = written.Encoding, HasBom = written.HasBom },
+                target, written.Result, IsViewerMarkdown(target));
+
+            // The panel follows only while it is still on the text that was
+            // saved - it may have moved on while a slow share took the write.
+            if (!samePath && string.Equals(_viewerTextPath, currentPath, StringComparison.OrdinalIgnoreCase))
+            {
+                // Before the tree moves: the selection landing on the new row
+                // then finds the panel already on that path, and its preview
+                // returns early instead of going back to the 보기 offer
+                // (UpdateViewerPreview's same-path return).
+                _viewerTextPath = target;
+                _pendingViewerPath = target;
+                ViewerFileName.Text = Path.GetFileName(target);
+                SetViewerFileInfo(target, 0, 0);
+                SelectSavedAsRow(target);
+            }
+        }
+        finally
+        {
+            _viewerTextSaving = false;
+            UpdateViewerTextEditBar();
+        }
+    }
+
+    private void SelectSavedAsRow(string path)
+    {
+        // The search view covers the tree, and the panel follows the results
+        // list there; nothing in the tree is the panel's to move.
+        if (_isSearchViewActive)
+        {
+            return;
+        }
+
+        if (Path.GetDirectoryName(path) is { } folderPath &&
+            FindLoadedItemForPath(folderPath) is { ChildrenLoaded: true } folder)
+        {
+            RefreshFolderPreservingState(folder);
+            if (folder.FindLoadedChild(Path.GetFileName(path)) is { } row)
+            {
+                if (!folder.Children.Contains(row))
+                {
+                    folder.ShowChildrenUpTo(row);
+                }
+                folder.IsExpanded = true;
+                SelectVisibleItem(row, focus: false);
+                return;
+            }
+        }
+
+        NavigateToPath(path, pinToTop: false, source: "saveas");
+    }
+
     // One file's write, with its three questions (see SaveViewerText). The
     // encoding comes back with the result because the last question can turn
     // it into UTF-8. Null when a question was answered no or the write failed
     // (said in a message box); the file and the edits are then as they were.
     // Takes plain values rather than a SaveRequest so 종료's save-all can write
     // a text kept from an earlier session without the editor ever loading.
+    // overwrite: write without comparing the file first - 다른 이름으로 저장,
+    // whose dialog has already asked about a file that is there.
     private async Task<(TextFileWriter.Result Result, System.Text.Encoding Encoding, bool HasBom)?> WriteViewerTextAsync(
-        string path, string text, System.Text.Encoding encoding, bool hasBom, long expectedLength, DateTime expectedLastWriteUtc)
+        string path, string text, System.Text.Encoding encoding, bool hasBom, long expectedLength, DateTime expectedLastWriteUtc,
+        bool overwrite = false)
     {
         string name = Path.GetFileName(path);
         try
         {
-            bool overwrite = false;
             while (true)
             {
                 var attemptEncoding = encoding;

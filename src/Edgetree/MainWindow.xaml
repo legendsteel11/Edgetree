@@ -1822,6 +1822,101 @@
                     Click="ViewerRepeatMenuItem_Click"/>
         </ContextMenu>
 
+        <!-- THE TEXT VIEW'S MENU (2026-10-13). Given to the editor in code
+             (EnsureViewerTextEditor), which is why it lives here as a resource:
+             the editor is never named in XAML, so XAML never loads AvalonEdit.
+             The order is the tree row menu's - 전체 선택, then 잘라내기 · 복사 ·
+             붙여넣기 - with undo above and find and the saves below. Rows only
+             editing can do are ABSENT while reading, not greyed (absent = this
+             state can never do it), and 서식 is there only for a Markdown file
+             being edited. All of it is decided in ViewerTextContextMenu_Opened,
+             by Tag. The keys are shown as the edit bar's tooltips show them. -->
+        <ContextMenu x:Key="ViewerTextContextMenu"
+                Style="{StaticResource DarkContextMenuStyle}"
+                Opened="ViewerTextContextMenu_Opened"
+                Closed="AnyMenu_Closed"
+                PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
+            <MenuItem Header="{x:Static services:Strings.MenuUndo}"
+                    Tag="undo"
+                    InputGestureText="Ctrl+Z"
+                    Click="ViewerTextUndo_Click"/>
+            <MenuItem Header="{x:Static services:Strings.MenuRedo}"
+                    Tag="redo"
+                    InputGestureText="Ctrl+Y"
+                    Click="ViewerTextRedo_Click"/>
+            <Separator Tag="undoSep"/>
+            <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
+                    InputGestureText="Ctrl+A"
+                    Click="ViewerTextSelectAll_Click"/>
+            <Separator/>
+            <MenuItem Header="{x:Static services:Strings.MenuCut}"
+                    Tag="cut"
+                    InputGestureText="Ctrl+X"
+                    Click="ViewerTextCut_Click"/>
+            <MenuItem Header="{x:Static services:Strings.MenuCopy}"
+                    InputGestureText="Ctrl+C"
+                    Click="ViewerTextCopy_Click"/>
+            <MenuItem Header="{x:Static services:Strings.MenuPaste}"
+                    Tag="paste"
+                    InputGestureText="Ctrl+V"
+                    Click="ViewerTextPaste_Click"/>
+            <Separator Tag="formatSep"/>
+            <!-- Every row a toggle: asked of text that already has the format,
+                 it takes it away (see ViewerTextEditor.Markdown.cs). The line
+                 rows are ticked for the caret's line. -->
+            <MenuItem Header="{x:Static services:Strings.MenuFormat}"
+                    Tag="format">
+                <MenuItem Header="{x:Static services:Strings.MenuFormatBold}"
+                        InputGestureText="Ctrl+B"
+                        Click="ViewerTextFormatBold_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatItalic}"
+                        InputGestureText="Ctrl+I"
+                        Click="ViewerTextFormatItalic_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatStrikethrough}"
+                        Click="ViewerTextFormatStrikethrough_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatInlineCode}"
+                        Click="ViewerTextFormatInlineCode_Click"/>
+                <Separator/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatHeading1}"
+                        Tag="h1"
+                        Click="ViewerTextFormatHeading_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatHeading2}"
+                        Tag="h2"
+                        Click="ViewerTextFormatHeading_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatHeading3}"
+                        Tag="h3"
+                        Click="ViewerTextFormatHeading_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatBody}"
+                        Tag="h0"
+                        Click="ViewerTextFormatHeading_Click"/>
+                <Separator/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatBulletList}"
+                        Tag="bullet"
+                        Click="ViewerTextFormatLine_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatNumberedList}"
+                        Tag="numbered"
+                        Click="ViewerTextFormatLine_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatQuote}"
+                        Tag="quote"
+                        Click="ViewerTextFormatLine_Click"/>
+                <Separator/>
+                <MenuItem Header="{x:Static services:Strings.MenuFormatLink}"
+                        Click="ViewerTextFormatLink_Click"/>
+            </MenuItem>
+            <Separator/>
+            <MenuItem Header="{x:Static services:Strings.MenuFind}"
+                    InputGestureText="Ctrl+F"
+                    Click="ViewerTextFind_Click"/>
+            <Separator Tag="saveSep"/>
+            <MenuItem Header="{x:Static services:Strings.MenuSave}"
+                    Tag="save"
+                    InputGestureText="Ctrl+S"
+                    Click="ViewerTextSave_Click"/>
+            <MenuItem Header="{x:Static services:Strings.MenuSaveAs}"
+                    Tag="saveAs"
+                    Click="ViewerTextSaveAs_Click"/>
+        </ContextMenu>
+
         <!-- The search results' own sort menu. Deliberately NOT the folder menu
              above: these are different states over a different list - a flat
              result set has no 유형/크기 to sort by, and it has 폴더별 묶기 which no

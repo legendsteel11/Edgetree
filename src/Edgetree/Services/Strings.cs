@@ -704,6 +704,28 @@ public static class Strings
     public static string TextEditRedo = "다시 실행 (Ctrl+Y)";
     public static string TextEditCopy = "복사 (Ctrl+C)";
     public static string TextEditPaste = "붙여넣기 (Ctrl+V)";
+    // The text view's right-click menu (2026-10-13). The rows that only
+    // editing can do are absent while reading, and 서식 - Markdown's marks put
+    // in or taken out - is there only for a Markdown file being edited. The
+    // format rows are Word's names for the same things.
+    public static string MenuUndo = "실행 취소";
+    public static string MenuRedo = "다시 실행";
+    public static string MenuFind = "찾기";
+    public static string MenuSave = "저장";
+    public static string MenuSaveAs = "다른 이름으로 저장";
+    public static string MenuFormat = "서식";
+    public static string MenuFormatBold = "굵게";
+    public static string MenuFormatItalic = "기울임꼴";
+    public static string MenuFormatStrikethrough = "취소선";
+    public static string MenuFormatInlineCode = "인라인 코드";
+    public static string MenuFormatHeading1 = "제목 1";
+    public static string MenuFormatHeading2 = "제목 2";
+    public static string MenuFormatHeading3 = "제목 3";
+    public static string MenuFormatBody = "본문";
+    public static string MenuFormatBulletList = "글머리 기호 목록";
+    public static string MenuFormatNumberedList = "번호 매기기 목록";
+    public static string MenuFormatQuote = "인용";
+    public static string MenuFormatLink = "링크";
     // 편집's tooltip while it is disabled. Says where such a file CAN be
     // edited, in the row menu's own words (MenuOpen), and gives the size as a
     // number - "앞부분만 표시한 파일은 편집할 수 없습니다" read as vague, since
@@ -1342,6 +1364,24 @@ public static class Strings
         TextEditRedo = "Redo (Ctrl+Y)";
         TextEditCopy = "Copy (Ctrl+C)";
         TextEditPaste = "Paste (Ctrl+V)";
+        MenuUndo = "Undo";
+        MenuRedo = "Redo";
+        MenuFind = "Find";
+        MenuSave = "Save";
+        MenuSaveAs = "Save as";
+        MenuFormat = "Format";
+        MenuFormatBold = "Bold";
+        MenuFormatItalic = "Italic";
+        MenuFormatStrikethrough = "Strikethrough";
+        MenuFormatInlineCode = "Inline code";
+        MenuFormatHeading1 = "Heading 1";
+        MenuFormatHeading2 = "Heading 2";
+        MenuFormatHeading3 = "Heading 3";
+        MenuFormatBody = "Body text";
+        MenuFormatBulletList = "Bulleted list";
+        MenuFormatNumberedList = "Numbered list";
+        MenuFormatQuote = "Quote";
+        MenuFormatLink = "Link";
         TextEditOffHeadOnly = "Files over 10 MB can be edited in the default program";
         TextEditOffSplit = "Files with very long lines can be edited in the default program";
         TextSaveTitle = "Save";

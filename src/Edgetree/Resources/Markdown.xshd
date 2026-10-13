@@ -19,6 +19,9 @@
     plain text. The original's `_.*_` italicised both.
   - Inline code is no longer "Footlight MT Light"; the editor's own monospace
     face carries it.
+  - ~~Strikethrough~~ (GitHub's) is drawn struck (2026-10-13), since 서식 can
+    put it in and a mark with no visible effect would read as a failure.
+    Double tildes only, so a lone ~ in prose stays plain.
 -->
 <SyntaxDefinition name="EdgetreeMarkdown" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">
     <Color name="Heading1" fontWeight="bold" />
@@ -29,6 +32,7 @@
     <Color name="Heading6" fontWeight="bold" />
     <Color name="Emphasis" fontStyle="italic" />
     <Color name="StrongEmphasis" fontWeight="bold" />
+    <Color name="Strikethrough" strikethrough="true" />
     <Color name="Code" />
     <Color name="BlockQuote" />
     <Color name="ListMarker" />
@@ -59,6 +63,7 @@
         <Rule color="StrongEmphasis">(?&lt;!\w)__(?=\S).+?(?&lt;=\S)__(?!\w)</Rule>
         <Rule color="Emphasis">(?&lt;![\w*])\*(?=[^\s*]).*?(?&lt;=[^\s*])\*(?!\*)</Rule>
         <Rule color="Emphasis">(?&lt;!\w)_(?=[^\s_]).*?(?&lt;=[^\s_])_(?!\w)</Rule>
+        <Rule color="Strikethrough">~~(?=\S).+?(?&lt;=\S)~~</Rule>
         <Rule color="Link">!?\[[^\]]*\]\([^)]*\)</Rule>
         <Rule color="Link">!?\[[^\]]*\]\[[^\]]*\]</Rule>
     </RuleSet>

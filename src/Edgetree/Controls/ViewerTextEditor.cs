@@ -41,11 +41,12 @@ namespace SidebarExplorer.App;
 // on screen, so the cost stays the size of the panel. It is the project's
 // first package dependency, accepted for that reason (2026-09-28).
 //
-// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS FILE. MainWindow holds
-// the editor as a plain FrameworkElement and reaches it only through methods
-// that run after the first 보기 press, so a session that never opens a text
-// file never loads the assembly. See MainWindow's ViewerText section.
-public sealed class ViewerTextEditor : TextEditor
+// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS CLASS - this file and
+// ViewerTextEditor.Markdown.cs, the 서식 commands. MainWindow holds the editor
+// as a plain FrameworkElement and reaches it only through methods that run
+// after the first 보기 press, so a session that never opens a text file never
+// loads the assembly. See MainWindow's ViewerText section.
+public sealed partial class ViewerTextEditor : TextEditor
 {
     // What the worker hands back: the document, built off the UI thread, and
     // what was learned about the file on the way.
@@ -78,11 +79,12 @@ public sealed class ViewerTextEditor : TextEditor
             Document = document;
         }
 
-        // Settable for one reason: a file the app renames or moves keeps its
-        // edits under the new name (MovePath).
+        // Settable for two reasons: a file the app renames or moves keeps its
+        // edits under the new name (MovePath), and 다른 이름으로 저장 makes the
+        // text another file's (CompleteSaveAs) - which can be the other kind.
         public string Path { get; set; }
         public TextDocument Document { get; }
-        public bool Markdown { get; init; }
+        public bool Markdown { get; set; }
         public bool Truncated { get; init; }
         public bool LongLinesSplit { get; init; }
         public bool CanEdit => !Truncated && !LongLinesSplit;
@@ -239,6 +241,12 @@ public sealed class ViewerTextEditor : TextEditor
         TextArea.SelectionChanged += (_, _) => OnSelectionChangedForFind();
         // F3 in the text, taken here rather than left to the panel's own
         // binding, so it goes through DriveFind like the row's arrows do.
+        //
+        // Ctrl+B and Ctrl+I are 서식's 굵게 and 기울임꼴 (2026-10-13), the keys
+        // every Markdown editor gives them - only while a Markdown file is
+        // being edited. Ctrl+I is AvalonEdit's own indent-the-selection, which
+        // is why it is taken here, before the editor's key bindings see it;
+        // everywhere else (reading, a TXT) it is left to them as before.
         TextArea.PreviewKeyDown += (_, e) =>
         {
             if (e.Key == System.Windows.Input.Key.F3 && FindIsOpen)
@@ -253,6 +261,30 @@ public sealed class ViewerTextEditor : TextEditor
                 }
                 e.Handled = true;
             }
+            else if (System.Windows.Input.Keyboard.Modifiers == System.Windows.Input.ModifierKeys.Control &&
+                     e.Key is System.Windows.Input.Key.B or System.Windows.Input.Key.I &&
+                     CanFormat)
+            {
+                ToggleWrap(e.Key == System.Windows.Input.Key.B ? "**" : "*");
+                e.Handled = true;
+            }
+        };
+
+        // A RIGHT-CLICK PUTS THE CARET WHERE IT LANDS (2026-10-13), unless it
+        // lands inside the selection - Notepad's and VS Code's answer, and what
+        // makes the menu's 서식 act on the word that was clicked rather than
+        // wherever the caret had been left. It also takes the keyboard: the
+        // menu's commands act on the text, and a menu hands the focus back to
+        // where it found it when it closes.
+        TextArea.PreviewMouseRightButtonDown += (_, e) =>
+        {
+            if (GetPositionFromPoint(e.GetPosition(this)) is { } position &&
+                !TextArea.Selection.Contains(Document.GetOffset(position.Location)))
+            {
+                TextArea.ClearSelection();
+                TextArea.Caret.Position = position;
+            }
+            TextArea.Focus();
         };
 
         TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
@@ -880,6 +912,61 @@ public sealed class ViewerTextEditor : TextEditor
         }
         EditStateChanged?.Invoke(this, EventArgs.Empty);
     }
+
+    // 다른 이름으로 저장 went through (2026-10-13). The text BECOMES the new
+    // file, as it does in Notepad and VS Code: it stays on screen, undo
+    // history and all, under the new name, and the file it came from is left
+    // as it stands on disk. Edits it had are the new file's now, so the old
+    // path counts as cleaned and its disk copy goes. Same session as
+    // CompleteSave's - the panel may have moved on while the write was out.
+    public void CompleteSaveAs(SaveRequest request, string newPath, TextFileWriter.Result result, bool markdown)
+    {
+        var session = request.Session;
+        string oldPath = session.Path;
+        bool kept = _unsaved.TryGetValue(oldPath, out var waiting) && ReferenceEquals(waiting, session);
+        if (kept)
+        {
+            _unsaved.Remove(oldPath);
+        }
+        if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+        {
+            _cleaned.Add(oldPath);
+        }
+
+        session.Path = newPath;
+        session.Markdown = markdown;
+        // The disk copy is kept by path, and this one has never been written
+        // under the new one.
+        session.PersistedVersion = null;
+        if (kept)
+        {
+            _unsaved[newPath] = session;
+        }
+
+        if (ReferenceEquals(_session, session) && _markdown != markdown)
+        {
+            _markdown = markdown;
+            ApplyHighlighting();
+        }
+        CompleteSave(request, result);
+    }
+
+    // A file 다른 이름으로 저장 has just written over: edits this process kept
+    // for it were for a text that is no longer there.
+    public void DropKept(string path)
+    {
+        if (!_unsaved.Remove(path, out var kept))
+        {
+            return;
+        }
+
+        kept.Document.UndoStack.MarkAsOriginalFile();
+        _cleaned.Add(path);
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The file on screen, for 다른 이름으로 저장's dialog.
+    public string? ShownPath => _session?.Path;
 
     // 다시 불러오기: the file as it now is on disk, in place of the edits.
     // ONE UNDO STEP rather than a fresh document, so a press by mistake is
