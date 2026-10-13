@@ -75,6 +75,8 @@ public class AppPreset
         nameof(AppSettings.AutoHideSliverWidth),
         nameof(AppSettings.AutoHideHandleWidth),
         nameof(AppSettings.AutoHideUseHandle),
+        nameof(AppSettings.AutoHideHandleLengthPercent),
+        nameof(AppSettings.AutoHideHandlePositionPercent),
         nameof(AppSettings.AutoHideSlide),
         nameof(AppSettings.AutoHideCloseOnMouseLeave),
     };

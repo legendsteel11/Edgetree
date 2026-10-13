@@ -2908,8 +2908,9 @@ public partial class MainWindow : Window
         if (IsCollapsedToHandle)
         {
             RootContent.Margin = new Thickness(0);
-            Height = AutoHideHandleHeight(bandHeight);
-            Top = bandTop + ((bandHeight - Height) / 2);
+            var handle = AutoHideHandleSpan(bandTop, bandHeight);
+            Height = handle.Height;
+            Top = handle.Top;
         }
         else
         {
@@ -3527,8 +3528,30 @@ public partial class MainWindow : Window
     // the edge is 12% of a smaller thing twice over, and the old ceiling was
     // never reached there at all - raising the ceiling alone would have changed
     // nothing on the very setup that reported it.
-    private static double AutoHideHandleHeight(double bandHeight)
+    //
+    // THE AUTOMATIC LENGTH ONLY, since 2026-10-13: what the handle is until
+    // its length is chosen in the options menu (AutoHideHandleSpan).
+    private static double AutomaticHandleHeight(double bandHeight)
         => Math.Min(bandHeight, Math.Clamp(bandHeight * 0.18, 60, 280));
+
+    // A chosen length still never goes under this: a handle has to be found
+    // and aimed at, and five percent of a short band is a speck.
+    private const double MinChosenHandleHeight = 24;
+
+    // WHERE THE HANDLE IS, in one place (2026-10-13, when its length and place
+    // became options): the window is put there when it collapses, and the
+    // cursor is tested against it to reveal. Those two had each worked out the
+    // centred handle for themselves, which held while there was only one way
+    // to place it; with two settings in play, two copies of the arithmetic are
+    // two chances for the reveal target to sit somewhere the handle is not.
+    private (double Top, double Height) AutoHideHandleSpan(double bandTop, double bandHeight)
+    {
+        double height = _settings.AutoHideHandleLengthPercent is { } percent
+            ? Math.Min(bandHeight, Math.Max(MinChosenHandleHeight, bandHeight * Math.Clamp(percent, 0, 100) / 100))
+            : AutomaticHandleHeight(bandHeight);
+        double place = Math.Clamp(_settings.AutoHideHandlePositionPercent, 0, 100) / 100;
+        return (bandTop + ((bandHeight - height) * place), height);
+    }
 
     // Only the two corners facing AWAY from the screen edge - the pair against
     // the edge has nothing to show a curve against. Rounding both pairs (which
@@ -4407,12 +4430,9 @@ public partial class MainWindow : Window
         var workArea = GetCurrentMonitorWorkArea();
         var (bandTop, bandHeight) = DockedBand(workArea);
         double width = CollapsedWidth;
-        double height = _settings.AutoHideUseHandle
-            ? AutoHideHandleHeight(bandHeight)
-            : bandHeight;
-        double top = _settings.AutoHideUseHandle
-            ? bandTop + ((bandHeight - height) / 2)
-            : bandTop;
+        var (top, height) = _settings.AutoHideUseHandle
+            ? AutoHideHandleSpan(bandTop, bandHeight)
+            : (bandTop, bandHeight);
         double left = _settings.DockOnRight ? workArea.Right - width : workArea.Left;
 
         var cursor = System.Windows.Forms.Cursor.Position;
@@ -9429,6 +9449,20 @@ public partial class MainWindow : Window
             var collapsedWidth = CollapsedWidthStepperRange();
             UpdateStepperRow(autoHideSliverWidthRow,
                 collapsedWidth.Value, collapsedWidth.Min, collapsedWidth.Max);
+            // Looked up apart from the chain above, so a row renamed here can
+            // only ever take itself down.
+            if (FindMenuItem(menu, "autoHideHandleLengthRow") is { } handleLengthRow &&
+                FindMenuItem(menu, "autoHideHandlePositionRow") is { } handlePositionRow)
+            {
+                UpdateStepperRow(handleLengthRow, HandleLengthPercentShown(), MinHandleLengthPercent, 100);
+                UpdateStepperRow(handlePositionRow, _settings.AutoHideHandlePositionPercent, 0, 100);
+                handleLengthRow.IsEnabled = _settings.AutoHideUseHandle;
+                handlePositionRow.IsEnabled = _settings.AutoHideUseHandle;
+            }
+            else
+            {
+                LogClickLine("options menu: a 숨김 시 손잡이 row is missing");
+            }
             UpdateStepperRow(scrollBarThicknessRow, _settings.ScrollBarThickness, 6, 20);
 
             // THE LAST TWO PLACES IN THIS HANDLER THAT READ A MENU BY POSITION,
@@ -13334,6 +13368,66 @@ public partial class MainWindow : Window
         => _settings.AutoHideUseHandle
             ? (_settings.AutoHideHandleWidth, MinAutoHideHandleWidth, MaxAutoHideHandleWidth)
             : (_settings.AutoHideSliverWidth, 2, 8);
+
+    // ----- The handle's length and place (2026-10-13, on request) ------------
+    //
+    // Percent of the docked band, both (see AppSettings
+    // .AutoHideHandleLengthPercent). Like the thickness above, only seen the
+    // next time the window collapses: the menu is open over the revealed
+    // sidebar. Greyed while auto-hide collapses to the full-edge bar instead,
+    // whose length and place are the band's own.
+    private const double HandleLengthStep = 5;
+    private const double MinHandleLengthPercent = 5;
+    private const double HandlePositionStep = 10;
+
+    // What the length row shows: the chosen percent, or - never chosen - the
+    // share of the band the automatic handle takes on this monitor now, so
+    // the first press steps from what is on screen rather than from a number
+    // the user never saw.
+    private double HandleLengthPercentShown()
+    {
+        if (_settings.AutoHideHandleLengthPercent is { } chosen)
+        {
+            return Math.Clamp(chosen, MinHandleLengthPercent, 100);
+        }
+
+        var (_, bandHeight) = DockedBand(GetCurrentMonitorWorkArea());
+        return bandHeight > 0 ? Math.Round(AutomaticHandleHeight(bandHeight) / bandHeight * 100) : 18;
+    }
+
+    private void AutoHideHandleLengthDecrement_Click(object sender, RoutedEventArgs e)
+        => StepAutoHideHandleLength(sender, -1);
+
+    private void AutoHideHandleLengthIncrement_Click(object sender, RoutedEventArgs e)
+        => StepAutoHideHandleLength(sender, +1);
+
+    // To the next whole step in the direction pressed, so an automatic 13%
+    // goes to 15 or 10 rather than to 18 or 8.
+    private void StepAutoHideHandleLength(object sender, int delta)
+    {
+        double current = Math.Round(HandleLengthPercentShown(), 2);
+        double next = delta > 0
+            ? (Math.Floor(current / HandleLengthStep) + 1) * HandleLengthStep
+            : (Math.Ceiling(current / HandleLengthStep) - 1) * HandleLengthStep;
+        double value = Math.Clamp(next, MinHandleLengthPercent, 100);
+        _settings.AutoHideHandleLengthPercent = value;
+        UpdateStepperRow(sender, value, MinHandleLengthPercent, 100);
+    }
+
+    private void AutoHideHandlePositionDecrement_Click(object sender, RoutedEventArgs e)
+        => StepAutoHideHandlePosition(sender, -1);
+
+    private void AutoHideHandlePositionIncrement_Click(object sender, RoutedEventArgs e)
+        => StepAutoHideHandlePosition(sender, +1);
+
+    private void StepAutoHideHandlePosition(object sender, int delta)
+    {
+        double value = Math.Clamp(
+            Math.Round(_settings.AutoHideHandlePositionPercent / HandlePositionStep + delta) * HandlePositionStep,
+            0, 100);
+        _settings.AutoHideHandlePositionPercent = value;
+        UpdateStepperRow(sender, value, 0, 100);
+    }
 
     // Same live-swap approach as ApplyColorSettings: replacing the resource
     // dictionary entry is picked up immediately by every row's DynamicResource

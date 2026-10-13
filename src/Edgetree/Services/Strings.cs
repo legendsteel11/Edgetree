@@ -301,6 +301,10 @@ public static class Strings
     public static string MenuAutoHideUseHandle = "숨김 시 손잡이만";
     public static string MenuAutoHideSlide = "숨김 애니메이션";
     public static string MenuAutoHideSliverWidth = "숨김 시 막대 두께";
+    // Both in percent of the docked band (AppSettings.AutoHideHandleLengthPercent).
+    public static string MenuAutoHideHandleLength = "숨김 시 손잡이 길이 (%)";
+    public static string MenuAutoHideHandlePosition = "숨김 시 손잡이 위치 (%)";
+    public static string MenuAutoHideHandlePositionTip = "0 맨 위 · 50 가운데 · 100 맨 아래";
     public static string MenuColorSettings = "색상 설정";
     // On every swatch in the colour window. The right-click gesture has to be
     // stated somewhere the hand is already resting, or it may as well not exist.
@@ -1259,6 +1263,9 @@ public static class Strings
         MenuAutoHideUseHandle = "Handle instead of full edge";
         MenuAutoHideSlide = "Slide animation";
         MenuAutoHideSliverWidth = "Auto-hide thickness";
+        MenuAutoHideHandleLength = "Auto-hide handle length (%)";
+        MenuAutoHideHandlePosition = "Auto-hide handle position (%)";
+        MenuAutoHideHandlePositionTip = "0 top · 50 middle · 100 bottom";
         MenuColorSettings = "Color settings";
         ColorSwatchTooltip = "Click: color picker · Right-click: enter a color code";
         ColorHexInputHint = "#RRGGBB · Enter to apply, Esc to cancel";

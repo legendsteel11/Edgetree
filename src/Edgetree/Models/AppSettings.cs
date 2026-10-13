@@ -355,6 +355,24 @@ public class AppSettings
     // has been the only mode in use here since it shipped.
     public bool AutoHideUseHandle { get; set; } = false;
 
+    // The handle's length and place on the edge (2026-10-13, on request), both
+    // in percent of the docked band, so they mean the same on any monitor and
+    // after the band is dragged shorter - see MainWindow.AutoHideHandleSpan.
+    //
+    // NULL LENGTH IS THE AUTOMATIC ONE, kept for everyone who never touches
+    // the row: 18% of the band held between 60 and 280px, which is what the
+    // handle has always been. A plain 18 in its place would have lengthened
+    // the handle on every large screen at the update - the 280px ceiling is
+    // what decides there - and a chosen length cannot keep that ceiling, or
+    // the row would stop doing anything past it. The same pattern as
+    // AutoHideHandleColorHex: unset follows, set is the value.
+    //
+    // The position needs no such care: 50 is the middle, where the handle has
+    // always sat. A share of the band's LEFTOVER space, like DockedTopRatio, so
+    // 0 and 100 put it flush with the band's top and bottom, never past them.
+    public double? AutoHideHandleLengthPercent { get; set; }
+    public double AutoHideHandlePositionPercent { get; set; } = 50;
+
     // Whether the peek slides in and out or simply appears.
     //
     // Worth an option rather than a decision: auto-hide is one of this app's
@@ -1179,6 +1197,11 @@ public class AppSettings
         ViewerSubtitleBottom = Sane(ViewerSubtitleBottom, 18, min: 0);
         AutoHideSliverWidth = Sane(AutoHideSliverWidth, 3, min: 1);
         AutoHideHandleWidth = Sane(AutoHideHandleWidth, 8, min: 1);
+        if (AutoHideHandleLengthPercent is { } handleLength)
+        {
+            AutoHideHandleLengthPercent = Sane(handleLength, 18, min: 0, max: 100);
+        }
+        AutoHideHandlePositionPercent = Sane(AutoHideHandlePositionPercent, 50, min: 0, max: 100);
         SlideshowSeconds = (int)Sane(SlideshowSeconds, 5, min: 3);
         TreeFontSize = Sane(TreeFontSize, 12, min: 1);
         ViewerTextFontSize = Sane(ViewerTextFontSize, 12, min: 1);

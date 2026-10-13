@@ -2782,6 +2782,74 @@
                     </Grid>
                 </MenuItem.Header>
             </MenuItem>
+            <!-- The handle's length and place on the edge (2026-10-13), under
+                 its thickness. Greyed while auto-hide leaves the full-edge bar
+                 instead - see the options menu's Opened handler. -->
+            <MenuItem StaysOpenOnClick="True"
+                    Focusable="False"
+                    Padding="{DynamicResource MenuStepperRowPadding}"
+                    AutomationProperties.AutomationId="autoHideHandleLengthRow">
+                <MenuItem.Header>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                Text="{x:Static services:Strings.MenuAutoHideHandleLength}"
+                                Foreground="{DynamicResource MenuForeground}"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"/>
+                        <StackPanel Grid.Column="1"
+                                Orientation="Horizontal">
+                            <Button Content="−"
+                                    Style="{StaticResource MenuStepperButtonStyle}"
+                                    Click="AutoHideHandleLengthDecrement_Click"/>
+                            <TextBlock Text="18"
+                                    Foreground="{DynamicResource MenuForeground}"
+                                    Width="26"
+                                    TextAlignment="Center"
+                                    VerticalAlignment="Center"/>
+                            <Button Content="+"
+                                    Style="{StaticResource MenuStepperButtonStyle}"
+                                    Click="AutoHideHandleLengthIncrement_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </MenuItem.Header>
+            </MenuItem>
+            <MenuItem StaysOpenOnClick="True"
+                    Focusable="False"
+                    Padding="{DynamicResource MenuStepperRowPadding}"
+                    ToolTip="{x:Static services:Strings.MenuAutoHideHandlePositionTip}"
+                    AutomationProperties.AutomationId="autoHideHandlePositionRow">
+                <MenuItem.Header>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                Text="{x:Static services:Strings.MenuAutoHideHandlePosition}"
+                                Foreground="{DynamicResource MenuForeground}"
+                                VerticalAlignment="Center"
+                                Margin="0,0,8,0"/>
+                        <StackPanel Grid.Column="1"
+                                Orientation="Horizontal">
+                            <Button Content="−"
+                                    Style="{StaticResource MenuStepperButtonStyle}"
+                                    Click="AutoHideHandlePositionDecrement_Click"/>
+                            <TextBlock Text="50"
+                                    Foreground="{DynamicResource MenuForeground}"
+                                    Width="26"
+                                    TextAlignment="Center"
+                                    VerticalAlignment="Center"/>
+                            <Button Content="+"
+                                    Style="{StaticResource MenuStepperButtonStyle}"
+                                    Click="AutoHideHandlePositionIncrement_Click"/>
+                        </StackPanel>
+                    </Grid>
+                </MenuItem.Header>
+            </MenuItem>
             <MenuItem StaysOpenOnClick="True"
                     Focusable="False"
                     Padding="{DynamicResource MenuStepperRowPadding}"
