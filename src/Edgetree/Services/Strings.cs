@@ -197,6 +197,8 @@ public static class Strings
     // film is played.
     public static string MenuViewHere = "보기";
     public static string MenuPlayHere = "재생";
+    // A TXT/MD row's second way in: the panel opened straight into editing.
+    public static string MenuEditHere = "편집";
     public static string MenuOpenWith = "연결 프로그램";
     public static string MenuCut = "잘라내기";
     public static string MenuCopy = "복사";
@@ -1199,6 +1201,7 @@ public static class Strings
         MenuCollapseFolder = "Collapse";
         MenuViewHere = "View";
         MenuPlayHere = "Play";
+        MenuEditHere = "Edit";
         MenuOpenWith = "Open with";
         MenuCut = "Cut";
         MenuCopy = "Copy";

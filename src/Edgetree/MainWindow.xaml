@@ -1534,6 +1534,16 @@
                  cannot show. -->
             <MenuItem Tag="viewHere"
                     Click="ViewHere_Click"/>
+            <!-- A TXT/MD row's 편집 (2026-10-13, on request), under its 보기:
+                 the panel opened straight into editing, the way 새로 만들기
+                 opens a new file. A row of its own rather than 보기 turning
+                 into 편집 once the text is on screen - one place, one meaning,
+                 and editing one step away from any state. Visibility and
+                 IsEnabled are set in ExplorerItemContextMenu_Opened. -->
+            <MenuItem Tag="editHere"
+                    Visibility="Collapsed"
+                    Header="{x:Static services:Strings.MenuEditHere}"
+                    Click="EditHere_Click"/>
             <!-- The same way in, for a FOLDER: the panel's own folder play bar
                  (전체 재생, ViewerFolderPlay_Click) reachable from the tree, so
                  music can be set going without first opening the panel and
