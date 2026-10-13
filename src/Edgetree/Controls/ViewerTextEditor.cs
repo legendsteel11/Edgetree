@@ -41,9 +41,9 @@ namespace SidebarExplorer.App;
 // on screen, so the cost stays the size of the panel. It is the project's
 // first package dependency, accepted for that reason (2026-09-28).
 //
-// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS CLASS - this file,
-// ViewerTextEditor.Markdown.cs (the 서식 commands) and
-// ViewerTextEditor.Replace.cs (the replace row). MainWindow holds the editor
+// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS CLASS - this file and
+// its ViewerTextEditor.*.cs parts (the 서식 commands, the replace row, the
+// sticky headings, and the rest). MainWindow holds the editor
 // as a plain FrameworkElement and reaches it only through methods that run
 // after the first 보기 press, so a session that never opens a text file never
 // loads the assembly. See MainWindow's ViewerText section.
@@ -336,6 +336,7 @@ public sealed partial class ViewerTextEditor : TextEditor
 
         AttachDragOut();
         AttachMarkdownLinks();
+        AttachStickyHeadings();
         AttachCurrentLine();
 
         // REDO ON Ctrl+Shift+Z AS WELL AS Ctrl+Y (2026-10-13, on request).
@@ -465,6 +466,20 @@ public sealed partial class ViewerTextEditor : TextEditor
     // It only ever answers the caret MOVING, so a wheel or a scroll bar drag -
     // which leave the caret where it is - is never fought; and a caret already
     // in view (a click, an arrow key) is left alone.
+    //
+    // UNDER THE STICKY HEADINGS IS OUT OF VIEW TOO (2026-10-13, with them -
+    // ViewerTextEditor.StickyHeadings.cs). A caret row they cover is brought
+    // down, and a caret brought into view lands under them: a row of room for
+    // each heading its line lies under, as VS Code's reveal keeps room for its
+    // sticky lines. Without it a find or a #link would land its match at the
+    // top, behind the headings of its own section. That room shows lines
+    // ABOVE the caret's, whose heights may still be estimates, so drawing
+    // them can move the caret down: in the harness a wrapped line above a
+    // #link's heading dropped it a whole row, where the previous section's
+    // heading then stood over it. So once a reveal has moved the view, the
+    // next pass sets it again from the heights just drawn, until it lands
+    // where it was aimed. A text without headings has no room to keep and
+    // lands as before.
     private bool _revealPending;
 
     private void ScheduleRevealCaret()
@@ -490,8 +505,9 @@ public sealed partial class ViewerTextEditor : TextEditor
             return;
         }
 
-        // A couple of passes at most: the first lands, the second only confirms
-        // or nudges once the landing line has been drawn.
+        // A couple of passes at most: the first lands, the next only confirm
+        // or nudge once the lines around the landing have been drawn.
+        bool moved = false;
         for (int pass = 0; pass < 3; pass++)
         {
             textView.EnsureVisualLines();
@@ -499,15 +515,28 @@ public sealed partial class ViewerTextEditor : TextEditor
             double rowTop = textView.GetVisualPosition(caret, VisualYPosition.LineTop).Y;
             double rowBottom = textView.GetVisualPosition(caret, VisualYPosition.LineBottom).Y;
             double viewTop = textView.VerticalOffset;
-            if (rowTop >= viewTop && rowBottom <= viewTop + textView.ActualHeight)
-            {
-                return;
-            }
-
             double lineTop = textView.GetVisualTopByDocumentLine(caret.Line);
             double context = Math.Min(rowTop - lineTop, 2 * textView.DefaultLineHeight);
-            ScrollToVerticalOffset(Math.Max(0, rowTop - context));
+            double target = Math.Max(0, rowTop - context - StickyRoomAbove(caret.Line));
+            if (moved)
+            {
+                if (Math.Abs(viewTop - target) < 0.5)
+                {
+                    return;
+                }
+            }
+            else
+            {
+                UpdateStickyRows();
+                if (rowTop >= viewTop + StickyRowsBottom() - 0.5 && rowBottom <= viewTop + textView.ActualHeight)
+                {
+                    return;
+                }
+            }
+
+            ScrollToVerticalOffset(target);
             UpdateLayout();
+            moved = true;
         }
     }
 
@@ -688,6 +717,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         _caretPlaced = false;
         IsReadOnly = !editing;
         ApplyHighlighting();
+        ResetHeadingIndex();
         RefreshCurrentLine();
         // A kept session brings its marks with it; they are checked again on
         // the next pause anyway.
@@ -721,6 +751,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         SyntaxHighlighting = null;
         IsReadOnly = true;
         Document = new TextDocument();
+        ResetHeadingIndex();
         RefreshCurrentLine();
         EditStateChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -1036,6 +1067,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         {
             _markdown = markdown;
             ApplyHighlighting();
+            ResetHeadingIndex();
         }
         CompleteSave(request, result);
     }
@@ -1174,7 +1206,9 @@ public sealed partial class ViewerTextEditor : TextEditor
             {
                 Background = Brushes.Transparent;
             }
-            // Reading has its own rule for the current-line band.
+            // The sticky headings lie on the same ground, and reading has its
+            // own rule for the current-line band.
+            _stickyAdorner?.InvalidateVisual();
             RefreshCurrentLine();
             return;
         }
@@ -1264,34 +1298,45 @@ public sealed partial class ViewerTextEditor : TextEditor
                 return;
             }
 
-            var foreground = (System.Windows.Media.Brush)GetValue(Control.ForegroundProperty);
-            // The stock margin builds these through AvalonEdit's internal
-            // TextFormatterFactory; this is the same text with the same
-            // formatting mode and DPI, built directly.
-            var mode = TextOptions.GetTextFormattingMode(this);
-            double pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
             double right = RenderSize.Width;
             foreach (VisualLine line in textView.VisualLines)
             {
-                var text = new FormattedText(
-                    line.FirstDocumentLine.LineNumber.ToString(CultureInfo.CurrentCulture),
-                    CultureInfo.CurrentCulture,
-                    System.Windows.FlowDirection.LeftToRight,
-                    typeface, emSize, _owner.LineNumberBrush(line.FirstDocumentLine, foreground),
-                    null, mode, pixelsPerDip);
+                var text = FormatNumber(line.FirstDocumentLine);
                 double baseline = line.GetTextLineVisualYPosition(line.TextLines[0], VisualYPosition.Baseline);
                 drawingContext.DrawText(
                     text,
                     new System.Windows.Point(right - text.Width, baseline - text.Baseline - textView.VerticalOffset));
             }
         }
+
+        // A line's number as this margin draws it - also for a sticky heading's
+        // row, which stands over the margin.
+        // The stock margin builds these through AvalonEdit's internal
+        // TextFormatterFactory; this is the same text with the same
+        // formatting mode and DPI, built directly.
+        public FormattedText FormatNumber(DocumentLine line)
+        {
+            var foreground = (System.Windows.Media.Brush)GetValue(Control.ForegroundProperty);
+            return new FormattedText(
+                line.LineNumber.ToString(CultureInfo.CurrentCulture),
+                CultureInfo.CurrentCulture,
+                System.Windows.FlowDirection.LeftToRight,
+                typeface, emSize, _owner.LineNumberBrush(line, foreground),
+                null, TextOptions.GetTextFormattingMode(this), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        }
     }
 
     // The find marks are not coloured here: they follow the selection colour
     // through a binding (see the constructor), and a value written here would
     // replace that binding.
+    //
+    // The sticky headings take their colour from the definition, so they are
+    // drawn again with it.
     private void ApplyHighlighting()
-        => SyntaxHighlighting = _markdown ? MarkdownDefinition(_light) : null;
+    {
+        SyntaxHighlighting = _markdown ? MarkdownDefinition(_light) : null;
+        _stickyAdorner?.InvalidateVisual();
+    }
 
     // Token colours from VS Code's default themes, Dark 2026 / Light 2026,
     // for the same Markdown scopes: markup.heading, markup.inline.raw,
