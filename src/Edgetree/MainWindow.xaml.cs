@@ -26562,11 +26562,19 @@ public partial class MainWindow : Window
         // The same for text: the preview above put up the offer, and the menu
         // row (or the tree row's 보기 mark) is the press on it. Not again for
         // the text already on screen - that would read the file a second time
-        // to show what is showing.
-        else if (IsViewerText(item.FullPath) &&
-                 !string.Equals(_viewerTextPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
+        // to show what is showing. Such a text (a file with unsaved edits
+        // opens on selection alone, keyboard left in the tree) still gets
+        // the keyboard: this was the ask for it.
+        else if (IsViewerText(item.FullPath))
         {
-            ViewerTextOpenButton_Click(this, new RoutedEventArgs());
+            if (string.Equals(_viewerTextPath, item.FullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                FocusShownViewerText();
+            }
+            else
+            {
+                ViewerTextOpenButton_Click(this, new RoutedEventArgs());
+            }
         }
     }
 
@@ -36415,8 +36423,9 @@ public partial class MainWindow : Window
 
         // A file with unsaved edits is not offered: its text is already in
         // memory, so there is no read to hold back, and it opens straight
-        // back into its edits (decided with the author, 2026-10-11).
-        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path))
+        // back into its edits (decided with the author, 2026-10-11). The
+        // keyboard stays where it was - see RevealViewerText.
+        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path, takeKeyboard: false))
         {
             return;
         }
@@ -36487,7 +36496,7 @@ public partial class MainWindow : Window
     {
         // Never read over unsaved edits: the offer is not shown for such a
         // file, and this keeps any other way in from replacing them.
-        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path))
+        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path, takeKeyboard: true))
         {
             return;
         }
@@ -36559,7 +36568,7 @@ public partial class MainWindow : Window
         // file's text simply ends at its first megabyte. The one place either
         // fact now shows is 편집 - disabled, with the reason as its tooltip -
         // and the Debug log names them.
-        RevealViewerText(editor, path);
+        RevealViewerText(editor, path, takeKeyboard: true);
     }
 
     // An edited file the panel has come back to (ShowViewerTextOffer): from
@@ -36568,11 +36577,11 @@ public partial class MainWindow : Window
     // are put right and the offer goes up.
     // NoInlining: reached from the selection path, see the section's note.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private bool RestoreViewerText(string path)
+    private bool RestoreViewerText(string path, bool takeKeyboard)
     {
         if (_viewerTextEditor is ViewerTextEditor kept && kept.Restore(path, _settings.IsLightMode))
         {
-            RevealViewerText(kept, path);
+            RevealViewerText(kept, path, takeKeyboard);
             return true;
         }
 
@@ -36583,7 +36592,7 @@ public partial class MainWindow : Window
             editor.RestoreFromStore(
                 path, text, TextFileReader.EncodingFor(entry.CodePage, entry.HasBom), entry.HasBom,
                 entry.StampLength, entry.StampLastWriteUtc, entry.Markdown, _settings.IsLightMode);
-            RevealViewerText(editor, path);
+            RevealViewerText(editor, path, takeKeyboard);
             return true;
         }
 
@@ -36591,7 +36600,7 @@ public partial class MainWindow : Window
         return false;
     }
 
-    private void RevealViewerText(ViewerTextEditor editor, string path)
+    private void RevealViewerText(ViewerTextEditor editor, string path, bool takeKeyboard)
     {
         _viewerTextPath = path;
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
@@ -36610,8 +36619,32 @@ public partial class MainWindow : Window
         // the keyboard back, and leaving the file hands it back by itself
         // (HideViewerText).
         //
-        // At Input priority, after the layout that makes the host visible: a
-        // collapsed element cannot take focus.
+        // ONLY WHEN THE TEXT WAS ASKED FOR (takeKeyboard): 보기, or the row's
+        // 보기 mark or menu. A file with unsaved edits also opens when the
+        // selection merely lands on it, and taking the keyboard then broke the
+        // tree under the hand (2026-10-12, on report): F2 on that row went to
+        // the text and did nothing, and ↓ walking the folder started moving
+        // the caret instead of the selection.
+        if (takeKeyboard)
+        {
+            FocusViewerText(editor, path);
+        }
+    }
+
+    // NoInlining: ViewHere calls it, and must not name the editor's type.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void FocusShownViewerText()
+    {
+        if (_viewerTextEditor is ViewerTextEditor editor && _viewerTextPath is { } path)
+        {
+            FocusViewerText(editor, path);
+        }
+    }
+
+    // At Input priority, after the layout that makes the host visible: a
+    // collapsed element cannot take focus.
+    private void FocusViewerText(ViewerTextEditor editor, string path)
+    {
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
         {
             if (string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
