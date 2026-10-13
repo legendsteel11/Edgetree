@@ -180,6 +180,9 @@ public sealed partial class ViewerTextEditor : TextEditor
         // the LAST line can be brought to the top of the view - which is where
         // RevealCaret puts a line it has to reach (see there).
         Options.AllowScrollBelowDocument = true;
+        // AvalonEdit's own text drag stays off: it would offer a drop target a
+        // move out of this document and drag text around inside it. A
+        // selection is dragged out as a copy by ViewerTextEditor.DragOut.cs.
         Options.EnableTextDragDrop = false;
         Options.EnableEmailHyperlinks = false;
         // Links open on Ctrl+click only (AvalonEdit's default, kept): a plain
@@ -287,6 +290,8 @@ public sealed partial class ViewerTextEditor : TextEditor
             }
             TextArea.Focus();
         };
+
+        AttachDragOut();
 
         TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
     }
