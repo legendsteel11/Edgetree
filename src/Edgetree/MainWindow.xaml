@@ -4821,6 +4821,23 @@
                             Property="ToolTip"
                             Value="{x:Static services:Strings.TextUnsavedMark}"/>
                 </DataTrigger>
+                <!-- ITS TEXT ON SCREEN (2026-10-13, on request): the mark - page
+                     or dot, whichever it is - in the cut row's quieted file
+                     colour (MutedFileNameForeground, a blend towards the
+                     background, not an Opacity), and its press closes the
+                     panel (TreeViewItem_PreviewMouseLeftButtonDown), so the
+                     tooltip names that. After the unsaved trigger on purpose:
+                     on screen, what a press does wins over the status, which
+                     the dot's shape still carries. -->
+                <DataTrigger Binding="{Binding IsTextShown}"
+                        Value="True">
+                    <Setter TargetName="ViewTextIcon"
+                            Property="Fill"
+                            Value="{DynamicResource MutedFileNameForeground}"/>
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="ToolTip"
+                            Value="{x:Static services:Strings.ViewerClose}"/>
+                </DataTrigger>
                 <!-- The network dot rides the folder icon: folder rows on a
                      network drive only, and only while the icon itself is
                      showing (folder icons toggled off hides the dot too). -->

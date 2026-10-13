@@ -16163,14 +16163,28 @@ public partial class MainWindow : Window
         // Handled, so the press is not also a row click: the row is already
         // selected by then, and a second selection pass would only re-run the
         // panel's debounce for the same file.
+        // WITH ITS TEXT ALREADY ON SCREEN the press closes the panel instead
+        // (2026-10-13, on request) - the mark is drawn quieted then, and the
+        // pair is Ctrl+W's open/close from the mouse. Edits are kept, as the
+        // panel's own close keeps them.
         if ((e.OriginalSource as DependencyObject)?.FindAncestor<Border>() is { Name: "ViewTextIconBorder" } &&
             treeViewItem.DataContext is FileSystemItem { IsViewableText: true } textRow)
         {
+            // Read before the selection below can move the panel.
+            bool closesPanel = _viewerOpen &&
+                string.Equals(_viewerTextPath, textRow.FullPath, StringComparison.OrdinalIgnoreCase);
             ClearMultiSelection();
             _multiSelectAnchor = textRow;
             treeViewItem.IsSelected = true;
             treeViewItem.Focus();
-            ViewHere(textRow);
+            if (closesPanel)
+            {
+                CloseViewer();
+            }
+            else
+            {
+                ViewHere(textRow);
+            }
 
             _itemDragStart = null;
             _itemDragCandidate = null;
@@ -36714,8 +36728,34 @@ public partial class MainWindow : Window
     private FrameworkElement? _viewerTextEditor;
     private CancellationTokenSource? _viewerTextLoad;
     // The file whose text is on screen. Null while the offer is up, while a
-    // read is still out, and for every other kind of file.
+    // read is still out, and for every other kind of file. Written only
+    // through SetViewerTextPath, which keeps the tree row's mark in step.
     private string? _viewerTextPath;
+
+    // THE ROW SAYS ITS TEXT IS ON SCREEN (2026-10-13, on request): its 보기
+    // mark - or its dot - is drawn quieted, and pressing it closes the panel
+    // instead of opening it again. The mark opened the text and then had
+    // nothing to say about it, a button that only ever went one way.
+    // ShownTextPath first, so a row rebuilt from here on (a watcher merge
+    // after the save itself, say) is born knowing; then every loaded row is
+    // set, duplicates under a second root included - the walk the unsaved
+    // marks make, and only when the text actually changes.
+    private void SetViewerTextPath(string? path)
+    {
+        bool changed = !string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase);
+        _viewerTextPath = path;
+        if (!changed)
+        {
+            return;
+        }
+
+        FileSystemService.ShownTextPath = path;
+        foreach (var item in EnumerateLoadedItems(_roots))
+        {
+            item.IsTextShown = path is not null &&
+                               string.Equals(item.FullPath, path, StringComparison.OrdinalIgnoreCase);
+        }
+    }
 
     private void ShowViewerTextOffer(string path)
     {
@@ -36747,7 +36787,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        _viewerTextPath = null;
+        SetViewerTextPath(null);
         bool hadKeyboard = ViewerTextHost.IsKeyboardFocusWithin;
         ViewerTextHost.Visibility = Visibility.Collapsed;
         // Release closes the search; the rows are ours to put away, and the
@@ -36917,7 +36957,7 @@ public partial class MainWindow : Window
 
     private void RevealViewerText(ViewerTextEditor editor, string path, bool takeKeyboard)
     {
-        _viewerTextPath = path;
+        SetViewerTextPath(path);
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
         // The editor closed the search with the old document; the rows go
         // with it.
@@ -37691,7 +37731,7 @@ public partial class MainWindow : Window
                 // then finds the panel already on that path, and its preview
                 // returns early instead of going back to the 보기 offer
                 // (UpdateViewerPreview's same-path return).
-                _viewerTextPath = target;
+                SetViewerTextPath(target);
                 _pendingViewerPath = target;
                 ViewerFileName.Text = Path.GetFileName(target);
                 SetViewerFileInfo(target, 0, 0);

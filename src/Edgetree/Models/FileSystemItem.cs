@@ -516,6 +516,17 @@ public class FileSystemItem : INotifyPropertyChanged
         set => SetField(ref _isTextUnsaved, value);
     }
 
+    private bool _isTextShown;
+
+    // This file's text is on screen in the panel (2026-10-13). Quiets the
+    // row's 보기 mark (or its dot) and turns its press into the panel's close.
+    // Initialized from FileSystemService.ShownTextPath, like IsCut.
+    public bool IsTextShown
+    {
+        get => _isTextShown;
+        set => SetField(ref _isTextShown, value);
+    }
+
     public FileSystemItem(string name, string fullPath, bool isDirectory, FileSystemItem? parent = null)
     {
         Name = name;
@@ -532,6 +543,8 @@ public class FileSystemItem : INotifyPropertyChanged
         _isCut = FileSystemService.CutPaths.Count > 0 && FileSystemService.CutPaths.Contains(fullPath);
         _isTextUnsaved = FileSystemService.UnsavedTextPaths.Count > 0 &&
             FileSystemService.UnsavedTextPaths.Contains(fullPath);
+        _isTextShown = FileSystemService.ShownTextPath is { } shownText &&
+            string.Equals(shownText, fullPath, StringComparison.OrdinalIgnoreCase);
         // Built at all while hidden means it is being shown deliberately - the
         // filter in ReadChildrenFromDisk is what keeps the other case out.
         _isHiddenFolderShown = isDirectory &&

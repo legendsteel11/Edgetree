@@ -253,6 +253,12 @@ public static class FileSystemService
     // holds (SyncViewerTextUnsavedMarks).
     public static readonly HashSet<string> UnsavedTextPaths = new(StringComparer.OrdinalIgnoreCase);
 
+    // The text file the panel's text view has on screen (2026-10-13), or
+    // null - one at a time, so a path rather than a set. Read by every row
+    // built while it is shown, for the reason the sets above are; MainWindow
+    // sets it with the text (SetViewerTextPath).
+    public static string? ShownTextPath;
+
     // Mirror of AppSettings.NetworkLocations, kept in step by MainWindow the
     // same way the two sets above are. A LIST, not a set: these are rows in a
     // tree and the order they were added in is the order they appear.
