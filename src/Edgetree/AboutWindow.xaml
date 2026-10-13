@@ -299,7 +299,11 @@
                      every copy, and the exe IS the copy - so, like the Apache row
                      above, the link opens the text the exe carries. That file
                      holds the icon theme's MIT notice as well, which until now
-                     travelled only in the repository's THIRD-PARTY-NOTICES.md. -->
+                     travelled only in the repository's THIRD-PARTY-NOTICES.md.
+                     Since 2026-10-13 it also carries the CC BY 4.0 attribution
+                     for the replace row's two Codicons marks, which this row
+                     names on its second line - hence a link that no longer says
+                     MIT. -->
                 <TextBlock Text="{x:Static services:Strings.AboutTextViewerLabel}"
                         Style="{StaticResource AboutRowLabelStyle}"/>
                 <TextBlock Text="{x:Static services:Strings.AboutTextViewerValue}"

@@ -48,7 +48,7 @@ SOFTWARE.
 ```
 
 **위의 두 MIT 고지는 배포물에도 들어갑니다.** 실행 파일 안에 담겨 있고, 앱 정보 창의
-"MIT 라이선스 고지 보기"로 열 수 있습니다. 저장소에서는
+"라이선스 고지 보기"로 열 수 있습니다. 저장소에서는
 [src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt](src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt)에
 있습니다.
 
@@ -65,6 +65,18 @@ Apache License 2.0으로 배포됩니다. **§4a가 요구하는 라이선스 �
 들어갑니다** — 실행 파일 안에 담겨 있고, **앱 정보 창의 "Apache License 2.0 전문 보기"** 로
 열 수 있습니다(단일 exe라 옆에 텍스트 파일을 둘 자리가 없어 이렇게 했습니다). 저장소에서는
 [src/Edgetree/Resources/APACHE-2.0.txt](src/Edgetree/Resources/APACHE-2.0.txt)에 있습니다.
+
+## Codicons (Microsoft)
+
+텍스트 뷰어의 바꾸기 줄에 있는 두 버튼 아이콘은 [Codicons](https://github.com/microsoft/vscode-codicons)
+(Microsoft Corporation 및 기여자)의 `replace`, `replace-all`입니다.
+
+**변경 사항**: 각 아이콘의 SVG 경로를 하나의 WPF Path 도형으로 합쳐 앱의 글자색과 크기로
+그리도록 했습니다. 모양 자체는 바꾸지 않았습니다.
+
+[Creative Commons Attribution 4.0 International](https://creativecommons.org/licenses/by/4.0/)
+(CC BY 4.0) 라이선스로 배포됩니다. 이 출처 표시는 배포물에도 들어갑니다. 실행 파일 안의
+고지 파일에 담겨 있고, 앱 정보 창의 "라이선스 고지 보기"로 열 수 있습니다.
 
 ## .NET 8 (Microsoft)
 

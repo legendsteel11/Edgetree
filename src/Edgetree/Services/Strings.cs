@@ -694,6 +694,17 @@ public static class Strings
     public static string TextFindPrevious = "이전 찾기";
     public static string TextFindError = "오류: ";
     public static string TextFindNoMatches = "일치하는 항목 없음";
+    // The replace row under it (2026-10-13), editing only. Notepad's and VS
+    // Code's own names; the buttons are marks, so these two are their
+    // tooltips, each with its key, and TextReplace is the right-click menu's
+    // row. The count comes up where TextFindNoMatches does.
+    public static string TextReplace = "바꾸기";
+    public static string TextReplaceButton = "바꾸기 (Enter)";
+    public static string TextReplaceAll = "모두 바꾸기 (Ctrl+Alt+Enter)";
+    public static string TextReplacedCount = "{0}개 변경됨";
+    // The chevron at the find row's left that folds the replace row away.
+    public static string TextReplaceFold = "바꾸기 접기";
+    public static string TextReplaceUnfold = "바꾸기 펼치기";
     // The text view's edit bar (2026-10-11). The commands are icons, so these
     // are their tooltips, each with its key where it has one.
     public static string ViewerTextEdit = "편집";
@@ -969,11 +980,15 @@ public static class Strings
         "파일·폴더 아이콘: Material Icon Theme (MIT)\n" +
         "화면 글리프: Material Symbols, Google (Apache License 2.0)";
     public static string AboutIconLicenseOpen = "Apache License 2.0 전문 보기";
-    // The text view's component, and the MIT notices the exe carries for it
-    // and for the icon theme (Resources/THIRD-PARTY-NOTICES.txt).
+    // The text view's components, and the notices the exe carries for them
+    // and for the icon theme (Resources/THIRD-PARTY-NOTICES.txt). The link
+    // said "MIT" until the replace marks brought a CC BY 4.0 attribution
+    // into the same file (2026-10-13).
     public static string AboutTextViewerLabel = "텍스트 뷰어";
-    public static string AboutTextViewerValue = "AvalonEdit (MIT)";
-    public static string AboutMitNoticesOpen = "MIT 라이선스 고지 보기";
+    public static string AboutTextViewerValue =
+        "AvalonEdit (MIT)\n" +
+        "바꾸기 아이콘: Codicons, Microsoft (CC BY 4.0)";
+    public static string AboutMitNoticesOpen = "라이선스 고지 보기";
 
     // Tray
     public static string TrayOpen = "열기";
@@ -1356,6 +1371,12 @@ public static class Strings
         TextFindPrevious = "Find previous";
         TextFindError = "Error: ";
         TextFindNoMatches = "No matches";
+        TextReplace = "Replace";
+        TextReplaceButton = "Replace (Enter)";
+        TextReplaceAll = "Replace all (Ctrl+Alt+Enter)";
+        TextReplaceFold = "Hide replace";
+        TextReplaceUnfold = "Show replace";
+        TextReplacedCount = "{0} replaced";
         ViewerTextEdit = "Edit";
         TextEditCancel = "Cancel editing";
         TextEditSave = "Save (Ctrl+S)";
@@ -1509,8 +1530,10 @@ public static class Strings
             "Interface glyphs: Material Symbols, Google (Apache License 2.0)";
         AboutIconLicenseOpen = "Read the Apache License 2.0";
         AboutTextViewerLabel = "Text viewer";
-        AboutTextViewerValue = "AvalonEdit (MIT)";
-        AboutMitNoticesOpen = "Read the MIT notices";
+        AboutTextViewerValue =
+            "AvalonEdit (MIT)\n" +
+            "Replace icons: Codicons, Microsoft (CC BY 4.0)";
+        AboutMitNoticesOpen = "Read the license notices";
 
         TrayOpen = "Open";
         TrayHide = "Send to tray";

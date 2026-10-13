@@ -388,6 +388,11 @@ public class AppSettings
     // in a quieter ink (2026-10-11, on request: on by default, the switch
     // under 멀티미디어 패널 options).
     public bool ViewerTextLineNumbers { get; set; } = true;
+    // The replace row under the text view's find row, folded away by the
+    // chevron at the find row's left (2026-10-13). Remembered, as a find
+    // widget's fold is in an editor; Ctrl+H unfolds it. Not a preset field:
+    // it is how a tool is left, not the app's shape.
+    public bool ViewerTextReplaceShown { get; set; } = true;
     // 즐겨찾기가 있던 자리. 목록은 북마크로 합쳐졌고(MergeFavoritesIntoBookmarks)
     // 이 배열은 비우지 않는다 - 합치기는 한 번뿐이라 되돌릴 길이 여기 말고 없다.
     // 새로 담기는 것은 없으므로 여기 있는 것은 합치기 이전에 담아 둔 것 그대로다.

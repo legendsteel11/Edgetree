@@ -728,7 +728,8 @@ pjh85336@gmail.com 으로 보내주세요.
 
 MIT — [LICENSE.md](LICENSE.md) 참고. 파일·폴더 아이콘은 Material Icon Theme
 프로젝트(MIT), 화면 글리프는 구글 Material Symbols(Apache License 2.0)에서
-가져왔고, 텍스트 뷰어는 AvalonEdit(MIT)로 만들었습니다.
+가져왔고, 텍스트 뷰어는 AvalonEdit(MIT)로 만들었으며 바꾸기 아이콘 두 개는
+Microsoft Codicons(CC BY 4.0)에서 가져왔습니다.
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)를 참고하십시오. 라이선스 전문은 앱이
 직접 포함하고 있어 정보 창에서 열 수 있고, 저장소에서는
 [src/Edgetree/Resources/APACHE-2.0.txt](src/Edgetree/Resources/APACHE-2.0.txt)와

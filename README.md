@@ -740,7 +740,8 @@ and live size and spacing measurement app.
 
 MIT — see [LICENSE.md](LICENSE.md). File and folder icons come from the Material
 Icon Theme project (MIT), the interface glyphs from Google's Material Symbols
-(Apache License 2.0), and the text viewer is built on AvalonEdit (MIT) — see
+(Apache License 2.0), and the text viewer is built on AvalonEdit (MIT), with its
+two replace icons from Microsoft's Codicons (CC BY 4.0) — see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The app carries the licence
 texts itself and opens them from its About window; in the repository they are at
 [src/Edgetree/Resources/APACHE-2.0.txt](src/Edgetree/Resources/APACHE-2.0.txt) and

@@ -41,8 +41,9 @@ namespace SidebarExplorer.App;
 // on screen, so the cost stays the size of the panel. It is the project's
 // first package dependency, accepted for that reason (2026-09-28).
 //
-// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS CLASS - this file and
-// ViewerTextEditor.Markdown.cs, the 서식 commands. MainWindow holds the editor
+// EVERY REFERENCE TO AN AVALONEDIT TYPE LIVES IN THIS CLASS - this file,
+// ViewerTextEditor.Markdown.cs (the 서식 commands) and
+// ViewerTextEditor.Replace.cs (the replace row). MainWindow holds the editor
 // as a plain FrameworkElement and reaches it only through methods that run
 // after the first 보기 press, so a session that never opens a text file never
 // loads the assembly. See MainWindow's ViewerText section.

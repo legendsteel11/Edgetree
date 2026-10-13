@@ -2510,6 +2510,13 @@ public partial class MainWindow : Window
                 OpenViewerTextFind();
                 e.Handled = true;
                 break;
+            // Ctrl+H is the same row opened for replacing (2026-10-13), the
+            // key Notepad gives it. The app had no Ctrl+H of its own.
+            case Key.H when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerTextHost.IsKeyboardFocusWithin:
+                OpenViewerTextFind(forReplace: true);
+                e.Handled = true;
+                break;
             // Ctrl+S saves the text being edited (2026-10-11), with the keyboard
             // in the text or its find row. The app had no Ctrl+S of its own.
             case Key.S when Keyboard.Modifiers == ModifierKeys.Control
@@ -36549,8 +36556,9 @@ public partial class MainWindow : Window
         _viewerTextPath = null;
         bool hadKeyboard = ViewerTextHost.IsKeyboardFocusWithin;
         ViewerTextHost.Visibility = Visibility.Collapsed;
-        // Release closes the search; the row is ours to put away.
+        // Release closes the search; the rows are ours to put away.
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        ViewerTextReplaceBar.Visibility = Visibility.Collapsed;
         ReleaseViewerTextDocument();
 
         // A collapsed element keeps nothing, so the keyboard would be left
@@ -36715,9 +36723,10 @@ public partial class MainWindow : Window
     {
         _viewerTextPath = path;
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
-        // The editor closed the search with the old document; the row goes
+        // The editor closed the search with the old document; the rows go
         // with it.
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        ViewerTextReplaceBar.Visibility = Visibility.Collapsed;
         UpdateViewerTextEditBar();
         ViewerTextHost.Visibility = Visibility.Visible;
 
@@ -36866,11 +36875,18 @@ public partial class MainWindow : Window
     // closes with the file, like
     // everything else in the view.
     //
-    // NoInlining on the two the key handler calls, for the reason the section
-    // above gives: MainWindow_PreviewKeyDown runs on every key of every
-    // session, and must not pull AvalonEdit in by inlining a call that names it.
+    // NoInlining on the three the key handler calls, for the reason the
+    // section above gives: MainWindow_PreviewKeyDown runs on every key of
+    // every session, and must not pull AvalonEdit in by inlining a call that
+    // names it.
+    //
+    // forReplace is Ctrl+H (2026-10-13, Notepad's key): the same row, with
+    // the keyboard put in the replace field once there is something to find -
+    // a selection seeds the pattern, so select, Ctrl+H, type the new text.
+    // With nothing to find yet it goes to the find field first. Reading has
+    // no replace row, so there Ctrl+H is simply find.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private void OpenViewerTextFind()
+    private void OpenViewerTextFind(bool forReplace = false)
     {
         if (_viewerTextEditor is not ViewerTextEditor editor)
         {
@@ -36879,20 +36895,78 @@ public partial class MainWindow : Window
 
         editor.OpenFind();
         ViewerTextFindBar.Visibility = Visibility.Visible;
+        // Ctrl+H asks for the replace row, so a folded one comes back out.
+        if (forReplace && editor.IsEditing && !_settings.ViewerTextReplaceShown)
+        {
+            _settings.ViewerTextReplaceShown = true;
+            _settingsService.Save(_settings);
+        }
+        UpdateViewerTextReplaceBar(editor);
         // After the row has been laid out, or the field it has just shown may
         // not take the focus yet.
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
         {
+            if (forReplace && ViewerTextReplaceBar.IsVisible && ViewerTextFindBox.Text.Length > 0)
+            {
+                ViewerTextReplaceBox.Focus();
+                ViewerTextReplaceBox.SelectAll();
+                return;
+            }
             ViewerTextFindBox.Focus();
             ViewerTextFindBox.SelectAll();
         }));
     }
 
+    // The replace row stands while find is open AND the text is being edited
+    // AND it has not been folded away, so it follows all three: find opening
+    // and closing, editing starting and ending (UpdateViewerTextEditBar), and
+    // the chevron. A row taken away with the keyboard in it hands the keyboard
+    // on - to the find field if that is still there, else the text - or it
+    // would be left with no owner.
+    private void UpdateViewerTextReplaceBar(ViewerTextEditor editor)
+    {
+        bool editing = editor.IsEditing;
+        bool findOpen = ViewerTextFindBar.Visibility == Visibility.Visible;
+        bool unfolded = _settings.ViewerTextReplaceShown;
+        bool show = findOpen && editing && unfolded;
+
+        ViewerTextReplaceToggle.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+        ViewerTextReplaceFoldGlyph.Visibility = unfolded ? Visibility.Visible : Visibility.Collapsed;
+        ViewerTextReplaceUnfoldGlyph.Visibility = unfolded ? Visibility.Collapsed : Visibility.Visible;
+        ViewerTextReplaceToggle.ToolTip = unfolded ? Strings.TextReplaceFold : Strings.TextReplaceUnfold;
+
+        if (!show && ViewerTextReplaceBar.IsKeyboardFocusWithin)
+        {
+            if (findOpen)
+            {
+                ViewerTextFindBox.Focus();
+            }
+            else
+            {
+                editor.TextArea.Focus();
+            }
+        }
+        ViewerTextReplaceBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void ViewerTextReplaceToggle_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        _settings.ViewerTextReplaceShown = !_settings.ViewerTextReplaceShown;
+        _settingsService.Save(_settings);
+        UpdateViewerTextReplaceBar(editor);
+    }
+
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private void CloseViewerTextFind()
     {
-        bool hadKeyboard = ViewerTextFindBar.IsKeyboardFocusWithin;
+        bool hadKeyboard = ViewerTextFindBar.IsKeyboardFocusWithin || ViewerTextReplaceBar.IsKeyboardFocusWithin;
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
+        ViewerTextReplaceBar.Visibility = Visibility.Collapsed;
         if (_viewerTextEditor is ViewerTextEditor editor)
         {
             editor.CloseFind();
@@ -36931,6 +37005,33 @@ public partial class MainWindow : Window
     private void ViewerTextFindClose_Click(object sender, RoutedEventArgs e)
         => CloseViewerTextFind();
 
+    // Enter is 바꾸기, Ctrl+Alt+Enter 모두 바꾸기 - VS Code's pair. A Korean
+    // composition still open arrives as ImeProcessed, so the Enter that
+    // finishes a syllable never replaces.
+    private void ViewerTextReplaceBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key is not (Key.Enter or Key.Return))
+        {
+            return;
+        }
+
+        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt))
+        {
+            ViewerTextReplaceAll_Click(sender, e);
+        }
+        else
+        {
+            ViewerTextReplace_Click(sender, e);
+        }
+        e.Handled = true;
+    }
+
+    private void ViewerTextReplace_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ReplaceNext(ViewerTextReplaceBox.Text);
+
+    private void ViewerTextReplaceAll_Click(object sender, RoutedEventArgs e)
+        => (_viewerTextEditor as ViewerTextEditor)?.ReplaceAll(ViewerTextReplaceBox.Text);
+
     // ----- The text view's edit bar (2026-10-11) -------------------------------
     //
     // Across the top of the text, with the find row under it (the author's
@@ -36964,6 +37065,7 @@ public partial class MainWindow : Window
         ViewerTextSaveButton.IsEnabled = editor.HasUnsavedEdits && !_viewerTextSaving;
         ViewerTextUndoButton.IsEnabled = editor.CanUndoEdit;
         ViewerTextRedoButton.IsEnabled = editor.CanRedoEdit;
+        UpdateViewerTextReplaceBar(editor);
     }
 
     // Keeps FileSystemService.UnsavedTextPaths, and the tree rows' marks, equal
@@ -37064,7 +37166,7 @@ public partial class MainWindow : Window
         if (sender is ContextMenu menu && _viewerTextEditor is ViewerTextEditor editor)
         {
             bool editing = editor.IsEditing;
-            foreach (string tag in new[] { "undo", "redo", "undoSep", "cut", "paste", "saveSep", "save", "saveAs" })
+            foreach (string tag in new[] { "undo", "redo", "undoSep", "cut", "paste", "replace", "saveSep", "save", "saveAs" })
             {
                 if (FindTaggedMenuElement<FrameworkElement>(menu, tag) is { } row)
                 {
@@ -37125,6 +37227,8 @@ public partial class MainWindow : Window
         => (_viewerTextEditor as ViewerTextEditor)?.Cut();
 
     private void ViewerTextFind_Click(object sender, RoutedEventArgs e) => OpenViewerTextFind();
+
+    private void ViewerTextReplaceMenu_Click(object sender, RoutedEventArgs e) => OpenViewerTextFind(forReplace: true);
 
     private void ViewerTextFormatBold_Click(object sender, RoutedEventArgs e)
         => (_viewerTextEditor as ViewerTextEditor)?.ToggleWrap("**");
