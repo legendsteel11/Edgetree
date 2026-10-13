@@ -2553,10 +2553,13 @@ public partial class MainWindow : Window
             // the key that closes a tab or a document window nearly everywhere,
             // and the panel had no key at all. Wherever the keyboard is: the
             // panel's own close does the rest (full screen, background play,
-            // edits kept, the keyboard handed back to the tree). Close only;
-            // the title bar's icon still opens it.
-            case Key.W when Keyboard.Modifiers == ModifierKeys.Control && _viewerOpen:
-                CloseViewer();
+            // edits kept, the keyboard handed back to the tree).
+            // AND OPENS IT AGAIN (same day, on request): it was close only at
+            // first, which left the title bar's icon as the one way back. The
+            // app has no tabs or documents for a second Ctrl+W to close
+            // instead. See ToggleViewerByKey for what opening does.
+            case Key.W when Keyboard.Modifiers == ModifierKeys.Control:
+                ToggleViewerByKey();
                 e.Handled = true;
                 break;
             // Ctrl+S saves the text being edited (2026-10-11). The app had no
@@ -24045,6 +24048,44 @@ public partial class MainWindow : Window
         else
         {
             OpenViewer();
+        }
+    }
+
+    // Ctrl+W (2026-10-13): the title bar's icon, both ways - plus, opening
+    // onto a TXT/MD file, the 보기 press as well, so the key is the tree row's
+    // 보기 mark from the keyboard (its tooltip names it, on request). Without
+    // that the panel came up on the 보기 offer and the text still needed a
+    // click. Opening onto anything else keeps the keyboard where it is, as
+    // the icon does. OpenViewer declines only from the auto-hide sliver,
+    // where no key arrives; it runs the preview, so _pendingViewerPath is the
+    // file it opened onto - the tree's selection, or the result the search
+    // view links it to. A file with unsaved edits is already back on screen
+    // by then (restored by selection, keyboard left in the tree), and only
+    // the keyboard is still to move - what the mark does for it too.
+    private void ToggleViewerByKey()
+    {
+        if (_viewerOpen)
+        {
+            CloseViewer();
+            return;
+        }
+
+        OpenViewer();
+        // IsDirectory: the text test reads the extension only, and a folder
+        // can be named like a file.
+        if (!_viewerOpen || ViewerItem is not { IsDirectory: false } ||
+            _pendingViewerPath is not { } path || !IsViewerText(path))
+        {
+            return;
+        }
+
+        if (string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            FocusShownViewerText();
+        }
+        else
+        {
+            OpenPendingViewerText(beginEdit: false);
         }
     }
 

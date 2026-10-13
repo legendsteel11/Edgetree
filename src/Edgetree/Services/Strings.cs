@@ -753,6 +753,9 @@ public static class Strings
     public static string TextSaveMissingBody = "'{0}'을(를) 찾을 수 없습니다. 이 위치에 새로 저장할까요?";
     public static string TextSaveUnencodableBody = "ANSI(코드 페이지 {0})로 저장할 수 없는 문자가 있습니다. UTF-8로 저장할까요?";
     public static string TextSaveFailedTitle = "저장할 수 없습니다";
+    // The tree row's 보기 mark on a TXT/MD row, with the key that does the same
+    // from the keyboard.
+    public static string TextViewMark = "보기 (Ctrl+W)";
     // The tree row's mark for a file with edits not yet saved.
     public static string TextUnsavedMark = "저장하지 않은 변경 사항";
     // 종료 with such files (titled TrayExit). {0} is the file names, one per
@@ -1413,6 +1416,7 @@ public static class Strings
         TextSaveMissingBody = "\"{0}\" could not be found. Save it here as a new file?";
         TextSaveUnencodableBody = "Some characters cannot be saved in ANSI (code page {0}). Save as UTF-8 instead?";
         TextSaveFailedTitle = "Could not save";
+        TextViewMark = "View (Ctrl+W)";
         TextUnsavedMark = "Unsaved changes";
         TextExitUnsavedBody = "There are unsaved changes.\n\n{0}\n\nSave them before exiting?";
         TextExitUnsavedMore = "and {0} more";
