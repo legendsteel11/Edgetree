@@ -9578,7 +9578,46 @@
                                          fresh decision per frame. -->
                                     <Setter Property="ToolTipService.InitialShowDelay"
                                             Value="250"/>
-                                    <Setter Property="ToolTip" Value="{Binding Name}"/>
+                                    <!-- THE TREE ROW'S TOOLTIP, LINE FOR LINE
+                                         (2026-10-13, on request): the name, and
+                                         under it size and last change in the
+                                         tree's smaller secondary line, from the
+                                         same TooltipDetail on the same item and
+                                         read the same way when it opens
+                                         (FilmstripCellTooltip_Opening). The name
+                                         rather than the tree's full path: the
+                                         cells share a folder, so the path would
+                                         be the same on every one. The tree's
+                                         font size and showing time too, so the
+                                         two read as one kind of tooltip. -->
+                                    <Setter Property="ToolTipService.ShowDuration"
+                                            Value="20000"/>
+                                    <EventSetter Event="ToolTipOpening"
+                                            Handler="FilmstripCellTooltip_Opening"/>
+                                    <Setter Property="ToolTip">
+                                        <Setter.Value>
+                                            <ToolTip FontSize="{DynamicResource MenuFontSize}">
+                                                <StackPanel>
+                                                    <TextBlock Text="{Binding Name}"/>
+                                                    <TextBlock Text="{Binding Item.TooltipDetail}"
+                                                            FontSize="{DynamicResource TreeTooltipDetailFontSize}"
+                                                            Foreground="{DynamicResource SecondaryForeground}">
+                                                        <TextBlock.Style>
+                                                            <Style TargetType="TextBlock">
+                                                                <Style.Triggers>
+                                                                    <DataTrigger Binding="{Binding Item.TooltipDetail}"
+                                                                            Value="{x:Null}">
+                                                                        <Setter Property="Visibility"
+                                                                                Value="Collapsed"/>
+                                                                    </DataTrigger>
+                                                                </Style.Triggers>
+                                                            </Style>
+                                                        </TextBlock.Style>
+                                                    </TextBlock>
+                                                </StackPanel>
+                                            </ToolTip>
+                                        </Setter.Value>
+                                    </Setter>
                                     <Setter Property="Template">
                                         <Setter.Value>
                                             <ControlTemplate TargetType="ListBoxItem">

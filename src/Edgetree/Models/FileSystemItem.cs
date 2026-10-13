@@ -170,9 +170,10 @@ public class FileSystemItem : INotifyPropertyChanged
     // and even a date taken at listing time would go stale on the first save
     // in place - the drive watcher leaves LastWrite out on purpose (see
     // StartDriveWatchers), so nothing would ever correct it, and a wrong "last
-    // modified" is worse than none. MainWindow.TreeRowTooltip_Opening fills
-    // this; the previous answer stays up while the next read is out, so a
-    // second hover on a slow share does not open one line short.
+    // modified" is worse than none. MainWindow.FillTooltipDetailAsync fills
+    // this, for the tree row's tooltip and the thumbnail cell's alike
+    // (2026-10-13); the previous answer stays up while the next read is out,
+    // so a second hover on a slow share does not open one line short.
     private string? _tooltipDetail;
     public string? TooltipDetail
     {

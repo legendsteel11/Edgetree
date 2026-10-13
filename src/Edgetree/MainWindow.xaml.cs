@@ -14614,8 +14614,30 @@ public partial class MainWindow : Window
         // 더 보기 slot (IsShowMore covers all three) have no path of their own.
         if (sender is not FrameworkElement { DataContext: FileSystemItem item } ||
             item.IsShowMore || item.IsPlaceholder || item.IsBottomGap ||
-            item.DriveKind is not null ||
-            FileSystemService.IsNetworkPathUnreachable(item.FullPath))
+            item.DriveKind is not null)
+        {
+            return;
+        }
+
+        await FillTooltipDetailAsync(item);
+    }
+
+    // The same line on a thumbnail's tooltip (2026-10-13, on request): the tree
+    // row said what a file weighs and when it last changed, and the cell beside
+    // it said only its name - so comparing two pictures meant looking from one
+    // to the other. Written to the cell's tree item, the very object the tree's
+    // tooltip reads, so the two can never disagree about one file.
+    private async void FilmstripCellTooltip_Opening(object sender, ToolTipEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: FilmstripCell cell })
+        {
+            await FillTooltipDetailAsync(cell.Item);
+        }
+    }
+
+    private async Task FillTooltipDetailAsync(FileSystemItem item)
+    {
+        if (FileSystemService.IsNetworkPathUnreachable(item.FullPath))
         {
             return;
         }
