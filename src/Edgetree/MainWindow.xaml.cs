@@ -3627,9 +3627,18 @@ public partial class MainWindow : Window
     // playing in the background is not cut by this - CloseViewer keeps
     // background play, and without background play a track that is not the
     // selection is not playing at all.
+    //
+    // A TEXT ON SCREEN IS NOT AN EMPTY PANEL (2026-10-13, on report). A text
+    // file is not a carousel item, so the panel showing its text - read or
+    // being edited - was folded on every hide as if it held nothing, and came
+    // back closed. It rides along now while that text is the selection's; the
+    // 보기 offer alone (nothing read yet) still folds.
     private void FoldEmptyViewerBeforeHide()
     {
-        if (_viewerOpen && (ViewerItem is not { } shown || !IsViewerCarouselItem(shown)))
+        if (_viewerOpen &&
+            (ViewerItem is not { } shown ||
+             (!IsViewerCarouselItem(shown) &&
+              !string.Equals(_viewerTextPath, shown.FullPath, StringComparison.OrdinalIgnoreCase))))
         {
             CloseViewer();
         }
@@ -26606,15 +26615,21 @@ public partial class MainWindow : Window
 
     // 보기 / 재생 on a tree row: hand this file to the app's own panel.
     //
-    // IT ALWAYS PUTS THE PANEL ON SCREEN. "다른 플레이어로 재생하면 그 플레이어가
-    // 실행되잖아요" - handing a file to our viewer has to do the same thing every
-    // other player does, so there is no background start from this route.
+    // IT ALWAYS PUTS THE PANEL ON SCREEN. Handing a file to our player has to
+    // do what handing it to any other player does - that player comes up - so
+    // there is no background start from this route.
     //
-    // Collapsed to the sliver, the panel declines to open at all. Rather than
-    // refuse the menu item - which would make it a liar on the one row it was
-    // asked from - the pin comes off first and the play follows. That is the
-    // pin button's own path, and reaching this menu means the window is peeked
-    // open anyway: a sliver has no tree to right-click.
+    // UNDER AUTO-HIDE, 재생 PINS AND 보기 DOES NOT (2026-10-13, on report). Both
+    // used to take the pin off whenever auto-hide was on. The reason given was
+    // the sliver, where the panel declines to open at all - but these rows are
+    // only reachable in a revealed peek, and OpenViewer has opened in a peek
+    // since 2026-08-08, so for 보기 the pin came off for nothing: a text file,
+    // whose only doors are these, pinned the window every time it was opened.
+    // A picture or a text shown in a peek now rides the next hide and reveal
+    // the way a picture opened by selection always has. 재생 keeps the pin: a
+    // film started from here should not slide away when the pointer leaves.
+    // Collapsed for real (no peek), any of them still takes the pin off - the
+    // panel could not open otherwise.
     private void ViewHere_Click(object sender, RoutedEventArgs e)
     {
         if (ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } item)
@@ -26692,7 +26707,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_settings.IsAutoHidden)
+        // See ViewHere_Click's note: 재생 pins, 보기 leaves a peek a peek.
+        if (_settings.IsAutoHidden && (IsViewerPlayable(item.FullPath) || !_isAutoHideRevealed))
         {
             ExitAutoHide();
         }
