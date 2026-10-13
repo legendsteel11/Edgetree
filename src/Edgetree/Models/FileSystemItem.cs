@@ -1056,15 +1056,54 @@ public class FileSystemItem : INotifyPropertyChanged
                 : loaded);
         }
 
+        // The row of this folder that holds the tree's selection - the selected
+        // item itself, or the ancestor of it that is this folder's child. Kept
+        // in place by the move pass below, and kept in the tree by the cut.
+        FileSystemItem? anchor = null;
+        for (var row = selected; row is not null; row = row.Parent)
+        {
+            if (ReferenceEquals(row.Parent, this))
+            {
+                anchor = row;
+                break;
+            }
+        }
+
         // Same cap semantics as PopulateCapped/ShowAllChildren: overflow only
         // exists while not showing all, and shrinking back under the cap
         // returns the folder to the plain uncapped state.
+        //
+        // THE CUT NEVER TAKES THE SELECTION'S ROW (2026-10-13). A new order can
+        // carry that row past the cap - a re-sort does it readily (a 정렬 기준
+        // picked from a file row re-sorts the file's own folder, newest first
+        // sending it from the top to the far end), and so can a watcher merge
+        // when files arrive ahead of it. Cut off there, the row leaves
+        // Children, and a TreeViewItem whose selected child is removed takes
+        // the selection itself - the panel would leave the file with it (the
+        // same hand-over as in the move note below, not measured on this
+        // path). So the visible part reaches as far as that
+        // row, the way ShowChildrenUpTo uncovers a thumbnail's row, and the
+        // rest goes to the overflow as before. The row still moves to its new
+        // place in the order; only being cut away is prevented.
         _overflow.Clear();
         List<FileSystemItem> visibleTarget = target;
         if (!_showingAll && target.Count > DisplayCap)
         {
-            visibleTarget = target.GetRange(0, DisplayCap);
-            _overflow.AddRange(target.GetRange(DisplayCap, target.Count - DisplayCap));
+            int cut = DisplayCap;
+            int held = anchor is null ? -1 : target.IndexOf(anchor);
+            if (held >= cut)
+            {
+                cut = held + 1;
+            }
+            visibleTarget = target.GetRange(0, cut);
+            _overflow.AddRange(target.GetRange(cut, target.Count - cut));
+            // The held row was the last one: nothing is held back, and the
+            // folder is simply revealed - with the way back out a reveal gets,
+            // as ShowChildrenUpTo leaves it in the same case.
+            if (_overflow.Count == 0)
+            {
+                _showingAll = true;
+            }
         }
         else if (target.Count <= DisplayCap)
         {
@@ -1105,16 +1144,7 @@ public class FileSystemItem : INotifyPropertyChanged
         // do not hold the selection lose their containers. Measured in the
         // same harness: bringing the 9,000th of 10,000 rows to the top this way
         // took 9,000 Moves in 29ms, 54ms with the layout, selection intact.
-        FileSystemItem? anchor = null;
-        for (var row = selected; row is not null; row = row.Parent)
-        {
-            if (ReferenceEquals(row.Parent, this))
-            {
-                anchor = row;
-                break;
-            }
-        }
-
+        // (anchor is found above, before the cut.)
         for (int i = 0; i < visibleTarget.Count; i++)
         {
             var wanted = visibleTarget[i];
