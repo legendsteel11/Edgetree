@@ -159,13 +159,18 @@ public class AppSettings
     // Off by default: an app that moves the window on its own has to be asked.
     public bool ViewerFollowsSelection { get; set; } = false;
 
-    // The help window's size, because it is the one dialog here that can be
-    // resized and therefore the one someone can have an opinion about. 0 means
-    // "never sized by hand" - the window works out its own first size then, and
-    // deliberately not from the content: the document is several screens long,
-    // so sizing to it opens a window as tall as the monitor.
+    // The help window's size, because it is a dialog that can be resized and
+    // therefore one someone can have an opinion about. 0 means "never sized by
+    // hand" - the window works out its own first size then, and deliberately
+    // not from the content: the document is several screens long, so sizing
+    // to it opens a window as tall as the monitor.
     public double HelpWindowWidth { get; set; } = 0;
     public double HelpWindowHeight { get; set; } = 0;
+
+    // The print preview's size, the other resizable dialog (2026-10-13), kept
+    // for the same reason. 0 = one page fitted to its default width.
+    public double PrintPreviewWidth { get; set; } = 0;
+    public double PrintPreviewHeight { get; set; } = 0;
 
     // Playback marks: places in a film someone wanted to be able to come back
     // to, kept per file and shown as ticks over the position bar.

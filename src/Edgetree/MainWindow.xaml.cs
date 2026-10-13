@@ -37809,9 +37809,10 @@ public partial class MainWindow : Window
     // The view's 인쇄 / Ctrl+P print the text on screen; the tree row's 인쇄
     // prints the file's text as the panel would have it - this process's
     // copy with its edits if it holds one, else the disk copy of edits from an
-    // earlier session, else the file as read. The page itself is
-    // ViewerTextEditor.PrintText's. NoInlining, both: they name the editor's
-    // type, and the key handler and the row menu are hot paths.
+    // earlier session, else the file as read. Both open the preview first
+    // (PrintPreviewWindow); its 인쇄… is ViewerTextEditor.PrintText, which owns
+    // the page. NoInlining, all three: they name the editor's type, and the
+    // key handler and the row menu are hot paths.
     private void ViewerTextPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerText();
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -37820,8 +37821,26 @@ public partial class MainWindow : Window
         if (_viewerTextEditor is ViewerTextEditor { ShownTextForPrint: var (text, markdown) } &&
             _viewerTextPath is { } path)
         {
-            ReportPrintFailure(ViewerTextEditor.PrintText(text, Path.GetFileName(path), markdown));
+            ShowTextPrintPreview(text, Path.GetFileName(path), markdown);
         }
+    }
+
+    // Modal, beside the header like F1, so the text cannot change under the
+    // pages it shows.
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ShowTextPrintPreview(string text, string fileName, bool markdown)
+    {
+        var document = ViewerTextEditor.BuildPreview(text, fileName, markdown);
+        var window = new PrintPreviewWindow(document, fileName, () =>
+        {
+            ReportPrintFailure(ViewerTextEditor.PrintText(text, fileName, markdown, out bool printed));
+            return printed;
+        }, _settings, () => _settingsService.Save(_settings))
+        {
+            Owner = this,
+        };
+        PositionBesideHeader(window);
+        window.ShowDialog();
     }
 
     // A file over the size limit prints what the view would show of it: its
@@ -37845,7 +37864,7 @@ public partial class MainWindow : Window
             }
         }
 
-        ReportPrintFailure(ViewerTextEditor.PrintText(text, Path.GetFileName(path), IsViewerMarkdown(path)));
+        ShowTextPrintPreview(text, Path.GetFileName(path), IsViewerMarkdown(path));
     }
 
     private void ReportPrintFailure(string? message)

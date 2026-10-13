@@ -19,8 +19,13 @@ using Point = System.Windows.Point;
 
 namespace SidebarExplorer.App;
 
-// PRINTING A TEXT (2026-10-13, on request): Windows' print dialog, then the
-// text as the panel has it - unsaved edits included - on paper. The app does
+// PRINTING A TEXT (2026-10-13, on request): a preview of the pages
+// (BuildPreview, shown in PrintPreviewWindow), then Windows' print dialog,
+// then the text as the panel has it - unsaved edits included - on paper.
+// The file name is not put into the PDF printer's save box: Microsoft Print
+// to PDF ignores the job name there, and the one way round it
+// (StartXpsPrintJob with an output path) is an API Microsoft lists as
+// unsupported - set aside as not worth that risk (2026-10-13). The app does
 // it rather than handing the file to the shell: a .txt's print verb is
 // Notepad's /p (the file on disk, not the edits), and a .md has none at all.
 // Pictures go to the shell's own photo printing window instead (MainWindow).
@@ -56,11 +61,13 @@ public sealed partial class ViewerTextEditor
         => _session is { } session ? (session.Document.Text, session.Markdown) : null;
 
     // Asks Windows' print dialog, then prints. Null when it printed or the
-    // dialog was cancelled; the failure's message otherwise, for the caller
-    // to show. The dialog is owned by the application's main window (WPF's
-    // PrintDialog takes Application.MainWindow), so it opens over the app.
-    public static string? PrintText(string text, string title, bool markdown)
+    // dialog was cancelled - printed says which; the failure's message
+    // otherwise, for the caller to show. The dialog is owned by the
+    // application's main window (WPF's PrintDialog takes
+    // Application.MainWindow), so it opens over the app.
+    public static string? PrintText(string text, string title, bool markdown, out bool printed)
     {
+        printed = false;
         var dialog = new PrintDialog { UserPageRangeEnabled = true };
         if (dialog.ShowDialog() != true)
         {
@@ -82,6 +89,7 @@ public sealed partial class ViewerTextEditor
             }
 
             dialog.PrintDocument(new FramedPaginator(inner, title, first, count), title);
+            printed = true;
             return null;
         }
         catch (Exception ex) when (ex is PrintQueueException or PrintSystemException
@@ -140,16 +148,93 @@ public sealed partial class ViewerTextEditor
     // The paper the dialog settled on, turned for landscape. The printable
     // area is the fallback for a driver that names no media size.
     private static Size PrintPageSize(PrintDialog dialog)
+        => PageSizeOf(dialog.PrintTicket, new Size(dialog.PrintableAreaWidth, dialog.PrintableAreaHeight));
+
+    private static Size PageSizeOf(PrintTicket? ticket, Size fallback)
     {
-        var ticket = dialog.PrintTicket;
-        double width = ticket.PageMediaSize?.Width ?? dialog.PrintableAreaWidth;
-        double height = ticket.PageMediaSize?.Height ?? dialog.PrintableAreaHeight;
-        bool landscape = ticket.PageOrientation is PageOrientation.Landscape or PageOrientation.ReverseLandscape;
+        double width = ticket?.PageMediaSize?.Width ?? fallback.Width;
+        double height = ticket?.PageMediaSize?.Height ?? fallback.Height;
+        bool landscape = ticket?.PageOrientation is PageOrientation.Landscape or PageOrientation.ReverseLandscape;
         if (landscape == width < height)
         {
             (width, height) = (height, width);
         }
         return new Size(width, height);
+    }
+
+    // ----- The preview (2026-10-13, on request) -----------------------------------
+    //
+    // The pages exactly as they will print - the same FramedPaginator - on the
+    // default printer's paper as its user has set it, A4 when there is no
+    // printer to ask. The print dialog can still change the paper, and then
+    // the pages are laid out again for it; the preview shows what one press
+    // of 인쇄 would give on the paper most likely to be in the tray.
+    private static readonly Size A4 = new(210 / 25.4 * 96, 297 / 25.4 * 96);
+
+    private static Size DefaultPrintPageSize()
+    {
+        try
+        {
+            using var queue = LocalPrintServer.GetDefaultPrintQueue();
+            return PageSizeOf(queue.UserPrintTicket ?? queue.DefaultPrintTicket, A4);
+        }
+        catch (Exception ex) when (ex is PrintSystemException or InvalidOperationException
+                                       or System.ComponentModel.Win32Exception)
+        {
+            return A4;
+        }
+    }
+
+    // A FixedDocument of the framed pages, for a DocumentViewer. Each page's
+    // visual is laid on a FixedPage through PageVisualHost; every page is
+    // built here, once, so no visual is ever asked to have two parents.
+    public static FixedDocument BuildPreview(string text, string title, bool markdown)
+    {
+        var pageSize = DefaultPrintPageSize();
+        var pages = FramedPages(text, title, markdown, pageSize, out var highlighter);
+        try
+        {
+            var document = new FixedDocument();
+            document.DocumentPaginator.PageSize = pageSize;
+            for (int i = 0; i < pages.PageCount; i++)
+            {
+                var page = new FixedPage
+                {
+                    Width = pageSize.Width,
+                    Height = pageSize.Height,
+                    Background = Brushes.White,
+                };
+                page.Children.Add(new PageVisualHost(pages.GetPage(i).Visual, pageSize));
+                var content = new PageContent();
+                ((System.Windows.Markup.IAddChild)content).AddChild(page);
+                document.Pages.Add(content);
+            }
+            return document;
+        }
+        finally
+        {
+            highlighter?.Dispose();
+        }
+    }
+
+    // One printed page's visual as an element a FixedPage can hold.
+    private sealed class PageVisualHost : FrameworkElement
+    {
+        private readonly Visual _page;
+        private readonly Size _size;
+
+        public PageVisualHost(Visual page, Size size)
+        {
+            _page = page;
+            _size = size;
+            AddVisualChild(page);
+        }
+
+        protected override int VisualChildrenCount => 1;
+
+        protected override Visual GetVisualChild(int index) => _page;
+
+        protected override Size MeasureOverride(Size availableSize) => _size;
     }
 
     // One paragraph, a LineBreak between lines, as AvalonEdit's DocumentPrinter

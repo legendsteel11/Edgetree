@@ -759,6 +759,12 @@ public static class Strings
     // A printed text's page footer: {0} this page, {1} all pages.
     public static string TextPrintPageFormat = "{0} / {1}";
     public static string TextPrintFailedTitle = "인쇄할 수 없습니다";
+    // The print preview window: its title, the button that opens Windows'
+    // print dialog, and the page in view beside it ({0} that page, {1} all
+    // pages - the printed footer's form).
+    public static string PrintPreviewTitle = "인쇄 미리 보기";
+    public static string PrintPreviewPrint = "인쇄…";
+    public static string PrintPreviewPages = "{0} / {1}";
     // The tree row's 보기 mark on a TXT/MD row, with the key that does the same
     // from the keyboard.
     public static string TextViewMark = "보기 (Ctrl+W)";
@@ -1426,6 +1432,9 @@ public static class Strings
         TextSaveFailedTitle = "Could not save";
         TextPrintPageFormat = "{0} / {1}";
         TextPrintFailedTitle = "Could not print";
+        PrintPreviewTitle = "Print preview";
+        PrintPreviewPrint = "Print…";
+        PrintPreviewPages = "{0} / {1}";
         TextViewMark = "View (Ctrl+W)";
         TextUnsavedMark = "Unsaved changes";
         TextExitUnsavedBody = "There are unsaved changes.\n\n{0}\n\nSave them before exiting?";
