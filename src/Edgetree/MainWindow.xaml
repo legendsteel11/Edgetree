@@ -1256,9 +1256,18 @@
             <MenuItem Header="{x:Static services:Strings.MenuRefresh}"
                     Click="RefreshAll_Click"/>
             <Separator/>
-            <MenuItem Header="{x:Static services:Strings.MenuNewFolder}"
-                    InputGestureText="F7"
-                    Click="NewFolder_Click"/>
+            <!-- 새로 만들기 as a submenu (2026-10-13) once the text files joined
+                 the folder: three rows here would have lengthened both menus
+                 for something done now and then. -->
+            <MenuItem Header="{x:Static services:Strings.MenuNew}">
+                <MenuItem Header="{x:Static services:Strings.MenuNewFolder}"
+                        InputGestureText="F7"
+                        Click="NewFolder_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuNewTextFile}"
+                        Click="NewTextFile_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuNewMarkdownFile}"
+                        Click="NewMarkdownFile_Click"/>
+            </MenuItem>
             <Separator/>
             <!-- The three view lists, reachable without a row to right-click -
                  which is the whole point of this menu (2026-08-02). 북마크 has no
@@ -1567,11 +1576,18 @@
                     InputGestureText="Ctrl+V"
                     Click="PasteItem_Click"/>
             <!-- Next to paste, because both make something new in this folder.
-                 It used to lead the folder group further up. -->
-            <MenuItem Header="{x:Static services:Strings.MenuNewFolder}"
-                    Tag="newFolder"
-                    InputGestureText="F7"
-                    Click="NewFolder_Click"/>
+                 It used to lead the folder group further up. A submenu since
+                 the text files joined it - see the empty-space menu. -->
+            <MenuItem Header="{x:Static services:Strings.MenuNew}"
+                    Tag="new">
+                <MenuItem Header="{x:Static services:Strings.MenuNewFolder}"
+                        InputGestureText="F7"
+                        Click="NewFolder_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuNewTextFile}"
+                        Click="NewTextFile_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuNewMarkdownFile}"
+                        Click="NewMarkdownFile_Click"/>
+            </MenuItem>
             <!-- 압축 sits with paste rather than in a group of its own: it
                  makes a new file out of the selection, same as paste does, and
                  an extra separator costs every right-click height the menu was

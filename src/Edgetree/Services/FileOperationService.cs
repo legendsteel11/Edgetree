@@ -538,9 +538,13 @@ public static class FileOperationService
     // appends " (2)", " (3)", ... instead of overwriting. Shared with
     // ArchiveService so a second 압축 of the same row numbers up the same way
     // the rest of the app does.
-    internal static string GetUniqueDestination(string path)
+    // alsoTaken: names to skip that are not on disk (TryCreateEmptyFile).
+    internal static string GetUniqueDestination(string path, Predicate<string>? alsoTaken = null)
     {
-        if (!File.Exists(path) && !Directory.Exists(path))
+        bool Free(string candidate) =>
+            !File.Exists(candidate) && !Directory.Exists(candidate) && alsoTaken?.Invoke(candidate) != true;
+
+        if (Free(path))
         {
             return path;
         }
@@ -552,7 +556,7 @@ public static class FileOperationService
         for (int i = 2; ; i++)
         {
             string candidate = Path.Combine(dir, $"{name} ({i}){ext}");
-            if (!File.Exists(candidate) && !Directory.Exists(candidate))
+            if (Free(candidate))
             {
                 return candidate;
             }
@@ -569,6 +573,36 @@ public static class FileOperationService
         {
             string path = GetUniqueDestination(Path.Combine(parentDirectory, Strings.NewFolderDefaultName));
             Directory.CreateDirectory(path);
+            createdPath = path;
+            return true;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            error = ex.Message;
+            return false;
+        }
+    }
+
+    // 새로 만들기's text and Markdown rows (2026-10-13): numbered the same way,
+    // and EMPTY - zero bytes is UTF-8 without a BOM as far as the reader is
+    // concerned (TextFileReader), so the first save writes UTF-8 with none.
+    // CreateNew rather than Create: the name was free a moment ago, and if
+    // something else took it since, failing beats truncating its file.
+    //
+    // A NAME STILL HOLDING UNSAVED EDITS COUNTS AS TAKEN. A deleted file's
+    // edits are kept under its path (UnsavedTextStore), and a new empty file
+    // landing on that path would open showing them as its own.
+    public static bool TryCreateEmptyFile(string parentDirectory, string fileName, out string? createdPath, out string? error)
+    {
+        createdPath = null;
+        error = null;
+        try
+        {
+            string path = GetUniqueDestination(
+                Path.Combine(parentDirectory, fileName), FileSystemService.UnsavedTextPaths.Contains);
+            using (new FileStream(path, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+            }
             createdPath = path;
             return true;
         }

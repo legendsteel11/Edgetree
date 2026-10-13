@@ -174,7 +174,12 @@ public static class Strings
     public static string BookmarkClearAllConfirmBody = "북마크 {0}개를 모두 해제하겠습니까?";
     public static string BookmarkShortcutNext = "다음 북마크";
     public static string BookmarkShortcutPrev = "이전 북마크";
-    public static string MenuNewFolder = "새 폴더";
+    // The 새로 만들기 submenu (2026-10-13) and its rows, named the way
+    // Explorer's own submenu names them: the kind of thing, not "새 ...".
+    public static string MenuNew = "새로 만들기";
+    public static string MenuNewFolder = "폴더";
+    public static string MenuNewTextFile = "텍스트 문서";
+    public static string MenuNewMarkdownFile = "마크다운 문서";
     public static string MenuRefresh = "새로고침";
     // THE OPEN GROUP NAMES ITS DESTINATIONS. 열기 on its own said nothing about
     // where, which only became a question once the app grew a viewer of its own
@@ -977,6 +982,11 @@ public static class Strings
     // Anything a user can SEE belongs here, including text that ends up as a
     // filename.
     public static string NewFolderDefaultName = "새 폴더";
+    // The same rule for the two empty files 새로 만들기 makes (2026-10-13). The
+    // text one is Explorer's own name for it.
+    public static string NewTextFileDefaultName = "새 텍스트 문서.txt";
+    public static string NewMarkdownFileDefaultName = "새 마크다운 문서.md";
+    public static string NewFileFailedTitle = "새 파일 만들기 실패";
     public static string RenameFailedBody = "이름을 바꿀 수 없습니다.";
     public static string DeleteConfirmTitle = "삭제 확인";
     public static string DeleteConfirmBody = "'{0}'을(를) 휴지통으로 보낼까요?";
@@ -1136,7 +1146,10 @@ public static class Strings
         BookmarkClearAllConfirmBody = "Clear every bookmark? ({0})";
         BookmarkShortcutNext = "Next bookmark";
         BookmarkShortcutPrev = "Previous bookmark";
-        MenuNewFolder = "New folder";
+        MenuNew = "New";
+        MenuNewFolder = "Folder";
+        MenuNewTextFile = "Text document";
+        MenuNewMarkdownFile = "Markdown document";
         MenuRefresh = "Refresh";
         MenuPathBarAtTop = "Show path bar at top";
         MenuExpandOnSingleClick = "Expand on a single click";
@@ -1471,6 +1484,9 @@ public static class Strings
         NewFolderFailedTitle = "Failed to create folder";
         RenameFailedTitle = "Rename failed";
         NewFolderDefaultName = "New folder";
+        NewTextFileDefaultName = "New Text Document.txt";
+        NewMarkdownFileDefaultName = "New Markdown Document.md";
+        NewFileFailedTitle = "Failed to create file";
         RenameFailedBody = "Could not rename this item.";
         DeleteConfirmTitle = "Confirm delete";
         DeleteConfirmBody = "Send \"{0}\" to the Recycle Bin?";

@@ -17301,7 +17301,7 @@ public partial class MainWindow : Window
             var thumbnailSeparator = FindTaggedMenuElement<Separator>(menu, "thumbnailSep");
             var multiInfoItem = FindTaggedMenuElement<MenuItem>(menu, "multiInfo");
             var multiInfoSeparator = FindTaggedMenuElement<Separator>(menu, "multiInfoSep");
-            var newFolderItem = FindTaggedMenuElement<MenuItem>(menu, "newFolder");
+            var newSubmenu = FindTaggedMenuElement<MenuItem>(menu, "new");
             var refreshItem = FindTaggedMenuElement<MenuItem>(menu, "refresh");
             var searchInFolderItem = FindTaggedMenuElement<MenuItem>(menu, "searchInFolder");
             var sortMenu = FindTaggedMenuElement<MenuItem>(menu, "sort");
@@ -17408,7 +17408,7 @@ public partial class MainWindow : Window
             {
                 ("thumbnail", thumbnailItem), ("thumbnailSep", thumbnailSeparator),
                 ("multiInfo", multiInfoItem), ("multiInfoSep", multiInfoSeparator),
-                ("newFolder", newFolderItem), ("refresh", refreshItem),
+                ("new", newSubmenu), ("refresh", refreshItem),
                 ("searchInFolder", searchInFolderItem), ("sort", sortMenu),
                 ("openWith", openWithItem), ("compress", compressItem),
                 ("extract", extractItem), ("rename", renameItem),
@@ -17513,9 +17513,10 @@ public partial class MainWindow : Window
 
             bool isFolder = ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true };
 
-            // New folder is created as a child of the selected folder - it
-            // doesn't make sense (and there's nowhere to put it) off a file.
-            if (newFolderItem is not null) { newFolderItem.IsEnabled = isFolder; }
+            // 새로 만들기 makes its folder or file inside the selected folder,
+            // and on a file row the menu does not offer to make one beside it
+            // (F7 does, see CreateNewAndName).
+            if (newSubmenu is not null) { newSubmenu.IsEnabled = isFolder; }
 
             // Refresh re-reads the selected folder's own contents from disk -
             // there's nothing to refresh on a plain file.
@@ -21364,12 +21365,27 @@ public partial class MainWindow : Window
         }
     }
 
+    private void NewFolder_Click(object sender, RoutedEventArgs e) => CreateNewAndName(fileName: null);
+
+    // 새로 만들기's two file rows (2026-10-13): the new folder's whole flow - top
+    // of the view, selected, name box open - and then the panel opens the file
+    // straight into editing once the name is settled (OpenNewTextFileForEditing).
+    private void NewTextFile_Click(object sender, RoutedEventArgs e)
+        => CreateNewAndName(Strings.NewTextFileDefaultName);
+
+    private void NewMarkdownFile_Click(object sender, RoutedEventArgs e)
+        => CreateNewAndName(Strings.NewMarkdownFileDefaultName);
+
+    // The file made by 새로 만들기 whose name box is open. Cleared by every box
+    // that opens (BeginInlineRename), so it can only ever match its own.
+    private FileSystemItem? _newTextFileToEdit;
+
     // Right-click on empty tree space (see ExplorerEmptySpaceContextMenu) has
     // no clicked-on item to anchor to, unlike every other file operation here.
     // Falls back through: selected folder -> selected file's parent -> the
     // multi-selection's last row -> the first drive root, so it's never simply
-    // a no-op.
-    private void NewFolder_Click(object sender, RoutedEventArgs e)
+    // a no-op. fileName null = a folder.
+    private void CreateNewAndName(string? fileName)
     {
         // Before anything is created, not just before the new row goes into
         // edit mode: if a name really was typed into the open box, it has to
@@ -21401,9 +21417,14 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!FileOperationService.TryCreateFolder(target.FullPath, out var createdPath, out var error))
+        bool created = fileName is null
+            ? FileOperationService.TryCreateFolder(target.FullPath, out var createdPath, out var error)
+            : FileOperationService.TryCreateEmptyFile(target.FullPath, fileName, out createdPath, out error);
+        if (!created)
         {
-            MessageBox.Show(this, error, Strings.NewFolderFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show(this, error,
+                fileName is null ? Strings.NewFolderFailedTitle : Strings.NewFileFailedTitle,
+                MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
@@ -21455,6 +21476,44 @@ public partial class MainWindow : Window
         SelectVisibleItem(newItem, focus: false);
 
         BeginInlineRename(newItem);
+        if (fileName is not null)
+        {
+            _newTextFileToEdit = newItem;
+        }
+    }
+
+    // Once the new file's name box closes - Enter, a click on empty tree space,
+    // or Esc keeping the default name - the panel opens it into editing, which
+    // is what the file was made for. At Input priority, queued after the
+    // renamed row's reselect (KeepRenamedRowSelected), so it reads the
+    // selection that reselect leaves.
+    //
+    // ONLY IF THE SELECTION IS STILL THE NEW FILE. A box committed by a click on
+    // another row, or by F7 opening the next name box, has moved the user on,
+    // and pulling the panel back to this file would undo that. A box committed
+    // because the keyboard went to the search box or the path bar is skipped
+    // too (keyboardStayed): editing would take the keyboard back out of it.
+    // Leaving the app reverts the box without committing (OnDeactivated) and
+    // opens nothing.
+    private void OpenNewTextFileForEditing(string path, bool keyboardStayed)
+    {
+        if (!keyboardStayed)
+        {
+            return;
+        }
+
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            if (_inlineRenameItem is { IsEditing: true } || _filmstripRenameCell is { IsEditing: true } ||
+                _isSearchViewActive ||
+                ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } selected ||
+                !string.Equals(selected.FullPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            ViewHere(selected, beginEdit: true);
+        }));
     }
 
     // A row the model already holds, landed at the top of the tree in one move
@@ -21613,6 +21672,7 @@ public partial class MainWindow : Window
             editing.IsEditing = false;
         }
         _inlineRenameItem = null;
+        _newTextFileToEdit = null;
 
         // The thumbnail's box reverts the same way, for the same reason.
         if (_filmstripRenameCell is { IsEditing: true } stripEditing)
@@ -21654,6 +21714,7 @@ public partial class MainWindow : Window
     private void BeginInlineRename(FileSystemItem item)
     {
         FinishOpenInlineRename(except: item);
+        _newTextFileToEdit = null;
 
         item.EditingName = item.Name;
         item.IsEditing = true;
@@ -21806,6 +21867,14 @@ public partial class MainWindow : Window
             e.Handled = true;
             item.IsEditing = false;
             _inlineRenameItem = null;
+
+            // Esc keeps a new file's default name, as Explorer does - the file
+            // is still made, so it still opens to be written in.
+            if (ReferenceEquals(item, _newTextFileToEdit))
+            {
+                _newTextFileToEdit = null;
+                OpenNewTextFileForEditing(item.FullPath, keyboardStayed: true);
+            }
         }
     }
 
@@ -21829,9 +21898,29 @@ public partial class MainWindow : Window
         item.IsEditing = false;
         _inlineRenameItem = null;
 
+        bool isNewTextFile = ReferenceEquals(item, _newTextFileToEdit);
+        _newTextFileToEdit = null;
+
+        // WHERE THE KEYBOARD WENT. Committed by LostFocus, the keyboard is
+        // already on its new owner: the search box (Ctrl+F, Ctrl+Shift+F), the
+        // path bar, a menu. Committed by Enter or by F7, it is still in the
+        // rename box. Read here and not when the reselect runs: by then the box
+        // may have been taken out of the tree with its row, and a box outside
+        // the tree would read as the keyboard having left it. The window itself
+        // is not a new owner - it is where WPF parks the keyboard when the
+        // element holding it goes away.
+        bool keyboardLeftTree =
+            Keyboard.FocusedElement is DependencyObject focused &&
+            focused is not Window &&
+            !IsPressInside(focused, ExplorerTree);
+
         string newName = item.EditingName;
         if (string.IsNullOrWhiteSpace(newName) || newName == item.Name)
         {
+            if (isNewTextFile)
+            {
+                OpenNewTextFileForEditing(item.FullPath, keyboardStayed: !keyboardLeftTree);
+            }
             return;
         }
 
@@ -21854,34 +21943,29 @@ public partial class MainWindow : Window
                 is FileSystemItem pressedRow &&
             string.Equals(pressedRow.FullPath, renamedFrom.FullPath, StringComparison.OrdinalIgnoreCase);
 
-        // WHERE THE KEYBOARD WENT. Committed by LostFocus, the keyboard is
-        // already on its new owner: the search box (Ctrl+F, Ctrl+Shift+F), the
-        // path bar, a menu. Committed by Enter or by F7, it is still in the
-        // rename box. Read here and not when the reselect runs: by then the box
-        // may have been taken out of the tree with its row, and a box outside
-        // the tree would read as the keyboard having left it. The window itself
-        // is not a new owner - it is where WPF parks the keyboard when the
-        // element holding it goes away.
-        bool keyboardLeftTree =
-            Keyboard.FocusedElement is DependencyObject focused &&
-            focused is not Window &&
-            !IsPressInside(focused, ExplorerTree);
-
-        RenameKeepingSelection(item, newName,
+        string? landedPath = RenameKeepingSelection(item, newName,
             reselect: renamingSelection && !parentPressed,
             focus: !keyboardLeftTree);
+
+        // Under the name it landed with, or the default one if the rename was
+        // refused - the file is there either way.
+        if (isNewTextFile)
+        {
+            OpenNewTextFileForEditing(landedPath ?? item.FullPath, keyboardStayed: !keyboardLeftTree);
+        }
     }
 
     // What a rename does once a box has handed over the new name. Shared by
     // the tree's row and the thumbnail's (CommitFilmstripRename), which differ
     // only in what they read beforehand: whether the renamed file was the
-    // selection, and where the keyboard went.
-    private void RenameKeepingSelection(FileSystemItem item, string newName, bool reselect, bool focus)
+    // selection, and where the keyboard went. Answers the path the item now
+    // has, null if the rename was refused.
+    private string? RenameKeepingSelection(FileSystemItem item, string newName, bool reselect, bool focus)
     {
         if (!FileOperationService.TryRename(item.FullPath, newName, out var error))
         {
             MessageBox.Show(this, error, Strings.RenameFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
+            return null;
         }
 
         // Merge, not rebuild - a rename changes one row's name, and the rest
@@ -21905,6 +21989,9 @@ public partial class MainWindow : Window
                 KeepRenamedRowSelected(renameParent, landedName, focus);
             }
         }
+
+        // The landed name again, for the same reason as above.
+        return Path.GetFullPath(Path.Combine(Path.GetDirectoryName(item.FullPath) ?? string.Empty, newName));
     }
 
     // THE RENAMED ROW STAYS SELECTED (2026-09-28, on report). The merge reuses
@@ -26529,7 +26616,8 @@ public partial class MainWindow : Window
     // selected by the time they get here - a double-click selects on the way
     // down, and Enter has nothing else to act on - which matters because the
     // preview this opens follows the SELECTION, not the argument.
-    private void ViewHere(FileSystemItem item)
+    // beginEdit: a text file opens into editing (새로 만들기's new file).
+    private void ViewHere(FileSystemItem item, bool beginEdit = false)
     {
         // Text from the row menu only: the gesture above asks HasViewerPreview
         // alone, so a double-clicked .txt still goes to its default program.
@@ -26573,7 +26661,7 @@ public partial class MainWindow : Window
             }
             else
             {
-                ViewerTextOpenButton_Click(this, new RoutedEventArgs());
+                OpenPendingViewerText(beginEdit);
             }
         }
     }
@@ -36484,18 +36572,24 @@ public partial class MainWindow : Window
         }
     }
 
-    private void ViewerTextOpenButton_Click(object sender, RoutedEventArgs e)
+    private void ViewerTextOpenButton_Click(object sender, RoutedEventArgs e) => OpenPendingViewerText(beginEdit: false);
+
+    private void OpenPendingViewerText(bool beginEdit)
     {
         if (_pendingViewerPath is { } path && IsViewerText(path))
         {
-            OpenViewerText(path);
+            OpenViewerText(path, beginEdit);
         }
     }
 
-    private async void OpenViewerText(string path)
+    // beginEdit carried through the read rather than kept in a field: the
+    // read is out of the selection's hands, and a flag left behind by one
+    // that was cancelled would open some later 보기 into editing.
+    private async void OpenViewerText(string path, bool beginEdit)
     {
         // Never read over unsaved edits: the offer is not shown for such a
-        // file, and this keeps any other way in from replacing them.
+        // file, and this keeps any other way in from replacing them. Such a
+        // file is already being edited, so beginEdit has nothing to add.
         if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path, takeKeyboard: true))
         {
             return;
@@ -36544,7 +36638,7 @@ public partial class MainWindow : Window
         }
 
         _viewerTextLoad = null;
-        ShowViewerText(path, loaded);
+        ShowViewerText(path, loaded, beginEdit);
 
         // What the head limit will be settled from: how long a read takes, at
         // what size, from where. Debug only, written with the rest of the log.
@@ -36555,11 +36649,17 @@ public partial class MainWindow : Window
             $"{(loaded.Truncated ? "  HEAD ONLY" : "")}{(loaded.LongLinesSplit ? "  SPLIT" : "")}  {path}");
     }
 
-    private void ShowViewerText(string path, ViewerTextEditor.LoadedText loaded)
+    private void ShowViewerText(string path, ViewerTextEditor.LoadedText loaded, bool beginEdit)
     {
         var editor = EnsureViewerTextEditor();
         editor.SetLineNumbers(_settings.ViewerTextLineNumbers);
         editor.Show(path, loaded, IsViewerMarkdown(path), _settings.IsLightMode);
+        // Before the reveal, so the edit bar is drawn once, in its editing
+        // state. A no-op where 편집 would be disabled (head-only, split).
+        if (beginEdit)
+        {
+            editor.BeginEdit();
+        }
 
         // NO NOTICE LINE for a head-only or long-line-split file (taken out
         // 2026-10-11, on request, to be tried without): one said "앞부분 1 MB만
