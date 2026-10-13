@@ -966,6 +966,18 @@ public sealed class ViewerTextEditor : TextEditor
     {
         base.OnPropertyChanged(e);
 
+        // NO BLINKING CARET WHILE READING (2026-10-12, on request): a caret
+        // says "type here", and reading cannot. Made transparent rather than
+        // hidden - Caret.Hide is undone by the text area on its next focus -
+        // and still there underneath, so arrows and PgDn move through the
+        // text and a find lands where it says. Editing gives it its ink back
+        // (null = the text area's default).
+        if (e.Property == IsReadOnlyProperty)
+        {
+            TextArea.Caret.CaretBrush = IsReadOnly ? Brushes.Transparent : null;
+            return;
+        }
+
         if (e.Property != FontSizeProperty)
         {
             return;
