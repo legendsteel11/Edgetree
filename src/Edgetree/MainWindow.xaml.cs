@@ -36888,6 +36888,8 @@ public partial class MainWindow : Window
         editor.EditStateChanged += (_, _) =>
         {
             UpdateViewerTextEditBar();
+            // Before the marks are read: see DropCleanedUnsavedText.
+            DropCleanedUnsavedText(editor);
             SyncViewerTextUnsavedMarks();
             ScheduleUnsavedTextPersist();
         };
@@ -37724,10 +37726,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        foreach (string path in editor.TakeCleanedPaths())
-        {
-            _unsavedTextStore.Delete(path);
-        }
+        DropCleanedUnsavedText(editor);
         foreach (var edited in editor.TakeChangedUnsaved())
         {
             _unsavedTextStore.Write(
@@ -37735,6 +37734,24 @@ public partial class MainWindow : Window
                     edited.Path, edited.CodePage, edited.HasBom,
                     edited.StampLength, edited.StampLastWriteUtc, edited.Markdown),
                 edited.Text);
+        }
+    }
+
+    // A file whose edits went away - saved, reloaded, undone back to the saved
+    // text, written over by 다른 이름으로 저장 - leaves the disk copy AT ONCE,
+    // on the state change that says so, not on the persist timer (2026-10-13,
+    // on report). The row marks are the editor's sessions plus the copy's
+    // list, and the copy used to keep a just-saved file for the timer's second
+    // or more: moving to another file inside that second released the saved
+    // text from the editor, the copy's stale entry was then all the marks had
+    // to go on, and the row took its dot back - kept until some later change
+    // re-read the marks, since the timer's delete never did. A delete is one
+    // queued file removal, so nothing was being saved by batching it.
+    private void DropCleanedUnsavedText(ViewerTextEditor editor)
+    {
+        foreach (string path in editor.TakeCleanedPaths())
+        {
+            _unsavedTextStore.Delete(path);
         }
     }
 

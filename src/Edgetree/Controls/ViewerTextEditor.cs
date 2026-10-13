@@ -677,11 +677,14 @@ public sealed partial class ViewerTextEditor : TextEditor
 
     // ----- The disk copy (2026-10-11) ------------------------------------------
     //
-    // MainWindow keeps an UnsavedTextStore equal to what this holds, asking
-    // after each pause in typing: TakeChangedUnsaved for every edited file
-    // whose text moved since it last asked, TakeCleanedPaths for every file
-    // whose edits went away. Both are "since the last call", so nothing is
-    // written twice and a file nobody touched costs nothing.
+    // MainWindow keeps an UnsavedTextStore equal to what this holds:
+    // TakeChangedUnsaved after each pause in typing, for every edited file
+    // whose text moved since it last asked, and TakeCleanedPaths on every
+    // EditStateChanged, for every file whose edits went away - at once, since
+    // the tree's marks read the store too (see MainWindow's
+    // DropCleanedUnsavedText). Both are "since the last call", so nothing is
+    // written twice and a file nobody touched costs nothing. Every add to
+    // _cleaned is followed by EditStateChanged; keep it so.
     public List<UnsavedSnapshot> TakeChangedUnsaved()
     {
         var changed = new List<UnsavedSnapshot>();
