@@ -29,6 +29,7 @@ public partial class PresetNameWindow : Window
     public PresetNameWindow(string currentName, string fallbackName, string title, string hint)
     {
         InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
 
         TitleText.Text = title;
         Title = title;

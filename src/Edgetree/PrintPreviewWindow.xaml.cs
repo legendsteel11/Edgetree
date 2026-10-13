@@ -32,6 +32,7 @@ public partial class PrintPreviewWindow : Window
         AppSettings settings, Action onSave)
     {
         InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
         _print = print;
         _settings = settings;
         _onSave = onSave;

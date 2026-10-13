@@ -17,6 +17,7 @@ public partial class AboutWindow : Window
     public AboutWindow(Version? updateAvailable = null)
     {
         InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
         Deactivated += Window_Deactivated;
 
         var assembly = Assembly.GetExecutingAssembly();

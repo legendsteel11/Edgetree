@@ -29,6 +29,7 @@ public partial class ColorSettingsWindow : Window
     public ColorSettingsWindow(AppSettings settings, Action onChanged)
     {
         InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
         _settings = settings;
         _onChanged = onChanged;
         WireLabelHoverPreviews();

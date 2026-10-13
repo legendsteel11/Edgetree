@@ -28,6 +28,7 @@ public partial class FilterExtensionsWindow : Window
     public FilterExtensionsWindow(string currentExtensions, bool forExclusion = false)
     {
         InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
 
         string title = forExclusion ? Strings.FilterExcludeTitle : Strings.FilterCustomTitle;
         Title = title;

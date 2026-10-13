@@ -123,6 +123,7 @@
             </Grid.RowDefinitions>
 
             <Grid Grid.Row="0"
+                    x:Name="HeaderGrid"
                     Background="{DynamicResource DialogHeaderBackground}"
                     MouseLeftButtonDown="HeaderGrid_MouseLeftButtonDown">
                 <TextBlock Text="Edgetree"
