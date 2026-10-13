@@ -36820,12 +36820,23 @@ public partial class MainWindow : Window
     {
         ShowViewerFileTypeIcon(path, besideButton: false);
 
+        // A file a Markdown link was followed to is opened, not offered: the
+        // Ctrl+click was the ask (FollowMarkdownLink).
+        bool asked = TakeTextAskedOnArrival(path);
+
         // A file with unsaved edits is not offered: its text is already in
         // memory, so there is no read to hold back, and it opens straight
         // back into its edits (decided with the author, 2026-10-11). The
-        // keyboard stays where it was - see RevealViewerText.
-        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path, takeKeyboard: false))
+        // keyboard stays where it was - see RevealViewerText - unless the
+        // file was asked for.
+        if (FileSystemService.UnsavedTextPaths.Contains(path) && RestoreViewerText(path, takeKeyboard: asked))
         {
+            return;
+        }
+
+        if (asked)
+        {
+            OpenViewerText(path, beginEdit: false);
             return;
         }
 
@@ -37044,6 +37055,152 @@ public partial class MainWindow : Window
         {
             FocusViewerText(editor, path);
         }
+
+        // The #heading of a followed link (FollowMarkdownLink), once the text
+        // is up. Queued past Loaded: a restored text puts its old scroll back
+        // at that priority, and the jump has to come after it.
+        if (_textAnchorOnArrival is { } anchor &&
+            string.Equals(_textAnchorPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _textAnchorOnArrival = null;
+            _textAnchorPath = null;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Background, new Action(() =>
+            {
+                if (string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    editor.JumpToHeading(anchor);
+                }
+            }));
+        }
+    }
+
+    // ----- Following a Markdown link (2026-10-13) -------------------------------
+    //
+    // The text view's Ctrl+click on [text](target) (ViewerTextEditor.Links.cs).
+    // The target is resolved against the file it is written in, the way VS
+    // Code and GitHub read a relative link:
+    // - http(s) and mailto go to the browser or the mail program;
+    // - a #heading alone moves within this text;
+    // - a file or folder is reached in the TREE, as the path bar reaches one
+    //   (out of the search view, a "picking a place" jump), and the panel
+    //   follows the selection there. A TXT/MD it lands on is opened as if its
+    //   보기 had been pressed - the Ctrl+click asked for the text - and a
+    //   #heading after it is moved to once the text is up.
+    // A target that is not there does nothing: the link names nothing to go to,
+    // and a dialog for a dead link in a document would be noise.
+    private string? _textAskedOnArrival;
+    private long _textAskedOnArrivalTicks;
+    private string? _textAnchorOnArrival;
+    private string? _textAnchorPath;
+
+    // The tree's walk to a row is asynchronous, so the ask waits for the text
+    // to arrive - but not for ever: a walk that never lands must not leave a
+    // later, unrelated visit to the same file opening by itself.
+    private const long TextAskedOnArrivalMs = 10_000;
+
+    private bool TakeTextAskedOnArrival(string path)
+    {
+        if (_textAskedOnArrival is not { } asked ||
+            !string.Equals(asked, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        _textAskedOnArrival = null;
+        return Environment.TickCount64 - _textAskedOnArrivalTicks < TextAskedOnArrivalMs;
+    }
+
+    private void FollowMarkdownLink(string target)
+    {
+        target = target.Trim();
+        if (target.Length == 0 || _viewerTextPath is not { } from)
+        {
+            return;
+        }
+
+        if (target.StartsWith('#'))
+        {
+            (_viewerTextEditor as ViewerTextEditor)?.JumpToHeading(target);
+            return;
+        }
+
+        bool absolute = Uri.TryCreate(target, UriKind.Absolute, out var uri);
+        if (absolute && !uri!.IsFile)
+        {
+            if (uri.Scheme is "http" or "https" or "mailto")
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
+                }
+                catch (System.ComponentModel.Win32Exception)
+                {
+                }
+            }
+            return;
+        }
+
+        string? anchor = null;
+        string path;
+        try
+        {
+            if (absolute)
+            {
+                path = uri!.LocalPath;
+                anchor = uri.Fragment.Length > 1 ? uri.Fragment[1..] : null;
+            }
+            else
+            {
+                int hash = target.IndexOf('#');
+                if (hash >= 0)
+                {
+                    anchor = target[(hash + 1)..];
+                    target = target[..hash];
+                }
+                int query = target.IndexOf('?');
+                if (query >= 0)
+                {
+                    target = target[..query];
+                }
+
+                string relative = Uri.UnescapeDataString(target).Replace('/', '\\');
+                path = relative.Length == 0
+                    ? from
+                    : Path.GetFullPath(Path.Combine(Path.GetDirectoryName(from) ?? string.Empty, relative));
+            }
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException
+                                       or PathTooLongException or UriFormatException)
+        {
+            return;
+        }
+
+        if (string.Equals(path, from, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!string.IsNullOrEmpty(anchor))
+            {
+                (_viewerTextEditor as ViewerTextEditor)?.JumpToHeading(anchor);
+            }
+            return;
+        }
+
+        if (File.Exists(path))
+        {
+            if (IsViewerText(path))
+            {
+                _textAskedOnArrival = path;
+                _textAskedOnArrivalTicks = Environment.TickCount64;
+                _textAnchorOnArrival = string.IsNullOrEmpty(anchor) ? null : anchor;
+                _textAnchorPath = path;
+            }
+        }
+        else if (!Directory.Exists(path))
+        {
+            return;
+        }
+
+        SetSearchViewActive(false);
+        NavigateToPath(path, source: "md-link", collapseOthers: true);
     }
 
     // NoInlining: ViewHere calls it, and must not name the editor's type.
@@ -37112,6 +37269,7 @@ public partial class MainWindow : Window
             ScheduleUnsavedTextPersist();
         };
         editor.TextChanged += (_, _) => ScheduleUnsavedTextPersist();
+        editor.MarkdownLinkInvoked += FollowMarkdownLink;
         // A resource rather than XAML on the editor, which XAML never names.
         editor.ContextMenu = (ContextMenu)FindResource("ViewerTextContextMenu");
         _viewerTextEditor = editor;

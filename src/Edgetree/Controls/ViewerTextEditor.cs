@@ -333,6 +333,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         };
 
         AttachDragOut();
+        AttachMarkdownLinks();
 
         // REDO ON Ctrl+Shift+Z AS WELL AS Ctrl+Y (2026-10-13, on request).
         // AvalonEdit takes redo from WPF's ApplicationCommands.Redo, whose only
