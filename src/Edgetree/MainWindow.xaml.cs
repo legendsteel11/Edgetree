@@ -1579,6 +1579,15 @@ public partial class MainWindow : Window
         SetLocalBrush(resources, "ViewerTextReadingBackground", useLightInk
             ? Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x0E, 0x00, 0x00, 0x00));
+        // THE CARET'S LINE BAND (2026-10-13, ViewerTextEditor.CurrentLine.cs),
+        // as a fill over whatever ground the text has - reading's shade or
+        // editing's plain - so it keeps its step on both. The step is VS
+        // Code's own, worked back from its 2026 themes: Dark draws #242526 on
+        // #121314 (white at 0x13 over that ground), Light #EAEAEA at 0x40 on
+        // white (black at 0x05). Light's is barely there, in VS Code as here.
+        SetLocalBrush(resources, "ViewerTextCurrentLineBackground", useLightInk
+            ? Color.FromArgb(0x13, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x05, 0x00, 0x00, 0x00));
         // The find and replace fields, sunk a shade into whatever they sit on
         // (2026-10-13, on request), so a field reads as a place to type rather
         // than an outline on the bar. Darker on either theme - a

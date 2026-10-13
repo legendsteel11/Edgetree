@@ -216,6 +216,8 @@ public sealed partial class ViewerTextEditor : TextEditor
         FontFamily = TextFontFamily;
         AllowDrop = false;
 
+        // The caret's line is banded by our own renderer instead
+        // (ViewerTextEditor.CurrentLine.cs).
         Options.HighlightCurrentLine = false;
         // A view's height of room past the end, as VS Code has by default, so
         // the LAST line can be brought to the top of the view - which is where
@@ -334,6 +336,7 @@ public sealed partial class ViewerTextEditor : TextEditor
 
         AttachDragOut();
         AttachMarkdownLinks();
+        AttachCurrentLine();
 
         // REDO ON Ctrl+Shift+Z AS WELL AS Ctrl+Y (2026-10-13, on request).
         // AvalonEdit takes redo from WPF's ApplicationCommands.Redo, whose only
@@ -681,8 +684,11 @@ public sealed partial class ViewerTextEditor : TextEditor
         SyntaxHighlighting = null;
         Document = session.Document;
         session.Document.UndoStack.PropertyChanged += UndoStack_PropertyChanged;
+        // A text that comes up is not clicked yet (ViewerTextEditor.CurrentLine.cs).
+        _caretPlaced = false;
         IsReadOnly = !editing;
         ApplyHighlighting();
+        RefreshCurrentLine();
         // A kept session brings its marks with it; they are checked again on
         // the next pause anyway.
         _lineNumbers?.InvalidateVisual();
@@ -715,6 +721,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         SyntaxHighlighting = null;
         IsReadOnly = true;
         Document = new TextDocument();
+        RefreshCurrentLine();
         EditStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1167,6 +1174,8 @@ public sealed partial class ViewerTextEditor : TextEditor
             {
                 Background = Brushes.Transparent;
             }
+            // Reading has its own rule for the current-line band.
+            RefreshCurrentLine();
             return;
         }
 
