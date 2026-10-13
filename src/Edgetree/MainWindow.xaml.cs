@@ -10576,10 +10576,27 @@ public partial class MainWindow : Window
     // "change the app-wide default and re-sort everything I've got open".
     // Cleared via the folder's own override icon or its "전역 정렬 따르기" item
     // (FolderSortFollowGlobalMenuItem_Click below).
+    // WHAT 정렬 기준 SORTS. The selected folder - or, on a FILE row, the folder
+    // the file is in (2026-10-13, on request). The tree has no empty space
+    // inside a folder to right-click the way Explorer's background is, so
+    // sorting a folder of files meant climbing to its row first; a file row is
+    // the nearest thing to that background, and a file has no order of its own
+    // for the row to be about. Single selection only on a file row, as the row
+    // was before: a set of files can span folders. The file stays selected
+    // through the re-sort and moves to its new place (MergeChildrenFromDisk
+    // keeps its row in the tree past the 더 보기 cap); the view does not
+    // follow it.
+    private FileSystemItem? SortMenuSubject => ExplorerTree.SelectedItem switch
+    {
+        FileSystemItem { IsPlaceholder: false, IsDirectory: true } folder => folder,
+        FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false, Parent: { IsDirectory: true } parent }
+            when _multiSelection.Count <= 1 => parent,
+        _ => null,
+    };
+
     private void FolderSortFieldMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem { Tag: string field } ||
-            ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
+        if (sender is not MenuItem { Tag: string field } || SortMenuSubject is not { } item)
         {
             return;
         }
@@ -10590,8 +10607,7 @@ public partial class MainWindow : Window
 
     private void FolderSortDirectionMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (sender is not MenuItem { Tag: string direction } ||
-            ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
+        if (sender is not MenuItem { Tag: string direction } || SortMenuSubject is not { } item)
         {
             return;
         }
@@ -10606,7 +10622,7 @@ public partial class MainWindow : Window
     // folder's own override icon.
     private void FolderSortFollowGlobalMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
+        if (SortMenuSubject is { } item)
         {
             ClearFolderSortOverride(item);
         }
@@ -10710,11 +10726,14 @@ public partial class MainWindow : Window
     // items in the same order, so one routine can tick them: the folder's own
     // sort if it has one, otherwise the app-wide default, which is exactly
     // what that folder would sort by if it were reloaded right now.
-    private void ApplyFolderSortMenuState(ItemsControl menu, bool isFolder)
+    // subject: the folder the menu sorts (SortMenuSubject), null when there is
+    // none - the rows then show the app-wide default, unavailable.
+    private void ApplyFolderSortMenuState(ItemsControl menu, FileSystemItem? subject)
     {
-        bool hasOverride = isFolder && ExplorerTree.SelectedItem is FileSystemItem { HasSortOverride: true };
-        var (field, sortDescending) = isFolder && ExplorerTree.SelectedItem is FileSystemItem folderItem
-            ? GetEffectiveFolderSort(folderItem)
+        bool isFolder = subject is not null;
+        bool hasOverride = subject is { HasSortOverride: true };
+        var (field, sortDescending) = subject is not null
+            ? GetEffectiveFolderSort(subject)
             : (ReadSortField(_settings.SortField, _settings.SortByDate), _settings.SortDescending);
 
         CheckSortMenuRows(menu, field, sortDescending);
@@ -10737,8 +10756,7 @@ public partial class MainWindow : Window
 
         if (sender is ContextMenu menu)
         {
-            ApplyFolderSortMenuState(menu,
-                isFolder: ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true });
+            ApplyFolderSortMenuState(menu, SortMenuSubject);
         }
     }
 
@@ -17719,14 +17737,16 @@ public partial class MainWindow : Window
             // something in there either way now: "숨긴 폴더 표시" leads the
             // submenu, and an empty list says so in words.
 
-            // Only makes sense to reach for while looking at a folder. Shows
-            // that folder's own override if it has one (GetEffectiveFolderSort),
-            // otherwise the app-wide default - either way this submenu always
-            // reflects what THIS folder would sort by if (re)loaded right now.
+            // On a folder row the folder, on a file row the folder it is in
+            // (SortMenuSubject, 2026-10-13). Shows that folder's own override
+            // if it has one (GetEffectiveFolderSort), otherwise what it
+            // follows - either way this submenu always reflects what THAT
+            // folder would sort by if (re)loaded right now.
             if (sortMenu is not null)
             {
-                sortMenu.IsEnabled = isFolder;
-                ApplyFolderSortMenuState(sortMenu, isFolder);
+                var sortSubject = SortMenuSubject;
+                sortMenu.IsEnabled = sortSubject is not null;
+                ApplyFolderSortMenuState(sortMenu, sortSubject);
             }
 
             // The same row, said three ways. NOT disabled for a folder: it does
