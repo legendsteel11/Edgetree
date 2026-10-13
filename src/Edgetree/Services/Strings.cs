@@ -715,6 +715,10 @@ public static class Strings
     public static string TextSaveFailedTitle = "저장할 수 없습니다";
     // The tree row's mark for a file with edits not yet saved.
     public static string TextUnsavedMark = "저장하지 않은 변경 사항";
+    // 종료 with such files (titled TrayExit). {0} is the file names, one per
+    // line, the first ten; TextExitUnsavedMore closes a longer list.
+    public static string TextExitUnsavedBody = "저장하지 않은 변경 사항이 있습니다.\n\n{0}\n\n저장하고 종료할까요?";
+    public static string TextExitUnsavedMore = "외 {0}개";
     public static string ViewerPlay = "재생";
     public static string ViewerPause = "일시정지";
     public static string ViewerStop = "정지";
@@ -1333,6 +1337,8 @@ public static class Strings
         TextSaveUnencodableBody = "Some characters cannot be saved in ANSI (code page {0}). Save as UTF-8 instead?";
         TextSaveFailedTitle = "Could not save";
         TextUnsavedMark = "Unsaved changes";
+        TextExitUnsavedBody = "There are unsaved changes.\n\n{0}\n\nSave them before exiting?";
+        TextExitUnsavedMore = "and {0} more";
         ViewerPlay = "Play";
         ViewerPause = "Pause";
         ViewerStop = "Stop";

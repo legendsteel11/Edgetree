@@ -725,6 +725,16 @@ public partial class MainWindow : Window
             FileSystemService.BookmarkedPaths.Add(path);
         }
 
+        // Text edits a previous session left unsaved (a crash, a Windows
+        // shutdown, a restart): their rows come up marked, for the same
+        // first-read reason as the bookmarks above. Only the list is read -
+        // the texts wait until a file is opened, and nothing here loads the
+        // editor. See UnsavedTextStore.
+        _unsavedTextStore.Load();
+        FileSystemService.UnsavedTextPaths.Clear();
+        FileSystemService.UnsavedTextPaths.UnionWith(_unsavedTextStore.Paths);
+        FileOperationService.PathMoved += OnPathMovedForUnsavedText;
+
         // 그림이 도착할 때의 크기(맞춤·1:1·자름맞춤). 패널이 열리기 전에 세워야
         // 첫 그림부터 그 상태로 온다 - 위의 필터·정렬을 첫 폴더 읽기 전에 세우는
         // 것과 같은 이유.
@@ -2644,6 +2654,11 @@ public partial class MainWindow : Window
         // routes that do stamp their own reason first, so this reads as a second
         // line under theirs rather than as a claim about them.
         ExitLog.Record("window closing: outside the app's own controls");
+
+        // Unsaved text edits to disk, whatever the exit - including the ones
+        // nobody can be asked about: a Windows shutdown or logoff, an end task.
+        // The next start marks them and opens them on request.
+        FlushUnsavedText();
 
         // The viewer's measurements are held in memory and written when the
         // viewer closes, so a session that ended with it still open threw away
@@ -8848,14 +8863,23 @@ public partial class MainWindow : Window
 
     // The app's only in-window way out since the X stopped ending it. No
     // confirmation, deliberately: a menu item reached on purpose IS the intent,
-    // which is the same reasoning 다시 시작 two rows up was built on, and the
-    // user turned down a confirmation for exactly this ("종료 컨펌은 좀 거부감이
-    // 있네요", 2026-08-10).
+    // which is the same reasoning 다시 시작 two rows up was built on, and a
+    // confirmation for exactly this was tried and turned down (2026-08-10).
+    // The one exception is text edited in the panel and not saved
+    // (ConfirmUnsavedTextBeforeExit, 2026-10-12): that asks, because exiting
+    // would otherwise decide about edits nobody chose to keep or drop. Asked
+    // HERE, before Shutdown, and not in Closing - Shutdown closes the window
+    // ignoring a cancel, so a 취소 answered in Closing could not stop it.
     //
     // Recorded before the shutdown, matching the tray's own line, so exit.log
     // can still name which control ended a session.
-    private void ExitAppMenuItem_Click(object sender, RoutedEventArgs e)
+    private async void ExitAppMenuItem_Click(object sender, RoutedEventArgs e)
     {
+        if (!await ConfirmUnsavedTextBeforeExit())
+        {
+            return;
+        }
+
         ExitLog.Record("header menu: exit");
         Application.Current.Shutdown();
     }
@@ -8939,8 +8963,14 @@ public partial class MainWindow : Window
     private void TrayAboutMenuItem_Click(object sender, RoutedEventArgs e)
         => (Application.Current as App)?.ShowAboutFromTray();
 
-    private void TrayExitMenuItem_Click(object sender, RoutedEventArgs e)
+    // Asks about unsaved text first, as the header's 종료 does - see there.
+    private async void TrayExitMenuItem_Click(object sender, RoutedEventArgs e)
     {
+        if (!await ConfirmUnsavedTextBeforeExit())
+        {
+            return;
+        }
+
         ExitLog.Record("tray menu: exit");
         Application.Current.Shutdown();
     }
@@ -11005,6 +11035,8 @@ public partial class MainWindow : Window
         if (result == MessageBoxResult.Yes)
         {
             ExitLog.Record("restart requested by the user (language/settings change)");
+            // Unsaved text edits on disk before the next instance reads them.
+            FlushUnsavedText();
             System.Diagnostics.Process.Start(Environment.ProcessPath!);
             Application.Current.Shutdown();
         }
@@ -11023,6 +11055,8 @@ public partial class MainWindow : Window
     {
         SaveCurrentWidth();
         ExitLog.Record("restart requested by the user (restart menu)");
+        // Unsaved text edits on disk before the next instance reads them.
+        FlushUnsavedText();
         System.Diagnostics.Process.Start(Environment.ProcessPath!);
         Application.Current.Shutdown();
     }
@@ -11185,6 +11219,8 @@ public partial class MainWindow : Window
         if (result == MessageBoxResult.Yes)
         {
             ExitLog.Record("restart requested by the user (language/settings change)");
+            // Unsaved text edits on disk before the next instance reads them.
+            FlushUnsavedText();
             System.Diagnostics.Process.Start(Environment.ProcessPath!);
             Application.Current.Shutdown();
         }
@@ -11234,6 +11270,8 @@ public partial class MainWindow : Window
         _settingsResetPending = true;
 
         ExitLog.Record("restart after settings reset");
+        // Unsaved text edits on disk before the next instance reads them.
+        FlushUnsavedText();
         System.Diagnostics.Process.Start(Environment.ProcessPath!);
         Application.Current.Shutdown();
     }
@@ -36524,21 +36562,33 @@ public partial class MainWindow : Window
         RevealViewerText(editor, path);
     }
 
-    // An edited file the panel has come back to (ShowViewerTextOffer), shown
-    // from memory as it was left. False if the editor turns out not to hold
-    // it, in which case the marks are put right and the offer goes up.
+    // An edited file the panel has come back to (ShowViewerTextOffer): from
+    // memory as it was left, or - for a file edited in an earlier session -
+    // from the disk copy. False if neither holds it, in which case the marks
+    // are put right and the offer goes up.
     // NoInlining: reached from the selection path, see the section's note.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private bool RestoreViewerText(string path)
     {
-        if (_viewerTextEditor is not ViewerTextEditor editor || !editor.Restore(path, _settings.IsLightMode))
+        if (_viewerTextEditor is ViewerTextEditor kept && kept.Restore(path, _settings.IsLightMode))
         {
-            SyncViewerTextUnsavedMarks();
-            return false;
+            RevealViewerText(kept, path);
+            return true;
         }
 
-        RevealViewerText(editor, path);
-        return true;
+        if (_unsavedTextStore.ReadText(path, out var entry) is { } text && entry is not null)
+        {
+            var editor = EnsureViewerTextEditor();
+            editor.SetLineNumbers(_settings.ViewerTextLineNumbers);
+            editor.RestoreFromStore(
+                path, text, TextFileReader.EncodingFor(entry.CodePage, entry.HasBom), entry.HasBom,
+                entry.StampLength, entry.StampLastWriteUtc, entry.Markdown, _settings.IsLightMode);
+            RevealViewerText(editor, path);
+            return true;
+        }
+
+        SyncViewerTextUnsavedMarks();
+        return false;
     }
 
     private void RevealViewerText(ViewerTextEditor editor, string path)
@@ -36590,7 +36640,9 @@ public partial class MainWindow : Window
         {
             UpdateViewerTextEditBar();
             SyncViewerTextUnsavedMarks();
+            ScheduleUnsavedTextPersist();
         };
+        editor.TextChanged += (_, _) => ScheduleUnsavedTextPersist();
         _viewerTextEditor = editor;
         return editor;
     }
@@ -36769,17 +36821,27 @@ public partial class MainWindow : Window
     }
 
     // Keeps FileSystemService.UnsavedTextPaths, and the tree rows' marks, equal
-    // to what the editor holds. Called on every state change the editor
-    // reports, so it compares first and walks the loaded rows only when the
-    // set has actually changed - a file going modified or back, not a key.
+    // to what is unsaved: every file with edits the editor holds, plus every
+    // file the disk copy lists that this session has not opened yet (edited
+    // in an earlier one). Called on every state change the editor reports,
+    // so it compares first and walks the loaded rows only when the set has
+    // actually changed - a file going modified or back, not a key.
     private void SyncViewerTextUnsavedMarks()
     {
-        if (_viewerTextEditor is not ViewerTextEditor editor)
+        var editor = _viewerTextEditor as ViewerTextEditor;
+        var unsaved = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (editor is not null)
         {
-            return;
+            unsaved.UnionWith(editor.UnsavedPaths);
+        }
+        foreach (string path in _unsavedTextStore.Paths)
+        {
+            if (editor is null || !editor.HoldsText(path))
+            {
+                unsaved.Add(path);
+            }
         }
 
-        var unsaved = new HashSet<string>(editor.UnsavedPaths, StringComparer.OrdinalIgnoreCase);
         if (unsaved.SetEquals(FileSystemService.UnsavedTextPaths))
         {
             return;
@@ -36866,59 +36928,14 @@ public partial class MainWindow : Window
 
         _viewerTextSaving = true;
         UpdateViewerTextEditBar();
-        string name = Path.GetFileName(request.Path);
         try
         {
-            bool overwrite = false;
-            while (true)
+            if (await WriteViewerTextAsync(
+                    request.Path, request.Text, request.Encoding, request.HasBom,
+                    request.ExpectedLength, request.ExpectedLastWriteUtc) is { } written)
             {
-                var attempt = request;
-                bool force = overwrite;
-                var result = await Task.Run(() => TextFileWriter.Save(
-                    attempt.Path, attempt.Text, attempt.Encoding, attempt.HasBom,
-                    attempt.ExpectedLength, attempt.ExpectedLastWriteUtc, force));
-
-                switch (result.Outcome)
-                {
-                    case TextFileWriter.Outcome.Saved:
-                        editor.CompleteSave(request, result);
-                        ViewerLoadLog($"text saved  {FormatFileSize(result.FileLength),9}  {request.Encoding.WebName}" +
-                                      $"{(request.HasBom ? " BOM" : "")}  {request.Path}");
-                        return;
-                    case TextFileWriter.Outcome.ChangedOnDisk:
-                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveChangedBody, name), Strings.OverwriteConfirmTitle))
-                        {
-                            return;
-                        }
-                        overwrite = true;
-                        break;
-                    case TextFileWriter.Outcome.Missing:
-                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveMissingBody, name), Strings.TextSaveTitle))
-                        {
-                            return;
-                        }
-                        overwrite = true;
-                        break;
-                    case TextFileWriter.Outcome.Unencodable:
-                        if (!ConfirmViewerTextSave(
-                                string.Format(Strings.TextSaveUnencodableBody, request.Encoding.CodePage), Strings.TextSaveTitle))
-                        {
-                            return;
-                        }
-                        request = request with
-                        {
-                            Encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
-                            HasBom = false,
-                        };
-                        break;
-                }
+                editor.CompleteSave(request with { Encoding = written.Encoding, HasBom = written.HasBom }, written.Result);
             }
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                       or ArgumentException or NotSupportedException)
-        {
-            ViewerLoadLog($"text save FAILED {name}: {ex.GetType().Name} {ex.Message}");
-            MessageBox.Show(this, ex.Message, Strings.TextSaveFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         finally
         {
@@ -36927,8 +36944,256 @@ public partial class MainWindow : Window
         }
     }
 
+    // One file's write, with its three questions (see SaveViewerText). The
+    // encoding comes back with the result because the last question can turn
+    // it into UTF-8. Null when a question was answered no or the write failed
+    // (said in a message box); the file and the edits are then as they were.
+    // Takes plain values rather than a SaveRequest so 종료's save-all can write
+    // a text kept from an earlier session without the editor ever loading.
+    private async Task<(TextFileWriter.Result Result, System.Text.Encoding Encoding, bool HasBom)?> WriteViewerTextAsync(
+        string path, string text, System.Text.Encoding encoding, bool hasBom, long expectedLength, DateTime expectedLastWriteUtc)
+    {
+        string name = Path.GetFileName(path);
+        try
+        {
+            bool overwrite = false;
+            while (true)
+            {
+                var attemptEncoding = encoding;
+                bool attemptBom = hasBom;
+                bool force = overwrite;
+                var result = await Task.Run(() => TextFileWriter.Save(
+                    path, text, attemptEncoding, attemptBom, expectedLength, expectedLastWriteUtc, force));
+
+                switch (result.Outcome)
+                {
+                    case TextFileWriter.Outcome.Saved:
+                        ViewerLoadLog($"text saved  {FormatFileSize(result.FileLength),9}  {encoding.WebName}" +
+                                      $"{(hasBom ? " BOM" : "")}  {path}");
+                        return (result, encoding, hasBom);
+                    case TextFileWriter.Outcome.ChangedOnDisk:
+                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveChangedBody, name), Strings.OverwriteConfirmTitle))
+                        {
+                            return null;
+                        }
+                        overwrite = true;
+                        break;
+                    case TextFileWriter.Outcome.Missing:
+                        if (!ConfirmViewerTextSave(string.Format(Strings.TextSaveMissingBody, name), Strings.TextSaveTitle))
+                        {
+                            return null;
+                        }
+                        overwrite = true;
+                        break;
+                    case TextFileWriter.Outcome.Unencodable:
+                        if (!ConfirmViewerTextSave(
+                                string.Format(Strings.TextSaveUnencodableBody, encoding.CodePage), Strings.TextSaveTitle))
+                        {
+                            return null;
+                        }
+                        encoding = new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false);
+                        hasBom = false;
+                        break;
+                }
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                       or ArgumentException or NotSupportedException)
+        {
+            ViewerLoadLog($"text save FAILED {name}: {ex.GetType().Name} {ex.Message}");
+            ShowOwnedMessage(ex.Message, Strings.TextSaveFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+            return null;
+        }
+    }
+
     private bool ConfirmViewerTextSave(string body, string title)
-        => MessageBox.Show(this, body, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+        => ShowOwnedMessage(body, title, MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+    // Owned by the window while it is on screen. 종료 from the tray can come
+    // with the window hidden there, and a box owned by a hidden window can
+    // open behind everything - so then it stands alone.
+    private MessageBoxResult ShowOwnedMessage(string body, string title, MessageBoxButton buttons, MessageBoxImage image)
+        => IsVisible
+            ? MessageBox.Show(this, body, title, buttons, image)
+            : MessageBox.Show(body, title, buttons, image);
+
+    // ----- Unsaved text across exits (2026-10-11) -------------------------------
+    //
+    // The editor's edits are copied to disk (UnsavedTextStore) a second after
+    // typing pauses - and at least every ten seconds of steady typing - and
+    // once more at every graceful exit, so a crash costs seconds of typing and
+    // a Windows shutdown or a restart costs nothing; the next start marks the
+    // rows and opens the texts on request (RestoreViewerText). Only the app's
+    // own 종료 asks (decided with the author 09-28 and 10-12): one question
+    // for all files, 예 saving them, 아니요 dropping them, 취소 staying.
+    private readonly UnsavedTextStore _unsavedTextStore = new();
+    private System.Windows.Threading.DispatcherTimer? _unsavedTextPersistTimer;
+    private long _unsavedTextDirtySince;
+
+    private void ScheduleUnsavedTextPersist()
+    {
+        long now = Environment.TickCount64;
+        if (_unsavedTextDirtySince == 0)
+        {
+            _unsavedTextDirtySince = now;
+        }
+        else if (now - _unsavedTextDirtySince > 10_000)
+        {
+            PersistUnsavedText();
+            return;
+        }
+
+        _unsavedTextPersistTimer ??= new System.Windows.Threading.DispatcherTimer(
+            TimeSpan.FromSeconds(1),
+            System.Windows.Threading.DispatcherPriority.Background,
+            (_, _) => PersistUnsavedText(),
+            Dispatcher);
+        _unsavedTextPersistTimer.Stop();
+        _unsavedTextPersistTimer.Start();
+    }
+
+    private void PersistUnsavedText()
+    {
+        _unsavedTextPersistTimer?.Stop();
+        _unsavedTextDirtySince = 0;
+        if (_viewerTextEditor is not ViewerTextEditor editor)
+        {
+            return;
+        }
+
+        foreach (string path in editor.TakeCleanedPaths())
+        {
+            _unsavedTextStore.Delete(path);
+        }
+        foreach (var edited in editor.TakeChangedUnsaved())
+        {
+            _unsavedTextStore.Write(
+                new UnsavedTextStore.Entry(
+                    edited.Path, edited.CodePage, edited.HasBom,
+                    edited.StampLength, edited.StampLastWriteUtc, edited.Markdown),
+                edited.Text);
+        }
+    }
+
+    // Every graceful exit and every restart: what is queued reaches the disk
+    // before the process goes, or before the next one starts reading it.
+    private void FlushUnsavedText()
+    {
+        PersistUnsavedText();
+        _unsavedTextStore.Flush();
+    }
+
+    // The app's own 종료. True to go on and exit.
+    private async Task<bool> ConfirmUnsavedTextBeforeExit()
+    {
+        PersistUnsavedText();
+        SyncViewerTextUnsavedMarks();
+        var paths = FileSystemService.UnsavedTextPaths.ToList();
+        if (paths.Count == 0)
+        {
+            return true;
+        }
+
+        const int Listed = 10;
+        string list = string.Join("\n", paths.Take(Listed).Select(Path.GetFileName));
+        if (paths.Count > Listed)
+        {
+            list += "\n" + string.Format(Strings.TextExitUnsavedMore, paths.Count - Listed);
+        }
+
+        switch (ShowOwnedMessage(
+                    string.Format(Strings.TextExitUnsavedBody, list), Strings.TrayExit,
+                    MessageBoxButton.YesNoCancel, MessageBoxImage.Question))
+        {
+            case MessageBoxResult.Yes:
+                return await SaveAllUnsavedTextAsync();
+            case MessageBoxResult.No:
+                DiscardAllUnsavedText();
+                return true;
+            default:
+                return false;
+        }
+    }
+
+    // 예: every file written in turn, each with its own questions. One
+    // answered no, or one that failed, stops the exit; what was saved stays
+    // saved and the rest keep their marks.
+    private async Task<bool> SaveAllUnsavedTextAsync()
+    {
+        var editor = _viewerTextEditor as ViewerTextEditor;
+        foreach (string path in FileSystemService.UnsavedTextPaths.ToList())
+        {
+            if (editor?.CreateSaveRequest(path) is { } request)
+            {
+                if (await WriteViewerTextAsync(
+                        request.Path, request.Text, request.Encoding, request.HasBom,
+                        request.ExpectedLength, request.ExpectedLastWriteUtc) is not { } written)
+                {
+                    return false;
+                }
+                editor.CompleteSave(request with { Encoding = written.Encoding, HasBom = written.HasBom }, written.Result);
+            }
+            else if (_unsavedTextStore.ReadText(path, out var entry) is { } text && entry is not null)
+            {
+                if (await WriteViewerTextAsync(
+                        path, text, TextFileReader.EncodingFor(entry.CodePage, entry.HasBom), entry.HasBom,
+                        entry.StampLength, entry.StampLastWriteUtc) is null)
+                {
+                    return false;
+                }
+                _unsavedTextStore.Delete(path);
+            }
+        }
+
+        PersistUnsavedText();
+        SyncViewerTextUnsavedMarks();
+        return FileSystemService.UnsavedTextPaths.Count == 0;
+    }
+
+    // 아니요: every edit dropped, in memory and on disk.
+    private void DiscardAllUnsavedText()
+    {
+        (_viewerTextEditor as ViewerTextEditor)?.DiscardAllUnsaved();
+        foreach (string path in _unsavedTextStore.Paths.ToList())
+        {
+            _unsavedTextStore.Delete(path);
+        }
+        _unsavedTextStore.Flush();
+        SyncViewerTextUnsavedMarks();
+    }
+
+    // A file or folder the app renamed or moved (FileOperationService). Most
+    // moves touch no edited file, and that check reads only paths; the editor
+    // is reached only when one does.
+    private void OnPathMovedForUnsavedText(string oldPath, string newPath)
+    {
+        if (!Dispatcher.CheckAccess())
+        {
+            Dispatcher.Invoke(() => OnPathMovedForUnsavedText(oldPath, newPath));
+            return;
+        }
+
+        if (FileSystemService.UnsavedTextPaths.Any(path => UnsavedTextStore.MovedPath(path, oldPath, newPath) is not null))
+        {
+            MoveUnsavedText(oldPath, newPath);
+        }
+    }
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void MoveUnsavedText(string oldPath, string newPath)
+    {
+        // The disk copy brought up to date first, so the two move the same set.
+        PersistUnsavedText();
+        (_viewerTextEditor as ViewerTextEditor)?.MovePath(oldPath, newPath);
+        foreach (string path in _unsavedTextStore.Paths.ToList())
+        {
+            if (UnsavedTextStore.MovedPath(path, oldPath, newPath) is { } moved)
+            {
+                _unsavedTextStore.Move(path, moved);
+            }
+        }
+        SyncViewerTextUnsavedMarks();
+    }
 
     // 다시 불러오기, and 편집 취소 with edits to drop (see ViewerTextEditor.Reload).
     // Through _viewerTextLoad like an open, so the panel moving on cancels it

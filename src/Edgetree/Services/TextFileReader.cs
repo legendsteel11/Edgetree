@@ -239,6 +239,31 @@ public static class TextFileReader
         return (AnsiEncoding(), 0);
     }
 
+    // The encoding a code page and BOM flag stand for, built the way Detect
+    // builds it - so a text kept on disk across a restart (UnsavedTextStore)
+    // saves back exactly as the file was read. Here rather than in the store
+    // so the code-page provider this class registers is in place first.
+    public static Encoding EncodingFor(int codePage, bool hasBom) => codePage switch
+    {
+        65001 => new UTF8Encoding(encoderShouldEmitUTF8Identifier: hasBom),
+        1200 => new UnicodeEncoding(bigEndian: false, byteOrderMark: hasBom),
+        1201 => new UnicodeEncoding(bigEndian: true, byteOrderMark: hasBom),
+        12000 => new UTF32Encoding(bigEndian: false, byteOrderMark: hasBom),
+        _ => GetCodePageOrLatin1(codePage),
+    };
+
+    private static Encoding GetCodePageOrLatin1(int codePage)
+    {
+        try
+        {
+            return Encoding.GetEncoding(codePage);
+        }
+        catch (Exception ex) when (ex is ArgumentException or NotSupportedException)
+        {
+            return Encoding.Latin1;
+        }
+    }
+
     private static readonly UTF8Encoding StrictUtf8 =
         new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
 

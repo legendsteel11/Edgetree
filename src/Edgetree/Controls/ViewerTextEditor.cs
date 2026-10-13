@@ -78,7 +78,9 @@ public sealed class ViewerTextEditor : TextEditor
             Document = document;
         }
 
-        public string Path { get; }
+        // Settable for one reason: a file the app renames or moves keeps its
+        // edits under the new name (MovePath).
+        public string Path { get; set; }
         public TextDocument Document { get; }
         public bool Markdown { get; init; }
         public bool Truncated { get; init; }
@@ -93,8 +95,23 @@ public sealed class ViewerTextEditor : TextEditor
         public int CaretOffset { get; set; }
         public double VerticalOffset { get; set; }
 
+        // The document version last handed to the disk copy
+        // (TakeChangedUnsaved); null when it has never been, or when the text
+        // went back to saved and the copy was dropped.
+        public ITextSourceVersion? PersistedVersion { get; set; }
+
         public bool IsModified => !Document.UndoStack.IsOriginalFile;
     }
+
+    // What the disk copy needs of an edited file (UnsavedTextStore).
+    public sealed record UnsavedSnapshot(
+        string Path,
+        string Text,
+        int CodePage,
+        bool HasBom,
+        long StampLength,
+        DateTime StampLastWriteUtc,
+        bool Markdown);
 
     // A save, taken as a snapshot on the UI thread so the worker never reads
     // the document. Version is how CompleteSave tells whether anything was
@@ -123,9 +140,15 @@ public sealed class ViewerTextEditor : TextEditor
     // drops an edit: the session waits here, the tree row says so, and coming
     // back to the file opens it again exactly as it was left - undo history
     // included. It leaves this list when it is saved or reloaded.
-    // Memory only for now; keeping it on disk across a crash or a restart is
-    // the next step of the round.
+    // The copy that survives a crash or a restart is MainWindow's
+    // UnsavedTextStore, kept in step through TakeChangedUnsaved and
+    // TakeCleanedPaths; this list is only what this process holds.
     private readonly Dictionary<string, TextSession> _unsaved = new(StringComparer.OrdinalIgnoreCase);
+
+    // Files whose edits went away since MainWindow last asked - saved,
+    // reloaded, undone back to the saved text, or dropped - so their disk
+    // copies can go too. A file edited again leaves the set.
+    private readonly HashSet<string> _cleaned = new(StringComparer.OrdinalIgnoreCase);
 
     // Anything the edit bar shows has changed: editing began or ended, the
     // text went modified or back, undo or redo became possible or not, or a
@@ -592,12 +615,155 @@ public sealed class ViewerTextEditor : TextEditor
 
     private void UndoStack_PropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(UndoStack.IsOriginalFile) && _session is { } session)
+        {
+            NoteModifiedChanged(session);
+        }
+
         if (e.PropertyName is nameof(UndoStack.IsOriginalFile)
                            or nameof(UndoStack.CanUndo)
                            or nameof(UndoStack.CanRedo))
         {
             EditStateChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    private void NoteModifiedChanged(TextSession session)
+    {
+        if (session.IsModified)
+        {
+            _cleaned.Remove(session.Path);
+        }
+        else
+        {
+            _cleaned.Add(session.Path);
+            session.PersistedVersion = null;
+        }
+    }
+
+    // ----- The disk copy (2026-10-11) ------------------------------------------
+    //
+    // MainWindow keeps an UnsavedTextStore equal to what this holds, asking
+    // after each pause in typing: TakeChangedUnsaved for every edited file
+    // whose text moved since it last asked, TakeCleanedPaths for every file
+    // whose edits went away. Both are "since the last call", so nothing is
+    // written twice and a file nobody touched costs nothing.
+    public List<UnsavedSnapshot> TakeChangedUnsaved()
+    {
+        var changed = new List<UnsavedSnapshot>();
+        foreach (var session in EditedSessions())
+        {
+            var now = session.Document.Version;
+            if (session.PersistedVersion is { } written && now is not null &&
+                now.BelongsToSameDocumentAs(written) && now.CompareAge(written) == 0)
+            {
+                continue;
+            }
+
+            session.PersistedVersion = now;
+            changed.Add(new UnsavedSnapshot(
+                session.Path,
+                session.Document.Text,
+                session.Encoding.CodePage,
+                session.HasBom,
+                session.StampLength,
+                session.StampLastWriteUtc,
+                session.Markdown));
+        }
+        return changed;
+    }
+
+    public List<string> TakeCleanedPaths()
+    {
+        var cleaned = _cleaned.ToList();
+        _cleaned.Clear();
+        return cleaned;
+    }
+
+    // Whether this process holds the file's text at all - on screen or kept.
+    // A file the disk copy lists but this does not is one from a previous
+    // session that has not been opened yet.
+    public bool HoldsText(string path)
+        => _unsaved.ContainsKey(path) ||
+           (_session is not null && string.Equals(_session.Path, path, StringComparison.OrdinalIgnoreCase));
+
+    private IEnumerable<TextSession> EditedSessions()
+    {
+        if (_session is { IsModified: true } current)
+        {
+            yield return current;
+        }
+        foreach (var kept in _unsaved.Values)
+        {
+            yield return kept;
+        }
+    }
+
+    // A file edited in an earlier session, opened from the disk copy: straight
+    // into editing, from the top. The undo history did not survive the
+    // restart, so the text is loaded as it is and marked as not saved -
+    // DiscardOriginalFileMarker, so it counts as edited until saved or
+    // reloaded, with nothing for 실행 취소 to go back to.
+    public void RestoreFromStore(
+        string path, string text, Encoding encoding, bool hasBom,
+        long stampLength, DateTime stampLastWriteUtc, bool markdown, bool light)
+    {
+        var document = new TextDocument(text);
+        document.UndoStack.DiscardOriginalFileMarker();
+        var session = new TextSession(path, document)
+        {
+            Markdown = markdown,
+            Encoding = encoding,
+            HasBom = hasBom,
+            StampLength = stampLength,
+            StampLastWriteUtc = stampLastWriteUtc,
+            PersistedVersion = document.Version,
+        };
+        Attach(session, light, editing: true);
+        TextArea.Caret.Offset = 0;
+        ScrollToHome();
+    }
+
+    // The app renamed or moved a file, or a folder holding files with edits:
+    // their sessions take the new paths. A folder matches every path under it.
+    public void MovePath(string oldPath, string newPath)
+    {
+        foreach (var session in AllSessions())
+        {
+            if (UnsavedTextStore.MovedPath(session.Path, oldPath, newPath) is { } moved)
+            {
+                bool kept = _unsaved.Remove(session.Path);
+                session.Path = moved;
+                if (kept)
+                {
+                    _unsaved[moved] = session;
+                }
+            }
+        }
+    }
+
+    private List<TextSession> AllSessions()
+    {
+        var all = _unsaved.Values.ToList();
+        if (_session is not null && !all.Contains(_session))
+        {
+            all.Add(_session);
+        }
+        return all;
+    }
+
+    // 종료 answered with 아니요: every edit in this process is let go, marked
+    // saved so the closing flush finds nothing to write. The disk copies are
+    // MainWindow's to delete.
+    public void DiscardAllUnsaved()
+    {
+        foreach (var session in AllSessions())
+        {
+            session.Document.UndoStack.MarkAsOriginalFile();
+        }
+        _unsaved.Clear();
+        _cleaned.Clear();
+        EditStateChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // ----- Editing (2026-10-11) ---------------------------------------------
@@ -645,12 +811,24 @@ public sealed class ViewerTextEditor : TextEditor
 
     // Null when there is nothing to write.
     public SaveRequest? CreateSaveRequest()
-    {
-        if (_session is not { } session || IsReadOnly)
-        {
-            return null;
-        }
+        => _session is { } session && !IsReadOnly ? RequestFor(session) : null;
 
+    // Any file with edits this process holds - on screen or kept - for the
+    // save-all that 종료 offers. Null if it has none.
+    public SaveRequest? CreateSaveRequest(string path)
+    {
+        if (_unsaved.TryGetValue(path, out var kept))
+        {
+            return RequestFor(kept);
+        }
+        return _session is { IsModified: true } current &&
+               string.Equals(current.Path, path, StringComparison.OrdinalIgnoreCase)
+            ? RequestFor(current)
+            : null;
+    }
+
+    private static SaveRequest RequestFor(TextSession session)
+    {
         return new SaveRequest(
             session.Path,
             session.Document.Text,
@@ -684,6 +862,13 @@ public sealed class ViewerTextEditor : TextEditor
             now.CompareAge(written) == 0)
         {
             session.Document.UndoStack.MarkAsOriginalFile();
+        }
+
+        // Told here as well as by the undo stack's event, which only reaches
+        // the session on screen.
+        if (!session.IsModified)
+        {
+            NoteModifiedChanged(session);
         }
 
         if (!session.IsModified &&
@@ -761,6 +946,7 @@ public sealed class ViewerTextEditor : TextEditor
         {
             session.Document.UndoStack.PropertyChanged -= UndoStack_PropertyChanged;
             _session = null;
+            _cleaned.Add(session.Path);
         }
         Release();
     }

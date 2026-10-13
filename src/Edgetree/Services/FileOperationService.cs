@@ -7,6 +7,15 @@ namespace SidebarExplorer.App.Services;
 
 public static class FileOperationService
 {
+    // A file or folder this app renamed or moved, old path then new, raised
+    // after the move succeeded (2026-10-11). The panel's unsaved text edits are
+    // keyed by path, and follow their file through it. Only the app's own
+    // moves: following other programs' renames through the watcher would also
+    // follow an editor that renames the original to a backup before writing,
+    // and the edits would end up on the backup. May be raised off the UI
+    // thread.
+    public static event Action<string, string>? PathMoved;
+
     // THE CLIPBOARD CAN REFUSE, AND REFUSING MUST NOT END THE APP (issue #3,
     // 2026-09-06). Windows lets one process hold the clipboard open at a time,
     // so any other program touching it at that instant makes this throw
@@ -306,6 +315,7 @@ public static class FileOperationService
                 Directory.Delete(sourcePath, recursive: true);
             }
 
+            PathMoved?.Invoke(trimmedSource, destPath);
             return destPath;
         }
 
@@ -315,6 +325,7 @@ public static class FileOperationService
             // with the delete only after the copy landed).
             string moved = GetUniqueDestination(Path.Combine(destinationFolder, name));
             File.Move(sourcePath, moved);
+            PathMoved?.Invoke(trimmedSource, moved);
             return moved;
         }
 
@@ -584,10 +595,12 @@ public static class FileOperationService
             if (Directory.Exists(path))
             {
                 Directory.Move(path, newPath);
+                PathMoved?.Invoke(path, newPath);
             }
             else if (File.Exists(path))
             {
                 File.Move(path, newPath);
+                PathMoved?.Invoke(path, newPath);
             }
 
             return true;
