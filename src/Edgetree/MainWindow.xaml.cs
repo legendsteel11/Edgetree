@@ -2531,6 +2531,14 @@ public partial class MainWindow : Window
                 OpenViewerTextFind();
                 e.Handled = true;
                 break;
+            // Ctrl+P prints the text (2026-10-13), with the keyboard in it - the
+            // view's menu row. The app had no Ctrl+P of its own (P alone marks
+            // a film's position).
+            case Key.P when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerTextHost.IsKeyboardFocusWithin:
+                PrintShownViewerText();
+                e.Handled = true;
+                break;
             // Ctrl+H is the same row opened for replacing (2026-10-13), the
             // key Notepad gives it. The app had no Ctrl+H of its own.
             case Key.H when Keyboard.Modifiers == ModifierKeys.Control
@@ -17551,6 +17559,18 @@ public partial class MainWindow : Window
                                          || !ShownViewerTextHasNoEditToStart(editRow.FullPath);
             }
 
+            // 인쇄 on one picture or TXT/MD row (2026-10-13), absent otherwise:
+            // a picture only where Windows has a print for its type (the
+            // answer is remembered per extension - ShellFileService.CanPrint).
+            if (FindTaggedMenuElement<MenuItem>(menu, "print") is { } printItem)
+            {
+                bool printable = _multiSelection.Count <= 1 &&
+                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } printRow &&
+                    (IsViewerText(printRow.FullPath) ||
+                     (ThumbnailExtensions.Contains(Path.GetExtension(printRow.FullPath)) && ShellFileService.CanPrint(printRow.FullPath)));
+                printItem.Visibility = printable ? Visibility.Visible : Visibility.Collapsed;
+            }
+
             // 재생 on a FOLDER row. Absent unless the folder's children are
             // already read AND hold something playable - the user's call
             // (2026-08-14): no 재생 row that turns out to have nothing to play.
@@ -26785,6 +26805,25 @@ public partial class MainWindow : Window
         if (ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } item)
         {
             ViewHere(item);
+        }
+    }
+
+    // 인쇄 from the tree (2026-10-13). A picture is Windows' to print; a text
+    // is the app's, so its unsaved edits go on paper too (PrintViewerTextFile).
+    private void PrintItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } item)
+        {
+            return;
+        }
+
+        if (IsViewerText(item.FullPath))
+        {
+            PrintViewerTextFile(item.FullPath);
+        }
+        else
+        {
+            ShellFileService.Print(item.FullPath);
         }
     }
 
@@ -37762,6 +37801,58 @@ public partial class MainWindow : Window
         {
             _viewerTextSaving = false;
             UpdateViewerTextEditBar();
+        }
+    }
+
+    // ----- Printing a text (2026-10-13) -------------------------------------------
+    //
+    // The view's 인쇄 / Ctrl+P print the text on screen; the tree row's 인쇄
+    // prints the file's text as the panel would have it - this process's
+    // copy with its edits if it holds one, else the disk copy of edits from an
+    // earlier session, else the file as read. The page itself is
+    // ViewerTextEditor.PrintText's. NoInlining, both: they name the editor's
+    // type, and the key handler and the row menu are hot paths.
+    private void ViewerTextPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerText();
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void PrintShownViewerText()
+    {
+        if (_viewerTextEditor is ViewerTextEditor { ShownTextForPrint: var (text, markdown) } &&
+            _viewerTextPath is { } path)
+        {
+            ReportPrintFailure(ViewerTextEditor.PrintText(text, Path.GetFileName(path), markdown));
+        }
+    }
+
+    // A file over the size limit prints what the view would show of it: its
+    // first megabyte (TextFileReader).
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private async void PrintViewerTextFile(string path)
+    {
+        string? text = (_viewerTextEditor as ViewerTextEditor)?.TextFor(path)
+                       ?? _unsavedTextStore.ReadText(path, out _);
+        if (text is null)
+        {
+            try
+            {
+                text = (await Task.Run(() => TextFileReader.Read(path, CancellationToken.None))).Text;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                           or ArgumentException or NotSupportedException)
+            {
+                ReportPrintFailure(ex.Message);
+                return;
+            }
+        }
+
+        ReportPrintFailure(ViewerTextEditor.PrintText(text, Path.GetFileName(path), IsViewerMarkdown(path)));
+    }
+
+    private void ReportPrintFailure(string? message)
+    {
+        if (message is not null)
+        {
+            ShowOwnedMessage(message, Strings.TextPrintFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
         }
     }
 

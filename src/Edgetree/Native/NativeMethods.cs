@@ -617,6 +617,28 @@ internal static class NativeMethods
         return ShellExecuteEx(ref info);
     }
 
+    // Whether Windows registers a verb for this extension - as a command line
+    // or as a DelegateExecute handler (the picture types' "print" is the
+    // latter: the photo printing window). Checked 2026-10-13 on this build:
+    // jpg/png/gif/bmp/tif/heic/avif have "print", webp and svg have none.
+    public static bool HasShellVerb(string extension, string verb)
+    {
+        uint length = 0;
+        return AssocQueryString(0, ASSOCSTR_COMMAND, extension, verb, null, ref length) is S_OK or S_FALSE ||
+               AssocQueryString(0, ASSOCSTR_DELEGATEEXECUTE, extension, verb, null, ref length) is S_OK or S_FALSE;
+    }
+
+    private const int ASSOCSTR_COMMAND = 1;
+    private const int ASSOCSTR_DELEGATEEXECUTE = 17;
+    private const int S_OK = 0;
+    // What AssocQueryString answers a size query (a null buffer) with when
+    // the string exists.
+    private const int S_FALSE = 1;
+
+    [DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+    private static extern int AssocQueryString(
+        int flags, int str, string assoc, string? extra, System.Text.StringBuilder? output, ref uint outputLength);
+
     // 속성 for one path: the "properties" verb first, SHObjectProperties when
     // the verb refuses. Measured 2026-10-06 from a PowerShell STA probe: the
     // verb fails on the USER PROFILE FOLDER itself (C:\Users\<name>) with

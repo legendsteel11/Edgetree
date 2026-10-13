@@ -89,6 +89,40 @@ public static class ShellFileService
         NativeMethods.TryOpenWithShellVerb(path, "openas");
     }
 
+    // A picture's 인쇄 (2026-10-13): handed to Windows the way Explorer's own
+    // 인쇄 is - the "print" verb, which for the picture types opens the photo
+    // printing window (printer, paper, layout, copies). Nothing about the
+    // page is decided here.
+    public static void Print(string path)
+    {
+        NativeMethods.AllowNextWindowToActivate();
+        NativeMethods.TryOpenWithShellVerb(path, "print");
+    }
+
+    // Whether that verb exists for the file's type - asked on every
+    // right-click of a picture row, so remembered per extension for the
+    // session.
+    public static bool CanPrint(string path)
+    {
+        string extension = Path.GetExtension(path);
+        if (string.IsNullOrEmpty(extension))
+        {
+            return false;
+        }
+
+        lock (PrintableExtensions)
+        {
+            if (!PrintableExtensions.TryGetValue(extension, out bool printable))
+            {
+                printable = NativeMethods.HasShellVerb(extension, "print");
+                PrintableExtensions[extension] = printable;
+            }
+            return printable;
+        }
+    }
+
+    private static readonly Dictionary<string, bool> PrintableExtensions = new(StringComparer.OrdinalIgnoreCase);
+
     public static void ShowProperties(string path)
     {
         NativeMethods.AllowNextWindowToActivate();

@@ -199,6 +199,8 @@ public static class Strings
     public static string MenuPlayHere = "재생";
     // A TXT/MD row's second way in: the panel opened straight into editing.
     public static string MenuEditHere = "편집";
+    // A picture or TXT/MD row, and the text view's menu (2026-10-13).
+    public static string MenuPrint = "인쇄";
     public static string MenuOpenWith = "연결 프로그램";
     public static string MenuCut = "잘라내기";
     public static string MenuCopy = "복사";
@@ -717,6 +719,7 @@ public static class Strings
     public static string TextEditRedo = "다시 실행 (Ctrl+Y)";
     public static string TextEditCopy = "복사 (Ctrl+C)";
     public static string TextEditPaste = "붙여넣기 (Ctrl+V)";
+    public static string TextPrint = "인쇄 (Ctrl+P)";
     // The text view's right-click menu (2026-10-13). The rows that only
     // editing can do are absent while reading, and 서식 - Markdown's marks put
     // in or taken out - is there only for a Markdown file being edited. The
@@ -753,6 +756,9 @@ public static class Strings
     public static string TextSaveMissingBody = "'{0}'을(를) 찾을 수 없습니다. 이 위치에 새로 저장할까요?";
     public static string TextSaveUnencodableBody = "ANSI(코드 페이지 {0})로 저장할 수 없는 문자가 있습니다. UTF-8로 저장할까요?";
     public static string TextSaveFailedTitle = "저장할 수 없습니다";
+    // A printed text's page footer: {0} this page, {1} all pages.
+    public static string TextPrintPageFormat = "{0} / {1}";
+    public static string TextPrintFailedTitle = "인쇄할 수 없습니다";
     // The tree row's 보기 mark on a TXT/MD row, with the key that does the same
     // from the keyboard.
     public static string TextViewMark = "보기 (Ctrl+W)";
@@ -1205,6 +1211,7 @@ public static class Strings
         MenuViewHere = "View";
         MenuPlayHere = "Play";
         MenuEditHere = "Edit";
+        MenuPrint = "Print";
         MenuOpenWith = "Open with";
         MenuCut = "Cut";
         MenuCopy = "Copy";
@@ -1391,6 +1398,7 @@ public static class Strings
         TextEditRedo = "Redo (Ctrl+Y)";
         TextEditCopy = "Copy (Ctrl+C)";
         TextEditPaste = "Paste (Ctrl+V)";
+        TextPrint = "Print (Ctrl+P)";
         MenuUndo = "Undo";
         MenuRedo = "Redo";
         MenuFind = "Find";
@@ -1416,6 +1424,8 @@ public static class Strings
         TextSaveMissingBody = "\"{0}\" could not be found. Save it here as a new file?";
         TextSaveUnencodableBody = "Some characters cannot be saved in ANSI (code page {0}). Save as UTF-8 instead?";
         TextSaveFailedTitle = "Could not save";
+        TextPrintPageFormat = "{0} / {1}";
+        TextPrintFailedTitle = "Could not print";
         TextViewMark = "View (Ctrl+W)";
         TextUnsavedMark = "Unsaved changes";
         TextExitUnsavedBody = "There are unsaved changes.\n\n{0}\n\nSave them before exiting?";

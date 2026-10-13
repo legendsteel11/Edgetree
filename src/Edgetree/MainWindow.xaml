@@ -1568,6 +1568,15 @@
             <MenuItem Header="{x:Static services:Strings.MenuOpenWith}"
                     Tag="openWith"
                     Click="OpenWithPicker_Click"/>
+            <!-- 인쇄 (2026-10-13), after the open rows as in Explorer's menu: a
+                 picture goes to Windows' photo printing window, a TXT/MD is
+                 printed by the app with Windows' print dialog. Absent for
+                 anything else, and for a picture type Windows has no print
+                 for (webp, svg). Visibility set in ExplorerItemContextMenu_Opened. -->
+            <MenuItem Header="{x:Static services:Strings.MenuPrint}"
+                    Tag="print"
+                    Visibility="Collapsed"
+                    Click="PrintItem_Click"/>
             <Separator/>
             <!-- Above 잘라내기 on its own, as on the thumbnail list's menu
                  (2026-09-28). What "all" means here is at TreeSelectAll_Click. -->
@@ -1929,6 +1938,13 @@
             <MenuItem Header="{x:Static services:Strings.MenuSaveAs}"
                     Tag="saveAs"
                     Click="ViewerTextSaveAs_Click"/>
+            <!-- A group of its own, as Notepad's File menu keeps it apart from
+                 saving - and there while reading too, where the save rows are
+                 gone (2026-10-13). -->
+            <Separator/>
+            <MenuItem Header="{x:Static services:Strings.MenuPrint}"
+                    InputGestureText="Ctrl+P"
+                    Click="ViewerTextPrint_Click"/>
         </ContextMenu>
 
         <!-- The search results' own sort menu. Deliberately NOT the folder menu
@@ -8944,7 +8960,7 @@
                                  a pencil once 편집 취소 took the same spot as an
                                  icon (on request, the same day). Material Symbols
                                  edit / edit_off / save / refresh / undo / redo /
-                                 content_copy / content_paste, each boxed to the
+                                 content_copy / content_paste / print, each boxed to the
                                  family's 960 square (M0-960H960M0 0H960) so their
                                  own sizes survive Stretch; the box is the path
                                  bar's list-glyph size, which puts their ink at
@@ -8964,9 +8980,15 @@
                                          file, so it can never be written back. The
                                          tooltip is set in UpdateViewerTextEditBar,
                                          which picks 편집 or the reason. -->
+                                    <!-- One row for the pencil and the edit commands
+                                         (only one of the two is ever shown) and 인쇄
+                                         after whichever it is (2026-10-13, on
+                                         request): beside 편집 while reading, after
+                                         붙여넣기 while editing. -->
+                                    <StackPanel Orientation="Horizontal"
+                                            HorizontalAlignment="Left">
                                     <Button x:Name="ViewerTextEditButton"
                                             Style="{StaticResource ViewerTextBarButtonStyle}"
-                                            HorizontalAlignment="Left"
                                             ToolTipService.ShowOnDisabled="True"
                                             Click="ViewerTextEditButton_Click">
                                         <Path Data="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z M0-960H960M0 0H960"
@@ -8978,7 +9000,8 @@
                                          chevron under it, so with the same 4 after each,
                                          저장 starts where the find field does.
                                          Every group gap here is the 4 before a group's
-                                         first button: 저장, 실행 취소, 복사. -->
+                                         first button: 저장, 실행 취소, 복사, and 인쇄
+                                         after the row. -->
                                     <StackPanel x:Name="ViewerTextEditCommands"
                                             Orientation="Horizontal"
                                             Visibility="Collapsed">
@@ -9038,6 +9061,16 @@
                                             <Path Data="M200-120q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h167q11-35 43-57.5t70-22.5q40 0 71.5 22.5T594-840h166q33 0 56.5 23.5T840-760v560q0 33-23.5 56.5T760-120H200Zm0-80h560v-560h-80v120H280v-120h-80v560Zm308.5-571.5Q520-783 520-800t-11.5-28.5Q497-840 480-840t-28.5 11.5Q440-817 440-800t11.5 28.5Q463-760 480-760t28.5-11.5Z M0-960H960M0 0H960"
                                                     Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                         </Button>
+                                    </StackPanel>
+                                    <!-- 인쇄, a group of its own (4 before it).
+                                         Material Symbols print, boxed like the rest. -->
+                                    <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                            Margin="4,0,0,0"
+                                            Click="ViewerTextPrint_Click"
+                                            ToolTip="{x:Static services:Strings.TextPrint}">
+                                        <Path Data="M640-640v-120H320v120h-80v-200h480v200h-80Zm-480 80h640-640Zm560 100q17 0 28.5-11.5T760-500q0-17-11.5-28.5T720-540q-17 0-28.5 11.5T680-500q0 17 11.5 28.5T720-460Zm-80 260v-160H320v160h320Zm80 80H240v-160H80v-240q0-51 35-85.5t85-34.5h560q51 0 85.5 34.5T880-520v240H720v160Zm80-240v-160q0-17-11.5-28.5T760-560H200q-17 0-28.5 11.5T160-520v160h80v-80h480v80h80Z M0-960H960M0 0H960"
+                                                Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                    </Button>
                                     </StackPanel>
                                     <!-- CLOSES THE PANEL (2026-10-11, on request),
                                          reading or editing - the same CloseViewer
