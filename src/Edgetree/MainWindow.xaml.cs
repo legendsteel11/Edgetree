@@ -17502,11 +17502,12 @@ public partial class MainWindow : Window
                 }
             }
 
-            // 편집 on a TXT/MD row, present wherever its 보기 is. LIVE even with
-            // the text already editing on screen, unlike 보기 above: an edited
-            // file opened by selection leaves the keyboard in the tree, and
-            // putting it in the text is still something to ask for - the 재생
-            // reasoning. Greyed only for a text on screen that cannot be edited.
+            // 편집 on a TXT/MD row, present wherever its 보기 is, and greyed by
+            // 보기's rule: already done. That is its text on screen and being
+            // edited - or on screen and not editable at all. It was first left
+            // live while editing, to move the keyboard into the text, and read
+            // as a row offering what was already the case (2026-10-13); the
+            // row's own mark still moves the keyboard there.
             if (FindTaggedMenuElement<MenuItem>(menu, "editHere") is { } editHereItem)
             {
                 var editRow = ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } row
@@ -17515,7 +17516,7 @@ public partial class MainWindow : Window
                     : null;
                 editHereItem.Visibility = editRow is not null ? Visibility.Visible : Visibility.Collapsed;
                 editHereItem.IsEnabled = editRow is null || _viewerTextEditor is null
-                                         || !ShownViewerTextCannotEdit(editRow.FullPath);
+                                         || !ShownViewerTextHasNoEditToStart(editRow.FullPath);
             }
 
             // 재생 on a FOLDER row. Absent unless the folder's children are
@@ -36962,16 +36963,18 @@ public partial class MainWindow : Window
         }
     }
 
-    // For the row menu's 편집: the text on screen is this file and cannot be
-    // edited (head only, long lines split) - known once it has been read, as
-    // the bar's disabled pencil knows it. Before that the row stays live and
-    // opens the file reading, with that pencil. NoInlining, and asked only
-    // once the editor exists: the menu's Opened handler runs on every
-    // right-click and must not make the JIT load AvalonEdit.
+    // For the row menu's 편집: the text on screen is this file, and it is
+    // either being edited already or cannot be edited (head only, long lines
+    // split) - the second known once it has been read, as the bar's disabled
+    // pencil knows it. Before that the row stays live and opens the file
+    // reading, with that pencil. NoInlining, and asked only once the editor
+    // exists: the menu's Opened handler runs on every right-click and must
+    // not make the JIT load AvalonEdit.
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private bool ShownViewerTextCannotEdit(string path)
+    private bool ShownViewerTextHasNoEditToStart(string path)
         => string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase)
-           && _viewerTextEditor is ViewerTextEditor { CanEdit: false };
+           && _viewerTextEditor is ViewerTextEditor editor
+           && (editor.IsEditing || !editor.CanEdit);
 
     // At Input priority, after the layout that makes the host visible: a
     // collapsed element cannot take focus.
