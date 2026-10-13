@@ -164,7 +164,8 @@ public sealed class ViewerTextEditor : TextEditor
         // would flash it for a frame each time the width settles.
         HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled;
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
-        Background = Brushes.Transparent;
+        // No Background here: it follows IsReadOnly (OnPropertyChanged), and
+        // the IsReadOnly above has already set it for reading.
         Padding = new Thickness(8, 6, 2, 6);
         // Monospace, as Notepad and VS Code both open a text file. WPF's own
         // font fallback supplies Hangul and the other scripts Consolas lacks.
@@ -972,9 +973,26 @@ public sealed class ViewerTextEditor : TextEditor
         // and still there underneath, so arrows and PgDn move through the
         // text and a find lands where it says. Editing gives it its ink back
         // (null = the text area's default).
+        //
+        // AND THE GROUND DIFFERS BY A SHADE BETWEEN THE TWO (2026-10-13, on
+        // request), so reading and editing can be told apart at a glance and
+        // not only by the bar. The shade is READING's: tried on editing first,
+        // the same day, and turned round on seeing both - editing gets the
+        // panel's plain ground. A fill laid over the panel's background rather
+        // than a colour of its own: ViewerTextReadingBackground is derived
+        // against that background in MainWindow's ApplyEdgeInkOverrides, so a
+        // panel colour the user picks keeps the difference.
         if (e.Property == IsReadOnlyProperty)
         {
             TextArea.Caret.CaretBrush = IsReadOnly ? Brushes.Transparent : null;
+            if (IsReadOnly)
+            {
+                SetResourceReference(BackgroundProperty, "ViewerTextReadingBackground");
+            }
+            else
+            {
+                Background = Brushes.Transparent;
+            }
             return;
         }
 

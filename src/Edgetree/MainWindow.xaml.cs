@@ -1563,6 +1563,17 @@ public partial class MainWindow : Window
         // against the default dark ground, 3.4:1 against white.
         SetLocalBrush(resources, "ViewerTextLineNumberForeground",
             useLightInk ? Color.FromRgb(0x7A, 0x7D, 0x84) : Color.FromRgb(0x8A, 0x8D, 0x94));
+        // THE TEXT VIEW'S GROUND WHILE READING (2026-10-13, on request: the two
+        // states should differ at a glance). Given to editing first, and
+        // moved to reading the same day once both had been seen; editing
+        // keeps the panel's plain ground. A fill over the panel's own
+        // background, toward the ink - lighter on a dark ground, darker on a
+        // light one - so any panel colour keeps the step. Two fifths of the
+        // hover fill's strength below: a tint, not a second surface. Its
+        // strength was judged right on screen the day it was added.
+        SetLocalBrush(resources, "ViewerTextReadingBackground", useLightInk
+            ? Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)
+            : Color.FromArgb(0x0E, 0x00, 0x00, 0x00));
         var hoverFill = useLightInk
             ? Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x24, 0x00, 0x00, 0x00);
