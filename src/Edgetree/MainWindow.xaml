@@ -8728,7 +8728,11 @@
                          margin. Full ink rather than the chip's 0.65 rest, for
                          FooterNowPlayingChipStyle's reason: it is the one control
                          in front of you. Not focusable (the style's); once the
-                         text arrives the keyboard goes to it (ShowViewerText). -->
+                         text arrives the keyboard goes to it (ShowViewerText).
+                         One step above the strip's chips (2026-10-13, on
+                         request: at the chip size it read as small under a 64px
+                         icon) - the step the carousel counter and the transport
+                         glyphs already take, so it follows the zoom with them. -->
                     <Button x:Name="ViewerTextOpenButton"
                             Grid.Row="0"
                             HorizontalAlignment="Center"
@@ -8742,6 +8746,8 @@
                                     BasedOn="{StaticResource FooterActionChipStyle}">
                                 <Setter Property="Opacity"
                                         Value="1"/>
+                                <Setter Property="FontSize"
+                                        Value="{DynamicResource ViewerChipGlyphFontSize}"/>
                             </Style>
                         </Button.Style>
                     </Button>
