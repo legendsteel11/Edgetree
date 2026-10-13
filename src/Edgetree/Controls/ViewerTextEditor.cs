@@ -1297,6 +1297,12 @@ public sealed partial class ViewerTextEditor : TextEditor
     // VS Code's PREVIEW ratios (2em down to .85em) since 2026-10-11, to make a
     // long outline readable at a glance; next to the editor the sizes read as
     // this view's own invention.
+    //
+    // BOLD AND ITALIC IN VS CODE'S markup.bold / markup.italic COLOUR, #C9D1D9
+    // / #1F2328 - its own, a shade brighter than its editor text (#BBBEBF in
+    // Dark 2026). They first took this view's own text ink instead, to follow
+    // the palette, and beside VS Code a bold lead-in read a shade off (the
+    // same day, on report). Either way they stand apart from a quote's green.
     private static IHighlightingDefinition MarkdownDefinition(bool light)
     {
         var heading = light ? Color.FromRgb(0x05, 0x50, 0xAE) : Color.FromRgb(0x79, 0xC0, 0xFF);
@@ -1304,6 +1310,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         var quote = light ? Color.FromRgb(0x11, 0x63, 0x29) : Color.FromRgb(0x7E, 0xE7, 0x87);
         var list = light ? Color.FromRgb(0x95, 0x38, 0x00) : Color.FromRgb(0xFF, 0xA6, 0x57);
         var link = light ? Color.FromRgb(0x0A, 0x30, 0x69) : Color.FromRgb(0xA5, 0xD6, 0xFF);
+        var strong = light ? Color.FromRgb(0x1F, 0x23, 0x28) : Color.FromRgb(0xC9, 0xD1, 0xD9);
 
         XshdSyntaxDefinition xshd;
         var resource = Application.GetResourceStream(
@@ -1327,10 +1334,15 @@ public sealed partial class ViewerTextEditor : TextEditor
                 case "BlockQuote":
                     color.Foreground = new SimpleHighlightingBrush(quote);
                     break;
+                case "StrongEmphasis" or "Emphasis":
+                    color.Foreground = new SimpleHighlightingBrush(strong);
+                    break;
                 case "ListMarker":
                     color.Foreground = new SimpleHighlightingBrush(list);
                     break;
-                case "Link":
+                // A link's words; its target is LinkTarget, underlined in the
+                // text's own colour (Markdown.xshd).
+                case "LinkText":
                     color.Foreground = new SimpleHighlightingBrush(link);
                     break;
             }

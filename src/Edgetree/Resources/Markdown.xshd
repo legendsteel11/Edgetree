@@ -36,7 +36,10 @@
     <Color name="Code" />
     <Color name="BlockQuote" />
     <Color name="ListMarker" />
-    <Color name="Link" />
+    <!-- A link's words and its target (see the Links rule set). The target
+         has no colour of its own: the text's, underlined, as in VS Code. -->
+    <Color name="LinkText" />
+    <Color name="LinkTarget" underline="true" />
 
     <RuleSet>
         <Span color="Code" multiline="true">
@@ -55,16 +58,88 @@
         <Rule color="Heading5">^[ ]{0,3}\#{5}[ \t].*</Rule>
         <Rule color="Heading6">^[ ]{0,3}\#{6}[ \t].*</Rule>
 
-        <Rule color="BlockQuote">^[ ]{0,3}&gt;.*</Rule>
+        <!-- A QUOTE IS A SPAN, highlighted inside (2026-10-13, on request,
+             beside VS Code). It was one rule over the whole line, which
+             painted everything after the > in the quote colour - bold, links,
+             a list's marks and code included. Now the quote colour is only
+             the ground: what is inside is the Inline rules, and a list marker
+             right after the > (a list in a quote, "> - item"), as VS Code's
+             grammar has it. One line, as before: the span has no end, so it
+             ends with the line. -->
+        <Span color="BlockQuote" ruleSet="QuoteBody">
+            <Begin>^[ ]{0,3}&gt;</Begin>
+        </Span>
         <Rule color="ListMarker">^[ \t]*([-*+]|\d{1,9}[.)])(?=[ \t])</Rule>
 
+        <Import ruleSet="Inline" />
+    </RuleSet>
+
+    <!-- The list marker after the > (or after "> >" and so on). AvalonEdit
+         matches a span's rules against the line FROM THE SPAN'S START, just
+         past the first >, as if that were the whole text: ^ is that point and
+         a lookbehind sees nothing before it. The first version of this rule
+         looked back for the > itself and so never matched a plain "> - item"
+         - only "> > - item", where the second > lay inside what it could see
+         (measured 2026-10-13). So the lookbehind asks for nothing but further
+         >s and blanks between the span's start and the marker: a "- " later in
+         a quoted line, after any other text, is not taken for one. -->
+    <RuleSet name="QuoteBody">
+        <Rule color="ListMarker">(?&lt;=^([ \t]*&gt;)*)[ \t]*([-*+]|\d{1,9}[.)])(?=[ \t])</Rule>
+        <Import ruleSet="Inline" />
+    </RuleSet>
+
+    <!-- What can stand inside a line anywhere, a quote's included. Each part
+         takes what VS Code's Markdown grammar and its Dark / Light 2026 rules
+         give it - resolved from the installed VS Code's files, 2026-10-13. -->
+    <RuleSet name="Inline">
         <Rule color="Code">`[^`]+`</Rule>
-        <Rule color="StrongEmphasis">\*\*(?=\S).+?(?&lt;=\S)\*\*</Rule>
-        <Rule color="StrongEmphasis">(?&lt;!\w)__(?=\S).+?(?&lt;=\S)__(?!\w)</Rule>
+        <!-- BOLD IS A SPAN (2026-10-13), so what is inside keeps its own
+             colour: code in bold is the code colour, in bold, as VS Code
+             draws it - one rule over the whole run painted it all the bold
+             colour. The begin looks ahead for a close on the same line, so a
+             lone ** stays plain; the end has no lookbehind, because inside a
+             span a rule sees only from where it is scanning (QuoteBody). -->
+        <Span color="StrongEmphasis" ruleSet="InBold">
+            <Begin>\*\*(?=\S)(?=[^\r\n]*?\S\*\*)</Begin>
+            <End>\*\*</End>
+        </Span>
+        <Span color="StrongEmphasis" ruleSet="InBold">
+            <Begin>(?&lt;!\w)__(?=\S)(?=[^\r\n]*?\S__(?!\w))</Begin>
+            <End>__(?!\w)</End>
+        </Span>
         <Rule color="Emphasis">(?&lt;![\w*])\*(?=[^\s*]).*?(?&lt;=[^\s*])\*(?!\*)</Rule>
         <Rule color="Emphasis">(?&lt;!\w)_(?=[^\s_]).*?(?&lt;=[^\s_])_(?!\w)</Rule>
         <Rule color="Strikethrough">~~(?=\S).+?(?&lt;=\S)~~</Rule>
-        <Rule color="Link">!?\[[^\]]*\]\([^)]*\)</Rule>
-        <Rule color="Link">!?\[[^\]]*\]\[[^\]]*\]</Rule>
+        <Import ruleSet="Links" />
+    </RuleSet>
+
+    <RuleSet name="InBold">
+        <Rule color="Code">`[^`]+`</Rule>
+        <Rule color="Emphasis">(?&lt;![\w*])\*(?=[^\s*]).*?(?&lt;=[^\s*])\*(?!\*)</Rule>
+        <Rule color="Emphasis">(?&lt;!\w)_(?=[^\s_]).*?(?&lt;=[^\s_])_(?!\w)</Rule>
+        <Rule color="Strikethrough">~~(?=\S).+?(?&lt;=\S)~~</Rule>
+        <Import ruleSet="Links" />
+    </RuleSet>
+
+    <!-- A LINK IN PARTS (2026-10-13): its [ ] ( ) and ![ in the text's own
+         colour, its words in the link colour, its target underlined in the
+         text's colour - VS Code's punctuation, string.other.link and
+         markup.underline.link. It was one rule painting all of it the link
+         colour. One span from the [ to the ), its begin looking ahead for the
+         whole link so a bracket in prose starts nothing; inside, the words
+         are what follows the span's start up to the ] (^ is that start, see
+         QuoteBody) and the target is what follows "](". A reference link,
+         [words][label], stays one rule in the link colour. -->
+    <RuleSet name="Links">
+        <Span ruleSet="LinkBody">
+            <Begin>!?\[(?=[^\]\r\n]*\]\((?:&lt;[^&gt;\r\n]+&gt;|[^)\s]+)(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'))?\))</Begin>
+            <End>\)</End>
+        </Span>
+        <Rule color="LinkText">!?\[[^\]\r\n]*\]\[[^\]\r\n]*\]</Rule>
+    </RuleSet>
+
+    <RuleSet name="LinkBody">
+        <Rule color="LinkText">^[^\]\r\n]+</Rule>
+        <Rule color="LinkTarget">(?&lt;=\]\()(?:&lt;[^&gt;\r\n]+&gt;|[^)\s]+)</Rule>
     </RuleSet>
 </SyntaxDefinition>
