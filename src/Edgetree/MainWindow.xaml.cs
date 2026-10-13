@@ -1509,6 +1509,11 @@ public partial class MainWindow : Window
         // chevron over the tree's own edge - each follows its actual ground.
         ApplyEdgeInkOverrides(ViewerCollapseButton.Resources, viewerBg);
         ApplyEdgeInkOverrides(ViewerExpandButton.Resources, treeBg);
+        // The text view's frame while editing sits on the tree's ground too.
+        if (_viewerTextChromeOn)
+        {
+            RefreshViewerTextChromeInks(light);
+        }
     }
 
     private static void ApplyEdgeInkOverrides(ResourceDictionary resources, Color background)
@@ -1574,6 +1579,14 @@ public partial class MainWindow : Window
         SetLocalBrush(resources, "ViewerTextReadingBackground", useLightInk
             ? Color.FromArgb(0x12, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x0E, 0x00, 0x00, 0x00));
+        // The find and replace fields, sunk a shade into whatever they sit on
+        // (2026-10-13, on request), so a field reads as a place to type rather
+        // than an outline on the bar. Darker on either theme - a
+        // recess, not a highlight - and stronger on a dark ground, where the
+        // same alpha shows less.
+        SetLocalBrush(resources, "ViewerTextFieldBackground", useLightInk
+            ? Color.FromArgb(0x30, 0x00, 0x00, 0x00)
+            : Color.FromArgb(0x0C, 0x00, 0x00, 0x00));
         var hoverFill = useLightInk
             ? Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF)
             : Color.FromArgb(0x24, 0x00, 0x00, 0x00);
@@ -13674,10 +13687,24 @@ public partial class MainWindow : Window
         // bar took it): both seats start on the same grid row, so the bar's
         // top is the path bar's less the 2 the viewer panel already pads its
         // top with (ViewerPanel's Padding in the XAML - change one, change
-        // both). Its bottom line then meets the top seat's divider. The find
-        // row under it takes the same margins, so the pair stack evenly.
+        // both). Its bottom line then meets the top seat's divider.
+        //
+        // THE ROWS UNDER IT STAND THE SAME 2 APART (2026-10-13, on a zoomed
+        // capture). Each row used to carry the bar's margins and a line of
+        // its own, so the gaps between them came out uneven - 3+1+3 under the
+        // edit bar, 2+1+3 under find - while the last row ended 2 above its
+        // line. The three now share one block with one line under it
+        // (ViewerTextBars), and every visible gap is that bottom 2: outline to
+        // outline between find and replace, and 1 less between the edit bar
+        // and find, since the edit bar's buttons already sit 1 inside their
+        // row. With the edit bar alone the block's line falls where its own
+        // did, so the path bar alignment above holds.
+        double barGap = Math.Round(2.0 * CompactScale);
         Resources["ViewerTextBarMargin"] = new Thickness(
-            6, Math.Max(0.0, Math.Round(5.0 * CompactScale) - 2.0), 6, Math.Round(2.0 * CompactScale));
+            6, Math.Max(0.0, Math.Round(5.0 * CompactScale) - 2.0), 6, 0);
+        Resources["ViewerTextFindRowMargin"] = new Thickness(6, Math.Max(0.0, barGap - 1.0), 6, 0);
+        Resources["ViewerTextReplaceRowMargin"] = new Thickness(6, barGap, 6, 0);
+        Resources["ViewerTextBarsPadding"] = new Thickness(0, 0, 0, barGap);
 
         double tabSpacing = Math.Clamp(_settings.TabSpacing, 4, 24);
         Resources["TabSpacingWidth"] = new GridLength(tabSpacing);
@@ -36556,9 +36583,11 @@ public partial class MainWindow : Window
         _viewerTextPath = null;
         bool hadKeyboard = ViewerTextHost.IsKeyboardFocusWithin;
         ViewerTextHost.Visibility = Visibility.Collapsed;
-        // Release closes the search; the rows are ours to put away.
+        // Release closes the search; the rows are ours to put away, and the
+        // caption's editing ground with them.
         ViewerTextFindBar.Visibility = Visibility.Collapsed;
         ViewerTextReplaceBar.Visibility = Visibility.Collapsed;
+        SetViewerTextChrome(false);
         ReleaseViewerTextDocument();
 
         // A collapsed element keeps nothing, so the keyboard would be left
@@ -37066,6 +37095,71 @@ public partial class MainWindow : Window
         ViewerTextUndoButton.IsEnabled = editor.CanUndoEdit;
         ViewerTextRedoButton.IsEnabled = editor.CanRedoEdit;
         UpdateViewerTextReplaceBar(editor);
+        SetViewerTextChrome(editing);
+    }
+
+    // ----- The text view's frame while editing (2026-10-13) -------------------
+    //
+    // Editing, the bars above the text (edit, find, replace) and the caption
+    // below it sit on the TREE's ground - the colour the path bar sits on -
+    // so the text is framed as a page being worked on and stands apart from
+    // its frame, where reading leaves everything on the panel's own ground.
+    // Asked for on seeing the path bar beside the edit bar.
+    //
+    // THE INKS GO WITH THE GROUND. Everything in the panel takes inks derived
+    // against the PANEL's background (UpdateDerivedEdgeInks), and a palette
+    // can give the tree and the panel grounds that want opposite inks - so
+    // the frame's parts get a set derived against the tree's ground instead,
+    // one ResourceDictionary merged into each. Merged, not written into their
+    // own Resources: full screen writes the caption's plate inks there and
+    // takes them out key by key, and a key of its own outranks a merged one,
+    // so the plate wins while it is up and neither side removes the other's.
+    private ResourceDictionary? _viewerTextChromeInks;
+    private bool _viewerTextChromeOn;
+
+    private void SetViewerTextChrome(bool on)
+    {
+        if (on == _viewerTextChromeOn)
+        {
+            return;
+        }
+
+        _viewerTextChromeOn = on;
+        if (on)
+        {
+            _viewerTextChromeInks ??= new ResourceDictionary();
+            RefreshViewerTextChromeInks(_settings.IsLightMode);
+        }
+
+        if (on)
+        {
+            ViewerTextBars.SetResourceReference(Border.BackgroundProperty, "SidebarBackground");
+            ViewerTextBars.Resources.MergedDictionaries.Add(_viewerTextChromeInks!);
+            ViewerCaptionPanel.Resources.MergedDictionaries.Add(_viewerTextChromeInks!);
+        }
+        else
+        {
+            ViewerTextBars.ClearValue(Border.BackgroundProperty);
+            ViewerTextBars.Resources.MergedDictionaries.Remove(_viewerTextChromeInks!);
+            ViewerCaptionPanel.Resources.MergedDictionaries.Remove(_viewerTextChromeInks!);
+        }
+        ViewerCaptionGround.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // In place - the brushes keep their identity, so whatever already shows
+    // them takes the new colour. Also run on every palette or theme change
+    // while the frame is up (UpdateDerivedEdgeInks).
+    private void RefreshViewerTextChromeInks(bool light)
+    {
+        if (_viewerTextChromeInks is null)
+        {
+            return;
+        }
+
+        Color treeGround = ColorConverter.ConvertFromString(
+            light ? _settings.LightBackgroundColorHex : _settings.BackgroundColorHex)
+            is Color t ? t : Colors.Black;
+        ApplyEdgeInkOverrides(_viewerTextChromeInks, treeGround);
     }
 
     // Keeps FileSystemService.UnsavedTextPaths, and the tree rows' marks, equal
