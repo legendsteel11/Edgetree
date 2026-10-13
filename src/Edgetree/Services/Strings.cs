@@ -485,7 +485,7 @@ public static class Strings
     // 그때의 기록이라 소급하지 않는다.
     public static string ViewerZoomFill = "채우기";
     public static string ViewerNavigator = "내비게이터";
-    public static string ViewerClose = "멀티미디어 패널 닫기";
+    public static string ViewerClose = "멀티미디어 패널 닫기 (Ctrl+W)";
     // The footer's now-playing row, which only exists while the viewer is shut
     // and 배경 재생 is holding a track.
     public static string FooterNowPlayingOpen = "멀티미디어 패널에서 열기";
@@ -707,8 +707,8 @@ public static class Strings
     public static string TextReplaceUnfold = "바꾸기 펼치기";
     // The text view's edit bar (2026-10-11). The commands are icons, so these
     // are their tooltips, each with its key where it has one.
-    public static string ViewerTextEdit = "편집";
-    public static string TextEditCancel = "편집 취소";
+    public static string ViewerTextEdit = "편집 (Ctrl+E)";
+    public static string TextEditCancel = "편집 취소 (Ctrl+E)";
     public static string TextEditSave = "저장 (Ctrl+S)";
     public static string TextEditReload = "다시 불러오기";
     public static string TextEditUndo = "실행 취소 (Ctrl+Z)";
@@ -1304,7 +1304,7 @@ public static class Strings
         ViewerZoomActual = "1:1";
         ViewerZoomFill = "Fill";
         ViewerNavigator = "Navigator";
-        ViewerClose = "Close the multimedia panel";
+        ViewerClose = "Close the multimedia panel (Ctrl+W)";
         FooterNowPlayingOpen = "Open in the multimedia panel";
         FooterHeldFilmResume = "Resume";
         ViewerNowPlayingLabel = "Now playing";
@@ -1377,8 +1377,8 @@ public static class Strings
         TextReplaceFold = "Hide replace";
         TextReplaceUnfold = "Show replace";
         TextReplacedCount = "{0} replaced";
-        ViewerTextEdit = "Edit";
-        TextEditCancel = "Cancel editing";
+        ViewerTextEdit = "Edit (Ctrl+E)";
+        TextEditCancel = "Cancel editing (Ctrl+E)";
         TextEditSave = "Save (Ctrl+S)";
         TextEditReload = "Reload";
         TextEditUndo = "Undo (Ctrl+Z)";

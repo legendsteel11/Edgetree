@@ -2530,6 +2530,27 @@ public partial class MainWindow : Window
                 OpenViewerTextFind(forReplace: true);
                 e.Handled = true;
                 break;
+            // Ctrl+E INSIDE THE TEXT VIEW switches between reading and editing
+            // (2026-10-13, on request): the edit bar's pencil and 편집 취소 as
+            // one key, doing exactly what they do. Everywhere else it is still
+            // the way out of the search view (the last case below) - the same
+            // split Ctrl+F makes. Before that case, so this guard is asked
+            // first.
+            case Key.E when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerTextHost.IsKeyboardFocusWithin:
+                ToggleViewerTextEditing();
+                e.Handled = true;
+                break;
+            // Ctrl+W closes the multimedia panel (2026-10-13, on request) -
+            // the key that closes a tab or a document window nearly everywhere,
+            // and the panel had no key at all. Wherever the keyboard is: the
+            // panel's own close does the rest (full screen, background play,
+            // edits kept, the keyboard handed back to the tree). Close only;
+            // the title bar's icon still opens it.
+            case Key.W when Keyboard.Modifiers == ModifierKeys.Control && _viewerOpen:
+                CloseViewer();
+                e.Handled = true;
+                break;
             // Ctrl+S saves the text being edited (2026-10-11), with the keyboard
             // in the text or its find row. The app had no Ctrl+S of its own.
             case Key.S when Keyboard.Modifiers == ModifierKeys.Control
@@ -37203,6 +37224,29 @@ public partial class MainWindow : Window
         {
             editor.BeginEdit();
             Keyboard.Focus(editor.TextArea);
+        }
+    }
+
+    // Ctrl+E in the text: whichever of the two buttons is on the bar. A file
+    // that cannot be edited (head only, long lines split) answers nothing,
+    // as its disabled pencil does. 편집 취소 drops unsaved edits without
+    // asking here too - recoverable the same way, Ctrl+E then Ctrl+Z.
+    // NoInlining: the key handler calls it (see the find row's section).
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ToggleViewerTextEditing()
+    {
+        if (_viewerTextEditor is not ViewerTextEditor editor || _viewerTextPath is null)
+        {
+            return;
+        }
+
+        if (editor.IsEditing)
+        {
+            ViewerTextCancelEdit_Click(this, new RoutedEventArgs());
+        }
+        else if (editor.CanEdit)
+        {
+            ViewerTextEditButton_Click(this, new RoutedEventArgs());
         }
     }
 
