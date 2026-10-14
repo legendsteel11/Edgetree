@@ -37213,7 +37213,7 @@ public partial class MainWindow : Window
         return Environment.TickCount64 - _textAskedOnArrivalTicks < TextAskedOnArrivalMs;
     }
 
-    private void FollowMarkdownLink(string target)
+    private async void FollowMarkdownLink(string target)
     {
         target = target.Trim();
         if (target.Length == 0 || _viewerTextPath is not { } from)
@@ -37287,7 +37287,22 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (File.Exists(path))
+        // ASKED ON A WORKER (2026-10-14, pre-release review): a link into a
+        // share whose server is off waits out the network's timeout - seconds
+        // to tens of seconds - and asked here on the UI thread that froze the
+        // whole app for one Ctrl+click. A panel that has moved on by the time
+        // the answer comes drops the jump, which would land out of nowhere.
+        var (isFile, isFolder) = await Task.Run(() =>
+        {
+            bool file = File.Exists(path);
+            return (file, !file && Directory.Exists(path));
+        });
+        if (!string.Equals(_viewerTextPath, from, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        if (isFile)
         {
             if (IsViewerText(path))
             {
@@ -37297,7 +37312,7 @@ public partial class MainWindow : Window
                 _textAnchorPath = path;
             }
         }
-        else if (!Directory.Exists(path))
+        else if (!isFolder)
         {
             return;
         }
