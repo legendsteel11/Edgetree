@@ -37599,15 +37599,21 @@ public partial class MainWindow : Window
 
     // Enter is 바꾸기, Ctrl+Alt+Enter 모두 바꾸기 - VS Code's pair. A Korean
     // composition still open arrives as ImeProcessed, so the Enter that
-    // finishes a syllable never replaces.
+    // finishes a syllable never replaces. The key is read through SystemKey
+    // as well, as the window's own handler reads it: WPF reports a key
+    // pressed with Alt as Key.System, and Ctrl+Alt is not certain to escape
+    // that on every keyboard layout (2026-10-14, pre-release review).
     private void ViewerTextReplaceBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (e.Key is not (Key.Enter or Key.Return))
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        bool all = Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt);
+        // Alt+Enter alone stays nothing here, as it was.
+        if (key is not (Key.Enter or Key.Return) || (e.Key == Key.System && !all))
         {
             return;
         }
 
-        if (Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Alt))
+        if (all)
         {
             ViewerTextReplaceAll_Click(sender, e);
         }
