@@ -625,16 +625,21 @@ public static class FileOperationService
                 return false;
             }
             string newPath = Path.Combine(dir, newName);
+            // The name as Windows stores it: trailing spaces and dots are cut
+            // (measured under .NET 8 - see RenameKeepingSelection), and the
+            // edits PathMoved carries along have to land on the path the file
+            // is actually under (2026-10-14, pre-release review).
+            string landedPath = Path.GetFullPath(newPath);
 
             if (Directory.Exists(path))
             {
                 Directory.Move(path, newPath);
-                PathMoved?.Invoke(path, newPath);
+                PathMoved?.Invoke(path, landedPath);
             }
             else if (File.Exists(path))
             {
                 File.Move(path, newPath);
-                PathMoved?.Invoke(path, newPath);
+                PathMoved?.Invoke(path, landedPath);
             }
 
             return true;
