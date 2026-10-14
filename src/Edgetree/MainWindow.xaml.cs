@@ -37640,6 +37640,8 @@ public partial class MainWindow : Window
         // 저장 lights only with something to save, so the button itself says
         // whether the file on disk is the text on screen.
         ViewerTextSaveButton.IsEnabled = editor.HasUnsavedEdits && !_viewerTextSaving;
+        // Not while a save is out, for 편집 취소's reason (ReloadViewerText).
+        ViewerTextReloadButton.IsEnabled = !_viewerTextSaving;
         ViewerTextUndoButton.IsEnabled = editor.CanUndoEdit;
         ViewerTextRedoButton.IsEnabled = editor.CanRedoEdit;
         UpdateViewerTextReplaceBar(editor);
@@ -38320,9 +38322,16 @@ public partial class MainWindow : Window
         _unsavedTextStore.Flush();
     }
 
-    // The app's own 종료. True to go on and exit.
+    // The app's own 종료. True to go on and exit. A second 종료 while the
+    // first one's saves are still being written is not asked again and does
+    // not exit; the first one finishes and exits.
     private async Task<bool> ConfirmUnsavedTextBeforeExit()
     {
+        if (_savingAllText)
+        {
+            return false;
+        }
+
         PersistUnsavedText();
         SyncViewerTextUnsavedMarks();
         var paths = FileSystemService.UnsavedTextPaths.ToList();
@@ -38355,36 +38364,68 @@ public partial class MainWindow : Window
     // 예: every file written in turn, each with its own questions. One
     // answered no, or one that failed, stops the exit; what was saved stays
     // saved and the rest keep their marks.
+    //
+    // NEVER TWO WRITES TO ONE FILE AT ONCE (2026-10-14, pre-release review).
+    // A Ctrl+S still writing to a slow share is waited out first - starting
+    // alongside it, this write would find the file mid-change and ask whether
+    // to overwrite it, or write over it. And while these writes are out,
+    // _viewerTextSaving holds off Ctrl+S, 다시 불러오기 and 편집 취소 the same
+    // way a single save does.
+    private bool _savingAllText;
+
     private async Task<bool> SaveAllUnsavedTextAsync()
     {
-        var editor = _viewerTextEditor as ViewerTextEditor;
-        foreach (string path in FileSystemService.UnsavedTextPaths.ToList())
+        _savingAllText = true;
+        try
         {
-            if (editor?.CreateSaveRequest(path) is { } request)
+            while (_viewerTextSaving)
             {
-                if (await WriteViewerTextAsync(
-                        request.Path, request.Text, request.Encoding, request.HasBom,
-                        request.ExpectedLength, request.ExpectedLastWriteUtc) is not { } written)
-                {
-                    return false;
-                }
-                editor.CompleteSave(request with { Encoding = written.Encoding, HasBom = written.HasBom }, written.Result);
+                await Task.Delay(50);
             }
-            else if (_unsavedTextStore.ReadText(path, out var entry) is { } text && entry is not null)
-            {
-                if (await WriteViewerTextAsync(
-                        path, text, TextFileReader.EncodingFor(entry.CodePage, entry.HasBom), entry.HasBom,
-                        entry.StampLength, entry.StampLastWriteUtc) is null)
-                {
-                    return false;
-                }
-                _unsavedTextStore.Delete(path);
-            }
-        }
 
-        PersistUnsavedText();
-        SyncViewerTextUnsavedMarks();
-        return FileSystemService.UnsavedTextPaths.Count == 0;
+            _viewerTextSaving = true;
+            UpdateViewerTextEditBar();
+            try
+            {
+                var editor = _viewerTextEditor as ViewerTextEditor;
+                foreach (string path in FileSystemService.UnsavedTextPaths.ToList())
+                {
+                    if (editor?.CreateSaveRequest(path) is { } request)
+                    {
+                        if (await WriteViewerTextAsync(
+                                request.Path, request.Text, request.Encoding, request.HasBom,
+                                request.ExpectedLength, request.ExpectedLastWriteUtc) is not { } written)
+                        {
+                            return false;
+                        }
+                        editor.CompleteSave(request with { Encoding = written.Encoding, HasBom = written.HasBom }, written.Result);
+                    }
+                    else if (_unsavedTextStore.ReadText(path, out var entry) is { } text && entry is not null)
+                    {
+                        if (await WriteViewerTextAsync(
+                                path, text, TextFileReader.EncodingFor(entry.CodePage, entry.HasBom), entry.HasBom,
+                                entry.StampLength, entry.StampLastWriteUtc) is null)
+                        {
+                            return false;
+                        }
+                        _unsavedTextStore.Delete(path);
+                    }
+                }
+            }
+            finally
+            {
+                _viewerTextSaving = false;
+                UpdateViewerTextEditBar();
+            }
+
+            PersistUnsavedText();
+            SyncViewerTextUnsavedMarks();
+            return FileSystemService.UnsavedTextPaths.Count == 0;
+        }
+        finally
+        {
+            _savingAllText = false;
+        }
     }
 
     // 아니요: every edit dropped, in memory and on disk.
@@ -38435,9 +38476,16 @@ public partial class MainWindow : Window
     // 다시 불러오기, and 편집 취소 with edits to drop (see ViewerTextEditor.Reload).
     // Through _viewerTextLoad like an open, so the panel moving on cancels it
     // the same way.
+    //
+    // NEVER WHILE A SAVE IS OUT (2026-10-14, pre-release review). A save
+    // writes the file in place, so a read in the middle of it can take the
+    // new head with the old tail - and Reload then marks that text as what
+    // the file holds, the next save writing it back. 편집 취소 was already
+    // held off for this; the 다시 불러오기 button was not.
     private async void ReloadViewerText(bool endEditing)
     {
-        if (_viewerTextEditor is not ViewerTextEditor editor ||
+        if (_viewerTextSaving ||
+            _viewerTextEditor is not ViewerTextEditor editor ||
             _viewerTextPath is not { } path ||
             !editor.IsEditing)
         {
