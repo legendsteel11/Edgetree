@@ -215,7 +215,7 @@ const dict = {
         { title: '글꼴 크기', desc: '옵션 메뉴 또는 Ctrl +/- 로 9~20pt 조절, Ctrl+0으로 기본값 복원. 아이콘과 행 간격도 함께 따라옵니다.' },
         { title: '디스플레이 배율 대응', desc: '윈도우 확대 배율(125%·150%·200% 등)에서 화면을 늘려 그리지 않고 그 배율로 직접 렌더링합니다. 고해상도 노트북이나 27인치 이상 4K 모니터에서 글자와 아이콘이 또렷합니다.' },
         { title: '설정 내보내기/가져오기/초기화', desc: 'JSON으로 저장·복원하고, 전체 초기화 시 레지스트리까지 깔끔하게 정리됩니다.' },
-        { title: '한국어/영어 지원', desc: '옵션 메뉴에서 언제든 언어를 전환할 수 있습니다.' },
+        { highlight: true, title: '텍스트 · 마크다운 편집', desc: '멀티미디어 패널에서 TXT·MD 파일을 바로 보고 편집합니다. 찾기·바꾸기, 줄 번호, 마크다운 서식을 지원하고, 저장하지 않은 변경 사항은 다시 시작해도 유지됩니다.' },
       ],
     },
     info: {
@@ -401,7 +401,7 @@ const dict = {
         { title: 'Font Size', desc: 'Adjust 9-20pt from the options menu or with Ctrl +/-, Ctrl+0 to reset. Icons and row spacing follow along.' },
         { title: 'Display Scaling', desc: 'Renders at your display\'s actual scale (125%, 150%, 200%…) rather than being stretched to fit it, so text and icons stay sharp on high-resolution laptops and 27"+ 4K monitors.' },
         { title: 'Export / Import / Reset Settings', desc: "Save and restore settings as JSON - a full reset also cleans up the Windows registry entry." },
-        { title: 'Korean / English UI', desc: 'Switch languages anytime from the options menu.' },
+        { highlight: true, title: 'Text & Markdown Editing', desc: 'View and edit TXT and MD files right in the multimedia panel - find and replace, line numbers and Markdown formatting, with unsaved changes kept across restarts.' },
       ],
     },
     info: {

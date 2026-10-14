@@ -45,6 +45,48 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // TEN LINES. The text view leads with four of them - viewing and editing,
+    // find and line numbers, edits kept, Markdown - then the three other
+    // additions, two changes, and the one fix of a fault that was already in
+    // v2.6.3 (the tree's selection moving to the folder above, which had two
+    // causes and is one line). The notes carry more of the text view and two
+    // changes the card leaves out: 새 폴더 moving into 새로 만들기, and a
+    // dialog's title bar flashing when the window behind it is clicked.
+    //
+    // Off the card and the notes both: everything that repaired this
+    // release's own new code before it shipped, the pre-release review's
+    // fixes included.
+    //
+    // The English lines took the better half of an outside review's draft;
+    // "pinned" for the sticky headings did not come over, the app's pin
+    // being another thing.
+    version: 'v2.7.0',
+    ko: [
+      'TXT·MD 파일을 멀티미디어 패널에서 보고 편집할 수 있습니다.',
+      '텍스트 보기에서 찾기·바꾸기와 줄 번호를 지원합니다.',
+      '저장하지 않은 변경 사항은 다른 파일로 이동하거나 앱을 다시 시작해도 유지됩니다.',
+      '마크다운은 VS Code와 같은 색으로 표시되고, `서식` 메뉴, 링크 `Ctrl`+클릭, 위쪽 제목 고정을 지원합니다.',
+      '트리 우클릭 `새로 만들기`에서 텍스트 문서와 마크다운 문서를 만들 수 있습니다.',
+      '그림과 텍스트를 우클릭 메뉴의 `인쇄`로 인쇄할 수 있습니다.',
+      '자동 숨김 손잡이의 길이와 위치를 옵션에서 조정할 수 있습니다.',
+      '파일 행의 `정렬 기준`은 해당 파일이 있는 폴더의 정렬을 변경합니다.',
+      '썸네일 툴팁에 파일 크기와 수정 시각이 표시됩니다.',
+      '폴더 내용이 바뀌거나 정렬을 변경할 때 트리의 선택이 상위 폴더로 이동하던 문제를 수정했습니다.',
+    ],
+    en: [
+      'View and edit TXT and MD files in the multimedia panel.',
+      'Find & replace and line numbers are available in the text view.',
+      'Unsaved changes are kept even when you switch to another file or restart the app.',
+      'Markdown is shown in the same colors as VS Code, with a Format menu, Ctrl+click on links, and headings that stay at the top as you scroll.',
+      'Create text and Markdown documents from New in the tree\'s right-click menu.',
+      'Print images and text files from Print in the right-click menu.',
+      'Adjust the length and position of the auto-hide handle in Options.',
+      'A file row\'s Sort by now changes the sort order of the folder that contains the file.',
+      'Thumbnail tooltips now show the file size and modified time.',
+      'Fixed the tree\'s selection moving to the parent folder when a folder\'s contents or sort order changed.',
+    ],
+  },
+  {
     // TWELVE LINES: four additions, four changes (the bookmark landing is
     // written as what now works, not as a fault), four fixes of faults that
     // were in v2.6.2. The release notes carry five more: the marked count on

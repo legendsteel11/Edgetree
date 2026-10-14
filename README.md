@@ -1,4 +1,4 @@
-# Edgetree v2.6.3
+# Edgetree v2.7.0
 
 [한국어 안내](README-ko.md)
 
@@ -17,7 +17,7 @@ Grab the latest build from the [Releases page](https://github.com/legendsteel11/
   through it and Edgetree lands in your Start menu, with a clean uninstall.
 - **`Edgetree-<version>-win-x64-standalone.exe`** (~155 MB) — one file, nothing
   to install. Keep it wherever you like and run it.
-- **`Edgetree-<version>-win-x64.exe`** (~1 MB) — the same app, using the
+- **`Edgetree-<version>-win-x64.exe`** (~3 MB) — the same app, using the
   [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
   already on the machine.
 
@@ -82,10 +82,10 @@ leaves them where they are.
 
 ### Files and the right-click menu
 
-- **A full right-click menu**: new folder, open, open with, copy/paste,
-  compress, rename, delete to the Recycle Bin, copy path, open in terminal,
-  reveal in Explorer, properties — with the usual shortcuts (`F2`, `F5`,
-  `F7`, `Delete`, `Ctrl+C`/`Ctrl+V`, `Enter`).
+- **A full right-click menu**: new folder, text or Markdown document, open,
+  open with, copy/paste, compress, rename, delete to the Recycle Bin, copy
+  path, open in terminal, reveal in Explorer, print, properties — with the
+  usual shortcuts (`F2`, `F5`, `F7`, `Delete`, `Ctrl+C`/`Ctrl+V`, `Enter`).
 - **Compress to zip** from the same menu, and unpack a `.zip` with Extract.
 - **Image preview.** Right-click an image and a thumbnail appears at the top
   of the menu, with its format, pixel size, file size, and modified date.
@@ -122,6 +122,11 @@ leaves them where they are.
   window to the screen, or fills the window you already have — pick which
   from the right-click menu. It works while docked, and the thumbnail bar
   steps aside for a film.
+- **Text and Markdown**: view and edit TXT and MD files in the panel. Find
+  and replace, line numbers that color the lines changed since the last save,
+  Markdown formatting (`Ctrl+B`/`Ctrl+I`) and links you can follow, headings
+  that stay at the top as you scroll, and printing. Unsaved changes are kept
+  across restarts, and quitting asks about them.
 
 ### Bookmarks and search
 
@@ -219,6 +224,19 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.7.0 (2026-10-14)
+
+- View and edit TXT and MD files in the multimedia panel.
+- Find & replace and line numbers are available in the text view.
+- Unsaved changes are kept even when you switch to another file or restart the app.
+- Markdown is shown in the same colors as VS Code, with a Format menu, Ctrl+click on links, and headings that stay at the top as you scroll.
+- Create text and Markdown documents from New in the tree's right-click menu.
+- Print images and text files from Print in the right-click menu.
+- Adjust the length and position of the auto-hide handle in Options.
+- A file row's Sort by now changes the sort order of the folder that contains the file.
+- Thumbnail tooltips now show the file size and modified time.
+- Fixed the tree's selection moving to the parent folder when a folder's contents or sort order changed.
 
 ### v2.6.3 (2026-10-07)
 
