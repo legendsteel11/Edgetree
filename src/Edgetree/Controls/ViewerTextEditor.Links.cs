@@ -148,9 +148,15 @@ public sealed partial class ViewerTextEditor
             return false;
         }
 
+        // Only the lines the highlighting draws as headings (ScanHeadings,
+        // shared with the sticky headings): a "# comment" inside a fenced
+        // code block counted too until 2026-10-14 (pre-release review), which
+        // took the jump into the code and numbered the real heading after it
+        // as a repeat - GitHub counts neither.
         var seen = new Dictionary<string, int>(StringComparer.Ordinal);
-        foreach (var line in Document.Lines)
+        foreach (int number in ScanHeadings(Document.Text).Lines)
         {
+            var line = Document.GetLineByNumber(number);
             var match = HeadingLine.Match(Document.GetText(line));
             if (!match.Success)
             {
