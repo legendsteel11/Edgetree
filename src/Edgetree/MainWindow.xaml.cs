@@ -38114,7 +38114,21 @@ public partial class MainWindow : Window
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
     private void ShowTextPrintPreview(string text, string fileName, bool markdown)
     {
-        var document = ViewerTextEditor.BuildPreview(text, fileName, markdown);
+        // Every page is built before the window opens, on the UI thread:
+        // measured at 0.8s for a 1MB text (220 pages) and 1.6s for 3MB (660),
+        // so about 5s at the 10MB limit (2026-10-14, pre-release review). Rare
+        // enough to leave the build as it is, but not to leave it looking
+        // like a hang - the wait cursor for as long as it runs.
+        System.Windows.Documents.FixedDocument document;
+        Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait;
+        try
+        {
+            document = ViewerTextEditor.BuildPreview(text, fileName, markdown);
+        }
+        finally
+        {
+            Mouse.OverrideCursor = null;
+        }
         var window = new PrintPreviewWindow(document, fileName, () =>
         {
             ReportPrintFailure(ViewerTextEditor.PrintText(text, fileName, markdown, out bool printed));
