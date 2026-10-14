@@ -1562,7 +1562,7 @@ public partial class MainWindow : Window
         // above, which is this panel's FileNameForeground. They first took the
         // app's SecondaryForeground, which is drawn against the TREE's ground
         // and knows nothing of this panel's, and read a touch strong beside
-        // the text ("살짝 더 흐리게"). Quieted the way this method quiets the
+        // the text (on request, 2026-10-11). Quieted the way this method quiets the
         // caption - a backed-off ink, no opacity - and derived like the rest,
         // so a panel colour the user picks cannot swallow them. About 4:1
         // against the default dark ground, 3.4:1 against white.

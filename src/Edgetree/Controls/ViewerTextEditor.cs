@@ -477,8 +477,8 @@ public sealed partial class ViewerTextEditor : TextEditor
     // really many rows tall is drawn as it comes into view and pushes the
     // target straight back out. Measured in a harness: a find landing on line
     // 106 of a split one-line file left lines 51-52 on screen, and every
-    // further F3 crept one line closer - which is exactly how it was reported
-    // ("엔터를 눌러도 한줄씩 스크롤"). Not the split file's own problem: 2,000
+    // further F3 crept one line closer - which is exactly what had been seen
+    // in use (2026-10-11). Not the split file's own problem: 2,000
     // ordinary 1,200-character paragraphs did the same, finishing 23 lines
     // short of the last one.
     //
