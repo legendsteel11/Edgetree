@@ -351,11 +351,37 @@ public sealed partial class ViewerTextEditor : TextEditor
             System.Windows.Input.Key.Z,
             System.Windows.Input.ModifierKeys.Control | System.Windows.Input.ModifierKeys.Shift));
 
+        // NO UNDO OR REDO WHILE READING (2026-10-14, pre-release review).
+        // AvalonEdit runs both on a read-only text - measured in a harness:
+        // after 편집 취소 had dropped edits as one undo step, Ctrl+Z in the
+        // reading view put them back, leaving a changed text with no 저장 on
+        // the bar. Reading changes nothing, history included; 편집 and then
+        // Ctrl+Z still brings dropped edits back, as 편집 취소 promises.
+        System.Windows.Input.CommandManager.AddPreviewCanExecuteHandler(TextArea, (_, e) =>
+        {
+            if (IsReadOnly && IsHistoryCommand(e.Command))
+            {
+                e.CanExecute = false;
+                e.Handled = true;
+            }
+        });
+        System.Windows.Input.CommandManager.AddPreviewExecutedHandler(TextArea, (_, e) =>
+        {
+            if (IsReadOnly && IsHistoryCommand(e.Command))
+            {
+                e.Handled = true;
+            }
+        });
+
         // The changed-line marks follow the text (ViewerTextEditor.ChangeMarks.cs).
         TextChanged += (_, _) => ScheduleChangeMarks();
 
         TextArea.Caret.PositionChanged += (_, _) => ScheduleRevealCaret();
     }
+
+    private static bool IsHistoryCommand(System.Windows.Input.ICommand command)
+        => command == System.Windows.Input.ApplicationCommands.Undo ||
+           command == System.Windows.Input.ApplicationCommands.Redo;
 
     // ----- Find marks give way to a selection (2026-10-11) --------------------
     //
