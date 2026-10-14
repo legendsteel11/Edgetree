@@ -304,9 +304,9 @@ public static class HelpContent
                     // not: the row refreshes that folder, this one the drive
                     // list and every folder open in the tree.
                     R("빈 곳 우클릭",
-                      "전체 새로고침 · 새 폴더 · 북마크 · 숨긴 폴더 · 네트워크 위치 · 표시할 파일 형식",
+                      "전체 새로고침 · 새로 만들기 · 북마크 · 숨긴 폴더 · 네트워크 위치 · 표시할 파일 형식",
                       "Right-click empty space",
-                      "Refresh everything · New folder · Bookmark · Excluded folders · Network Locations · File types"),
+                      "Refresh everything · New · Bookmark · Excluded folders · Network Locations · File types"),
                 }),
             }),
 
@@ -353,6 +353,8 @@ public static class HelpContent
                       "기본 활성화, 개별 정렬을 선택하면 해제됨 (다시 선택하면 그 폴더의 개별 지정이 삭제됨)",
                       "Sort menu → Follow the parent folder",
                       "On by default; picking a field of its own clears it, and choosing it again drops that folder's own setting"),
+                    R("파일 행 우클릭 → 정렬 기준", "해당 파일이 있는 폴더의 정렬",
+                      "Right-click a file → Sort by", "Sorts the folder the file is in"),
                     R("옵션 → 정렬 기준", "전체 기본 정렬", "Options → Sort by", "The default for everything"),
                     // 접기 belongs on the same row as 더 보기, and the selection
                     // is the point of the row rather than a side effect: a long
@@ -442,8 +444,8 @@ public static class HelpContent
                 // someone reading this heading is looking for exactly that.
                 new Group(string.Empty, new[]
                 {
-                    R("제목 표시줄 이미지 아이콘", "멀티미디어 패널 열기 · 닫기",
-                      "The picture icon in the title bar", "Open · close the multimedia panel"),
+                    R("제목 표시줄 이미지 아이콘 · Ctrl+W", "멀티미디어 패널 열기 · 닫기",
+                      "The picture icon in the title bar · Ctrl+W", "Open · close the multimedia panel"),
                     R("옵션 → 멀티미디어 패널 → 더블클릭으로 열기",
                       "트리에서 더블클릭한 파일을 기본 프로그램 대신 패널에서 엶",
                       "Options → Multimedia panel → Open on double-click",
@@ -706,6 +708,57 @@ public static class HelpContent
                       "Where you stopped", "Not remembered - only film carries on from where it was"),
                 }),
 
+                // The TXT/MD view and its editing (2.7.0), keys and gestures
+                // only, on request: a row per key or gesture, its result in a
+                // few words. Rows a menu label already says (우클릭 → 편집,
+                // 다른 이름으로 저장, the line-number option) and things that
+                // only show themselves (the current line's band) are left out.
+                new Group(T("텍스트 · 마크다운", "Text and Markdown"), new[]
+                {
+                    R("보기 버튼 · 트리 행의 보기 아이콘", "텍스트 표시, 아이콘을 다시 클릭하면 패널 닫기",
+                      "View button · View icon on a tree row", "Show the text; click the icon again to close the panel"),
+                    R("텍스트 파일에서 Ctrl+W", "패널을 열며 텍스트까지 표시",
+                      "Ctrl+W on a text file", "Open the panel and show the text"),
+                    R("트리 우클릭 → 새로 만들기", "폴더 · 텍스트 문서 · 마크다운 문서, 문서는 만든 뒤 바로 편집",
+                      "Right-click in the tree → New", "Folder · Text document · Markdown document - new documents open straight into editing"),
+                    R("Ctrl+E · 연필 아이콘", "읽기 ↔ 편집 전환",
+                      "Ctrl+E · Pencil icon", "Switch between reading and editing"),
+                    R("Ctrl+S", "저장, 트리에서도 동작",
+                      "Ctrl+S", "Save - also works from the tree"),
+                    R("Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z", "실행 취소 · 다시 실행",
+                      "Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z", "Undo · redo"),
+                    R("편집 취소 · 다시 불러오기", "저장하지 않은 변경 사항 취소, 편집 중 Ctrl+Z로 복구",
+                      "Cancel editing · Reload", "Discard unsaved changes - Ctrl+Z while editing brings them back"),
+                    R("저장하지 않은 파일", "트리 행에 점 표시, 다른 파일로 이동하거나 다시 시작해도 유지, 종료 시 저장 여부 확인",
+                      "Unsaved file", "A dot on its tree row; kept when you switch files or restart, and Exit asks whether to save"),
+                    R("줄 번호 색", "마지막 저장 이후 수정한 줄은 주황, 추가한 줄은 초록",
+                      "Line number color", "Orange for lines changed since the last save, green for lines added"),
+                    R("텍스트에서 Ctrl+F · Ctrl+H", "찾기 · 바꾸기, Esc로 닫기",
+                      "Ctrl+F · Ctrl+H in the text", "Find · replace - Esc to close"),
+                    R("Enter · Shift+Enter · F3 · Shift+F3", "다음 · 이전 찾기",
+                      "Enter · Shift+Enter · F3 · Shift+F3", "Next · previous match"),
+                    R("바꾸기 줄에서 Enter · Ctrl+Alt+Enter", "바꾸기 · 모두 바꾸기",
+                      "Enter · Ctrl+Alt+Enter in the replace field", "Replace · Replace all"),
+                    R("마크다운 편집 중 Ctrl+B · Ctrl+I", "굵게 · 기울임꼴",
+                      "Ctrl+B · Ctrl+I while editing Markdown", "Bold · Italic"),
+                    R("마크다운 편집 중 우클릭 → 서식", "제목 · 목록 · 인용 · 링크 등 적용 · 해제",
+                      "Right-click → Format while editing Markdown", "Headings, lists, quotes, links and more - on and off"),
+                    R("마크다운 링크 Ctrl+클릭", "링크 열기",
+                      "Ctrl+click a Markdown link", "Open the link"),
+                    R("위쪽에 고정된 제목 클릭", "해당 제목으로 이동",
+                      "Click a sticky heading at the top", "Jump to that heading"),
+                    R("줄 번호 클릭 · 드래그", "줄 전체 선택",
+                      "Click · drag a line number", "Select whole lines"),
+                    R("선택 영역 드래그", "다른 앱으로 복사",
+                      "Drag the selection", "Copy to another app"),
+                    R("Ctrl+휠 · Ctrl + / −", "텍스트 크기 조절, 트리와 별도",
+                      "Ctrl+wheel · Ctrl + / −", "Text size, separate from the tree's"),
+                    R("Ctrl+P · 우클릭 → 인쇄", "미리 보기 후 인쇄",
+                      "Ctrl+P · Right-click → Print", "Print after a preview"),
+                    R("인쇄 미리 보기에서 Ctrl+휠", "확대 · 축소",
+                      "Ctrl+wheel in the print preview", "Zoom in · out"),
+                }),
+
                 new Group(T("썸네일 바", "The thumbnail bar"), new[]
                 {
                     R("장수 표시 옆 ▤ 버튼", "아래에 해당 폴더 이미지 목록 표시, 검색 중이면 검색 결과",
@@ -776,6 +829,8 @@ public static class HelpContent
                     R("색상 설정 → 그림자", "트리와 북마크 패널의 위아래 끝을 옅게 덮음",
                       "Color settings → Shading", "Veils the top and bottom ends of the tree and the bookmark panel"),
                     R("옵션 → 기본 설정", "자동 시작 · 트레이 · 아이콘 · 자동 숨김", "Options → General", "Autostart · tray · icons · auto-hide"),
+                    R("옵션 → 숨김 시 손잡이 길이 · 위치", "창 높이 대비 %로 조정",
+                      "Options → Auto-hide handle length · position", "As a share of the window's height"),
                     // "아이콘" in the row above reads as ONE switch, and it is
                     // three. The drive one arrived last (2026-08-16) and the
                     // release notes say it is separate from the folder's, so the
