@@ -37363,6 +37363,7 @@ public partial class MainWindow : Window
         _viewerTextLoad?.Cancel();
         _viewerTextLoad = null;
         _viewerTextRefusedPath = null;
+        _viewerTextEncodingLabel = null;
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
 
         if (_viewerTextPath is null)
@@ -37574,6 +37575,7 @@ public partial class MainWindow : Window
         ViewerTextReplaceBar.Visibility = Visibility.Collapsed;
         UpdateViewerTextEditBar();
         ViewerTextHost.Visibility = Visibility.Visible;
+        RefreshViewerTextEncodingCaption(editor, path);
 
         // THE KEYBOARD GOES TO THE TEXT that was just asked for (2026-10-11, on
         // report: Ctrl+F right after 보기 opened the tree's search, because the
@@ -38310,6 +38312,7 @@ public partial class MainWindow : Window
             SetMenuItemEnabled(menu, "paste", ClipboardHoldsText());
             SetMenuItemEnabled(menu, "save", editor.HasUnsavedEdits && !_viewerTextSaving);
             SetMenuItemEnabled(menu, "saveAs", !_viewerTextSaving);
+            UpdateViewerTextEncodingMenu(menu, editor);
 
             // The line rows say what the caret's line already is, so a row
             // that will take a format away is the one with the tick on it.
@@ -38327,6 +38330,116 @@ public partial class MainWindow : Window
         }
 
         AnyMenu_Opened(sender, e);
+    }
+
+    // ----- 인코딩 (2026-10-27) ------------------------------------------------
+    //
+    // The text view's encoding, VS Code's pair: SEEN in the caption's first
+    // slot whenever a text is on screen, and CHANGED from the text's menu -
+    // 다른 인코딩으로 다시 열기 for a file the detection read wrong (a
+    // Shift-JIS file on a Korean PC comes in as CP949 noise), 다른 인코딩으로
+    // 저장 to convert one. Both rows are there while reading too: neither is an
+    // edit. The reopen is 다시 불러오기's one undo step, so like that button it
+    // drops edits without asking - 실행 취소 brings them back.
+    //
+    // The rows carry "enc:<code page>" and, for the save list, "+bom". The
+    // lists are short on purpose: the Unicode three, the PC's own ANSI page,
+    // and the four legacy pages a file from a neighbouring language is in.
+
+    private static (int CodePage, bool HasBom)? ParseViewerTextEncodingTag(object? tag)
+    {
+        if (tag is not string text || !text.StartsWith("enc:", StringComparison.Ordinal))
+        {
+            return null;
+        }
+        bool bom = text.EndsWith("+bom", StringComparison.Ordinal);
+        string number = text["enc:".Length..(bom ? text.Length - "+bom".Length : text.Length)];
+        if (number == "ansi")
+        {
+            return (TextFileReader.AnsiCodePage, false);
+        }
+        return int.TryParse(number, out int codePage) ? (codePage, bom) : null;
+    }
+
+    private static string ViewerTextEncodingLabel(int codePage, bool hasBom) => codePage switch
+    {
+        65001 => hasBom ? Strings.EncodingUtf8Bom : Strings.EncodingUtf8,
+        1200 => Strings.EncodingUtf16Le,
+        1201 => Strings.EncodingUtf16Be,
+        12000 => Strings.EncodingUtf32Le,
+        _ when codePage == TextFileReader.AnsiCodePage => string.Format(Strings.EncodingAnsi, codePage),
+        949 => Strings.EncodingKorean,
+        932 => Strings.EncodingJapanese,
+        936 => Strings.EncodingChineseSimplified,
+        950 => Strings.EncodingChineseTraditional,
+        1252 => Strings.EncodingWestern,
+        _ => $"CP{codePage}",
+    };
+
+    // The caption's encoding, kept as a plain string for ApplyViewerFileInfo
+    // (a hot path that must not name the editor's type), then the line
+    // rewritten from a fresh stat - the file's size can have changed too.
+    private string? _viewerTextEncodingLabel;
+
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void RefreshViewerTextEncodingCaption(ViewerTextEditor editor, string path)
+    {
+        _viewerTextEncodingLabel = editor.ShownEncoding is { } shown
+            ? ViewerTextEncodingLabel(shown.CodePage, shown.HasBom)
+            : null;
+        SetViewerFileInfo(path, 0, 0);
+    }
+
+    // The 인코딩 submenu's state, from ViewerTextContextMenu_Opened: the row
+    // matching the text's encoding ticked in both lists, and the save list
+    // greyed where the text could never be written back (head only, split
+    // lines) or a save is already out.
+    private void UpdateViewerTextEncodingMenu(ContextMenu menu, ViewerTextEditor editor)
+    {
+        if (FindTaggedMenuElement<MenuItem>(menu, "encoding") is not { } encodingMenu)
+        {
+            return;
+        }
+
+        var shown = editor.ShownEncoding;
+        foreach (var list in encodingMenu.Items.OfType<MenuItem>())
+        {
+            bool saveList = (list.Tag as string) == "encodingSave";
+            if (saveList)
+            {
+                list.IsEnabled = editor.CanSaveShownText && !_viewerTextSaving;
+            }
+            foreach (var row in list.Items.OfType<MenuItem>())
+            {
+                if ((row.Tag as string) == "enc:ansi")
+                {
+                    row.Header = string.Format(Strings.EncodingAnsi, TextFileReader.AnsiCodePage);
+                }
+
+                // The reopen list ticks by code page alone - a BOM is read,
+                // not chosen, there.
+                row.IsChecked = shown is { } current &&
+                    ParseViewerTextEncodingTag(row.Tag) is { } choice &&
+                    choice.CodePage == current.CodePage &&
+                    (!saveList || choice.HasBom == current.HasBom || current.CodePage != 65001);
+            }
+        }
+    }
+
+    private void ViewerTextReopenEncoding_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: var tag } && ParseViewerTextEncodingTag(tag) is { } choice)
+        {
+            ReloadViewerText(endEditing: false, forcedCodePage: choice.CodePage);
+        }
+    }
+
+    private void ViewerTextSaveEncoding_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem { Tag: var tag } && ParseViewerTextEncodingTag(tag) is { } choice)
+        {
+            SaveViewerText(choice.CodePage, choice.HasBom);
+        }
     }
 
     // Another program can hold the clipboard open for a moment, and asking
@@ -38411,12 +38524,19 @@ public partial class MainWindow : Window
     private bool IsViewerTextEditing()
         => _viewerTextPath is not null && _viewerTextEditor is ViewerTextEditor { IsEditing: true };
 
+    //
+    // codePage is 다른 인코딩으로 저장: the text in that encoding, from either
+    // state, and a character it cannot hold stops the save instead of turning
+    // it into UTF-8 - the encoding was chosen by hand, and the app swapping it
+    // would undo the choice (see WriteViewerTextAsync).
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
-    private async void SaveViewerText()
+    private async void SaveViewerText(int? codePage = null, bool hasBom = false)
     {
         if (_viewerTextSaving ||
             _viewerTextEditor is not ViewerTextEditor editor ||
-            editor.CreateSaveRequest() is not { } request)
+            (codePage is { } chosen
+                ? editor.CreateSaveRequest(TextFileReader.EncodingFor(chosen, hasBom), hasBom)
+                : editor.CreateSaveRequest()) is not { } request)
         {
             return;
         }
@@ -38427,9 +38547,16 @@ public partial class MainWindow : Window
         {
             if (await WriteViewerTextAsync(
                     request.Path, request.Text, request.Encoding, request.HasBom,
-                    request.ExpectedLength, request.ExpectedLastWriteUtc) is { } written)
+                    request.ExpectedLength, request.ExpectedLastWriteUtc,
+                    utf8Fallback: codePage is null) is { } written)
             {
                 editor.CompleteSave(request with { Encoding = written.Encoding, HasBom = written.HasBom }, written.Result);
+                // The encoding may have changed - by hand, or by the UTF-8
+                // question - and the caption says which it is now.
+                if (_viewerTextPath is { } shown)
+                {
+                    RefreshViewerTextEncodingCaption(editor, shown);
+                }
             }
         }
         finally
@@ -38645,9 +38772,11 @@ public partial class MainWindow : Window
     // a text kept from an earlier session without the editor ever loading.
     // overwrite: write without comparing the file first - 다른 이름으로 저장,
     // whose dialog has already asked about a file that is there.
+    // utf8Fallback false: a character the encoding cannot hold is said and the
+    // save stops, rather than offering UTF-8 (다른 인코딩으로 저장).
     private async Task<(TextFileWriter.Result Result, System.Text.Encoding Encoding, bool HasBom)?> WriteViewerTextAsync(
         string path, string text, System.Text.Encoding encoding, bool hasBom, long expectedLength, DateTime expectedLastWriteUtc,
-        bool overwrite = false)
+        bool overwrite = false, bool utf8Fallback = true)
     {
         string name = Path.GetFileName(path);
         try
@@ -38680,6 +38809,11 @@ public partial class MainWindow : Window
                         }
                         overwrite = true;
                         break;
+                    case TextFileWriter.Outcome.Unencodable when !utf8Fallback:
+                        ShowOwnedMessage(
+                            string.Format(Strings.TextSaveEncodingRefused, ViewerTextEncodingLabel(encoding.CodePage, hasBom)),
+                            Strings.TextSaveTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return null;
                     case TextFileWriter.Outcome.Unencodable:
                         if (!ConfirmViewerTextSave(
                                 string.Format(Strings.TextSaveUnencodableBody, encoding.CodePage), Strings.TextSaveTitle))
@@ -38953,12 +39087,16 @@ public partial class MainWindow : Window
     // new head with the old tail - and Reload then marks that text as what
     // the file holds, the next save writing it back. 편집 취소 was already
     // held off for this; the 다시 불러오기 button was not.
-    private async void ReloadViewerText(bool endEditing)
+    //
+    // forcedCodePage is 다른 인코딩으로 다시 열기, the one caller that may come
+    // while reading as well: the same one-undo-step replace, in the encoding
+    // asked for (see the 인코딩 menu's section).
+    private async void ReloadViewerText(bool endEditing, int? forcedCodePage = null)
     {
         if (_viewerTextSaving ||
             _viewerTextEditor is not ViewerTextEditor editor ||
             _viewerTextPath is not { } path ||
-            !editor.IsEditing)
+            (!editor.IsEditing && forcedCodePage is null))
         {
             return;
         }
@@ -38970,7 +39108,7 @@ public partial class MainWindow : Window
         ViewerTextEditor.LoadedText loaded;
         try
         {
-            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token), load.Token);
+            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token, forcedCodePage: forcedCodePage), load.Token);
         }
         catch (OperationCanceledException)
         {
@@ -38998,6 +39136,7 @@ public partial class MainWindow : Window
 
         _viewerTextLoad = null;
         editor.Reload(path, loaded, _settings.IsLightMode, endEditing);
+        RefreshViewerTextEncodingCaption(editor, path);
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
@@ -39100,6 +39239,16 @@ public partial class MainWindow : Window
             string.Equals(_viewerTextRefusedPath, path, StringComparison.OrdinalIgnoreCase))
         {
             head = Strings.ViewerTextNotText;
+        }
+
+        // The text on screen leads with its encoding (2026-10-27) - a plain
+        // string set by the text section, so this hot path never names the
+        // editor's type (see the text view's section on AvalonEdit loading).
+        if (head.Length == 0 &&
+            _viewerTextEncodingLabel is { } encodingLabel &&
+            string.Equals(_viewerTextPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            head = encodingLabel;
         }
 
         // NoAudioNote is re-applied rather than assumed away. Now that the

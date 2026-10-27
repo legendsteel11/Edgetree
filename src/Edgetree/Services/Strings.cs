@@ -697,6 +697,25 @@ public static class Strings
     public static string ViewerTextReadFailed = "파일을 읽을 수 없습니다";
     // 텍스트로 보기 on a file that turned out to be binary (2026-10-27).
     public static string ViewerTextNotText = "텍스트 파일이 아닙니다";
+    // The text view's 인코딩 menu and the caption's encoding (2026-10-27).
+    // The Unicode names are the same in both languages; they live here so
+    // every label the menu shows comes from one place.
+    public static string MenuEncoding = "인코딩";
+    public static string MenuEncodingReopen = "다른 인코딩으로 다시 열기";
+    public static string MenuEncodingSave = "다른 인코딩으로 저장";
+    public static string EncodingUtf8 = "UTF-8";
+    public static string EncodingUtf8Bom = "UTF-8 BOM";
+    public static string EncodingUtf16Le = "UTF-16 LE";
+    public static string EncodingUtf16Be = "UTF-16 BE";
+    public static string EncodingUtf32Le = "UTF-32 LE";
+    public static string EncodingAnsi = "ANSI ({0})";
+    public static string EncodingKorean = "한국어 (CP949)";
+    public static string EncodingJapanese = "일본어 (Shift-JIS)";
+    public static string EncodingChineseSimplified = "중국어 간체 (GBK)";
+    public static string EncodingChineseTraditional = "중국어 번체 (Big5)";
+    public static string EncodingWestern = "서유럽 (Windows-1252)";
+    // 다른 인코딩으로 저장 hit a character the chosen encoding cannot hold.
+    public static string TextSaveEncodingRefused = "선택한 인코딩({0})으로 쓸 수 없는 글자가 있어 저장하지 않았습니다.";
     // The panel's PDF view (2026-10-27): the caption's first slot, the page
     // in view against the count, or why the file did not open.
     public static string ViewerPdfPage = "{0} / {1}쪽";
@@ -1405,6 +1424,15 @@ public static class Strings
         ViewerTextOpen = "View";
         ViewerTextReadFailed = "The file could not be read";
         ViewerTextNotText = "This is not a text file";
+        MenuEncoding = "Encoding";
+        MenuEncodingReopen = "Reopen with Encoding";
+        MenuEncodingSave = "Save with Encoding";
+        EncodingKorean = "Korean (CP949)";
+        EncodingJapanese = "Japanese (Shift-JIS)";
+        EncodingChineseSimplified = "Chinese Simplified (GBK)";
+        EncodingChineseTraditional = "Chinese Traditional (Big5)";
+        EncodingWestern = "Western European (Windows-1252)";
+        TextSaveEncodingRefused = "Some characters cannot be written in {0}, so the file was not saved.";
         ViewerPdfPage = "Page {0} / {1}";
         ViewerPdfPassword = "This PDF is password-protected";
         ViewerPdfWrongPassword = "Incorrect password";

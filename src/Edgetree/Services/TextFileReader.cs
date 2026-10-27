@@ -115,7 +115,13 @@ public static class TextFileReader
     // the first 8KB of a file with no Unicode BOM is a binary file, and its
     // "text" would be noise. Listed kinds are never refused this way - a log
     // cut off by a crash can carry a run of NULs and is still a log.
-    public static Result Read(string path, CancellationToken cancellation, bool rejectBinary = false)
+    //
+    // forcedCodePage is 다른 인코딩으로 다시 열기 (2026-10-27): the detection
+    // is skipped and the bytes are read in the code page asked for. A BOM of
+    // that encoding at the start is still taken off and remembered, so a
+    // UTF-8 file reopened as UTF-8 does not grow a U+FEFF at its head.
+    public static Result Read(string path, CancellationToken cancellation, bool rejectBinary = false,
+        int? forcedCodePage = null)
     {
         // ReadWrite | Delete sharing so a log another program is still writing
         // to - the common case for exactly the files that hit the head limit -
@@ -151,7 +157,9 @@ public static class TextFileReader
         }
 
         var span = new ReadOnlySpan<byte>(bytes, 0, read);
-        var (encoding, bomLength) = Detect(span, truncated);
+        var (encoding, bomLength) = forcedCodePage is { } forced
+            ? Forced(span, forced)
+            : Detect(span, truncated);
         if (rejectBinary && bomLength == 0 && span[..Math.Min(span.Length, 8192)].IndexOf((byte)0) >= 0)
         {
             throw new NotTextException();
@@ -276,6 +284,23 @@ public static class TextFileReader
 
         return (AnsiEncoding(), 0);
     }
+
+    private static (Encoding Encoding, int BomLength) Forced(ReadOnlySpan<byte> bytes, int codePage)
+    {
+        byte[] bom = codePage switch
+        {
+            65001 => new byte[] { 0xEF, 0xBB, 0xBF },
+            1200 => new byte[] { 0xFF, 0xFE },
+            1201 => new byte[] { 0xFE, 0xFF },
+            _ => Array.Empty<byte>(),
+        };
+        bool hasBom = bom.Length > 0 && bytes.StartsWith(bom);
+        return (EncodingFor(codePage, hasBom), hasBom ? bom.Length : 0);
+    }
+
+    // What Detect falls back to, for the save list's ANSI row and the
+    // caption's "ANSI (949)".
+    public static int AnsiCodePage => AnsiEncoding().CodePage;
 
     // The encoding a code page and BOM flag stand for, built the way Detect
     // builds it - so a text kept on disk across a restart (UnsavedTextStore)

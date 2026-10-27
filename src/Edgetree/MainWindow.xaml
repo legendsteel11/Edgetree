@@ -1949,8 +1949,59 @@
                     Click="ViewerTextSaveAs_Click"/>
             <!-- A group of its own, as Notepad's File menu keeps it apart from
                  saving - and there while reading too, where the save rows are
-                 gone (2026-10-13). -->
+                 gone (2026-10-13). 인코딩 joined it (2026-10-27) for the same
+                 reason: neither of its lists is an edit, so both are there
+                 while reading. Ticks and the save list's enabled state are set
+                 in UpdateViewerTextEncodingMenu; each row's Tag is its code
+                 page (ParseViewerTextEncodingTag). -->
             <Separator/>
+            <MenuItem Header="{x:Static services:Strings.MenuEncoding}"
+                    Tag="encoding">
+                <MenuItem Header="{x:Static services:Strings.MenuEncodingReopen}"
+                        Tag="encodingReopen">
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf8}"
+                            Tag="enc:65001"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf16Le}"
+                            Tag="enc:1200"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf16Be}"
+                            Tag="enc:1201"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <Separator/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingKorean}"
+                            Tag="enc:949"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingJapanese}"
+                            Tag="enc:932"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingChineseSimplified}"
+                            Tag="enc:936"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingChineseTraditional}"
+                            Tag="enc:950"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingWestern}"
+                            Tag="enc:1252"
+                            Click="ViewerTextReopenEncoding_Click"/>
+                </MenuItem>
+                <MenuItem Header="{x:Static services:Strings.MenuEncodingSave}"
+                        Tag="encodingSave">
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf8}"
+                            Tag="enc:65001"
+                            Click="ViewerTextSaveEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf8Bom}"
+                            Tag="enc:65001+bom"
+                            Click="ViewerTextSaveEncoding_Click"/>
+                    <MenuItem Header="{x:Static services:Strings.EncodingUtf16Le}"
+                            Tag="enc:1200+bom"
+                            Click="ViewerTextSaveEncoding_Click"/>
+                    <!-- Header written when the menu opens: "ANSI (949)" on
+                         a Korean PC, the machine's own page elsewhere. -->
+                    <MenuItem Tag="enc:ansi"
+                            Click="ViewerTextSaveEncoding_Click"/>
+                </MenuItem>
+            </MenuItem>
             <MenuItem Header="{x:Static services:Strings.MenuPrint}"
                     InputGestureText="Ctrl+P"
                     Click="ViewerTextPrint_Click"/>

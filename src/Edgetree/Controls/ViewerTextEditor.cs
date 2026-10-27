@@ -637,9 +637,10 @@ public sealed partial class ViewerTextEditor : TextEditor
     // made it, and the UI thread takes it over in Show. Building the line
     // index of a ten-megabyte file is the one part of this worth keeping off
     // the UI thread.
-    public static LoadedText Load(string path, CancellationToken cancellation, bool rejectBinary = false)
+    public static LoadedText Load(string path, CancellationToken cancellation, bool rejectBinary = false,
+        int? forcedCodePage = null)
     {
-        var file = TextFileReader.Read(path, cancellation, rejectBinary);
+        var file = TextFileReader.Read(path, cancellation, rejectBinary, forcedCodePage);
         cancellation.ThrowIfCancellationRequested();
 
         var document = new TextDocument(file.Text);
@@ -1002,6 +1003,22 @@ public sealed partial class ViewerTextEditor : TextEditor
             ? RequestFor(current)
             : null;
     }
+
+    // 다른 인코딩으로 저장 (2026-10-27): the text on screen written in another
+    // encoding, in either state - re-encoding is not an edit, so it does not
+    // wait for 편집. Null where the text could never be saved back (head only,
+    // split lines: CanEdit).
+    public SaveRequest? CreateSaveRequest(Encoding encoding, bool hasBom)
+        => _session is { CanEdit: true } session
+            ? RequestFor(session) with { Encoding = encoding, HasBom = hasBom }
+            : null;
+
+    public bool CanSaveShownText => _session is { CanEdit: true };
+
+    // The encoding the text on screen came in or was last saved in, for the
+    // caption and the 인코딩 menu's ticks. Null with nothing on screen.
+    public (int CodePage, bool HasBom)? ShownEncoding
+        => _session is { } session ? (session.Encoding.CodePage, session.HasBom) : null;
 
     private static SaveRequest RequestFor(TextSession session)
     {
