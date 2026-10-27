@@ -17872,10 +17872,20 @@ public partial class MainWindow : Window
 
             bool isFolder = ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true };
 
-            // 새로 만들기 makes its folder or file inside the selected folder,
-            // and on a file row the menu does not offer to make one beside it
-            // (F7 does, see CreateNewAndName).
-            if (newSubmenu is not null) { newSubmenu.IsEnabled = isFolder; }
+            // 새로 만들기 makes its folder or file inside the selected folder -
+            // or, on a FILE row, inside the folder the file is in (2026-10-27,
+            // on request), which F7 already did (CreateNewAndName). The same
+            // reading 정렬 기준 gives a file row (SortMenuSubject): the tree
+            // has no background inside a folder to right-click, and a file
+            // row is the nearest thing to it. Single selection only on a file
+            // row, as there: a set of files can span folders.
+            bool fileInFolder =
+                ExplorerTree.SelectedItem is FileSystemItem
+                {
+                    IsPlaceholder: false, IsShowMore: false, IsDirectory: false, Parent.IsDirectory: true,
+                } &&
+                _multiSelection.Count <= 1;
+            if (newSubmenu is not null) { newSubmenu.IsEnabled = isFolder || fileInFolder; }
 
             // Refresh re-reads the selected folder's own contents from disk -
             // there's nothing to refresh on a plain file.
