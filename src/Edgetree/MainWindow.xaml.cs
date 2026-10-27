@@ -734,6 +734,10 @@ public partial class MainWindow : Window
         FileSystemService.UnsavedTextPaths.Clear();
         FileSystemService.UnsavedTextPaths.UnionWith(_unsavedTextStore.Paths);
         FileOperationService.PathMoved += OnPathMovedForUnsavedText;
+        // A remembered PDF password follows its file through the app's own
+        // renames and moves, as an unsaved text does. Reads its file only if
+        // one exists - a session with no remembered PDF touches nothing.
+        FileOperationService.PathMoved += PdfPasswordStore.OnPathMoved;
 
         // 그림이 도착할 때의 크기(맞춤·1:1·자름맞춤). 패널이 열리기 전에 세워야
         // 첫 그림부터 그 상태로 온다 - 위의 필터·정렬을 첫 폴더 읽기 전에 세우는
@@ -37055,9 +37059,11 @@ public partial class MainWindow : Window
     }
 
     // The first open (no password) and every press of the password row's 열기
-    // come through here. A password lives only in this call and the one to
-    // PDFium - nothing keeps it, by decision (see the row's XAML).
-    private async void OpenViewerPdf(string path, string? password)
+    // come through here. A typed password lives only in this call and the one
+    // to PDFium, unless 암호 기억 is ticked when it opens the file - then it
+    // goes to PdfPasswordStore and nowhere else. fromStore: the password IS
+    // the remembered one (열기 on a remembered file).
+    private async void OpenViewerPdf(string path, string? password, bool fromStore = false)
     {
         int ticket = ++_viewerPdfTicket;
         _viewerPdfOpening = true;
@@ -37085,6 +37091,14 @@ public partial class MainWindow : Window
 
             if (retried)
             {
+                // The remembered password no longer opens it - the file was
+                // locked again with another. Forgotten, and the box comes back
+                // with 암호 기억 still ticked, so the right one takes its place.
+                if (fromStore)
+                {
+                    PdfPasswordStore.Remove(path);
+                    SetViewerPdfPasswordMode(remembered: false, ticked: true);
+                }
                 // The icon and the row are up already; the attempt is kept in
                 // the box, selected, so the next one types straight over it.
                 ViewerPdfPasswordBox.SelectAll();
@@ -37100,6 +37114,7 @@ public partial class MainWindow : Window
                 if (locked)
                 {
                     ViewerPdfPasswordRow.Visibility = Visibility.Visible;
+                    SetViewerPdfPasswordMode(remembered: PdfPasswordStore.Has(path), ticked: false);
                 }
                 else
                 {
@@ -37114,6 +37129,11 @@ public partial class MainWindow : Window
         _viewerPdfFailure = null;
         if (password is not null)
         {
+            // Read before the row is reset below, which clears the tick.
+            if (!fromStore && ViewerPdfRememberCheck.IsChecked == true)
+            {
+                PdfPasswordStore.Set(path, password);
+            }
             // Unlocked: the icon and the row give way to the pages, and a
             // keyboard that was in the box goes back to the list.
             ViewerIconImage.Visibility = Visibility.Collapsed;
@@ -37315,7 +37335,9 @@ public partial class MainWindow : Window
         }
 
         int ticket = _viewerPdfTicket;
-        var result = await PdfRenderService.OpenAsync(path, password: null);
+        // A remembered password opens the new version too: the press that
+        // opened this visit was already made. A typed one was kept nowhere.
+        var result = await PdfRenderService.OpenAsync(path, PdfPasswordStore.Get(path));
         if (ticket != _viewerPdfTicket ||
             !ReferenceEquals(_viewerPdf, old) ||
             !string.Equals(_viewerPdfPath, path, StringComparison.OrdinalIgnoreCase))
@@ -37367,6 +37389,7 @@ public partial class MainWindow : Window
         bool hadKeyboard = ViewerPdfPasswordRow.IsKeyboardFocusWithin;
         ViewerPdfPasswordRow.Visibility = Visibility.Collapsed;
         ViewerPdfPasswordBox.Clear();
+        SetViewerPdfPasswordMode(remembered: false, ticked: false);
         ViewerPdfPasswordButton.IsEnabled = true;
         if (hadKeyboard)
         {
@@ -37374,15 +37397,56 @@ public partial class MainWindow : Window
         }
     }
 
+    // A remembered file shows the tick and 열기 with no box; otherwise the box,
+    // ticked as given (off on arrival - remembering is asked for each time).
+    private void SetViewerPdfPasswordMode(bool remembered, bool ticked)
+    {
+        ViewerPdfPasswordField.Visibility = remembered ? Visibility.Collapsed : Visibility.Visible;
+        ViewerPdfRememberCheck.IsChecked = remembered || ticked;
+    }
+
+    private bool ViewerPdfPasswordRemembered => ViewerPdfPasswordField.Visibility != Visibility.Visible;
+
     private void SubmitViewerPdfPassword()
     {
         if (_viewerPdfOpening ||
-            _viewerPdfPath is not { } path ||
-            ViewerPdfPasswordBox.Password.Length == 0)
+            _viewerPdfPath is not { } path)
+        {
+            return;
+        }
+        if (ViewerPdfPasswordRemembered)
+        {
+            if (PdfPasswordStore.Get(path) is { } remembered)
+            {
+                OpenViewerPdf(path, remembered, fromStore: true);
+            }
+            else
+            {
+                // Gone from the store since the row went up - the app moved
+                // the file and the password went with it. Asked instead.
+                SetViewerPdfPasswordMode(remembered: false, ticked: false);
+            }
+            return;
+        }
+        if (ViewerPdfPasswordBox.Password.Length == 0)
         {
             return;
         }
         OpenViewerPdf(path, ViewerPdfPasswordBox.Password);
+    }
+
+    // Unticked on a remembered file: forgotten at once, and the box comes
+    // back. Over the box the tick only says what to do once a password
+    // opens the file, so nothing happens here.
+    private void ViewerPdfRememberCheck_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewerPdfRememberCheck.IsChecked != true &&
+            ViewerPdfPasswordRemembered &&
+            _viewerPdfPath is { } path)
+        {
+            PdfPasswordStore.Remove(path);
+            SetViewerPdfPasswordMode(remembered: false, ticked: false);
+        }
     }
 
     private void ViewerPdfPasswordButton_Click(object sender, RoutedEventArgs e) => SubmitViewerPdfPassword();

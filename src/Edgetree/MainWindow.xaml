@@ -9077,10 +9077,15 @@
                         </Button.Style>
                     </Button>
                     <!-- A PASSWORD-PROTECTED PDF'S ASK (2026-10-27): the box
-                         under its icon, 열기 centred on the line below (on
-                         request - beside the box it read as one lopsided row).
-                         Nothing is remembered (the author's call): leaving the
-                         file clears the box, and coming back asks again.
+                         under its icon, 암호 기억 under the box, 열기 centred on
+                         the line below (on request - beside the box it read as
+                         one lopsided row). Leaving the file clears the box, and
+                         coming back asks again - unless 암호 기억 was ticked when
+                         it opened (added the same day; at first nothing was
+                         remembered at all). A remembered file shows the tick
+                         and 열기 with NO box, and still opens only on the press,
+                         never by selection; unticking forgets it and brings
+                         the box back (PdfPasswordStore).
                          Outlined like the search box, not filled.
                          PLACED FROM THE CELL'S MIDDLE, not by a centred margin:
                          the lower of two equal rows starts exactly there, and
@@ -9104,7 +9109,8 @@
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"
                             Margin="0,41,0,0">
-                        <Grid Width="160"
+                        <Grid x:Name="ViewerPdfPasswordField"
+                                Width="160"
                                 Height="26">
                             <Border Background="Transparent"
                                     BorderBrush="{DynamicResource ControlBorder}"
@@ -9128,6 +9134,63 @@
                                     PasswordChanged="ViewerPdfPasswordBox_PasswordChanged"
                                     PreviewKeyDown="ViewerPdfPasswordBox_PreviewKeyDown"/>
                         </Grid>
+                        <!-- The app's only check box, so its look is drawn here:
+                             a WPF default box is white in the dark theme. Not
+                             focusable - a click must not take the keyboard
+                             from the tree, as the password box does not on
+                             arrival. Click, not Checked: only the hand's
+                             change forgets a password, never a reset in code. -->
+                        <CheckBox x:Name="ViewerPdfRememberCheck"
+                                Margin="0,8,0,0"
+                                HorizontalAlignment="Center"
+                                Focusable="False"
+                                Cursor="Hand"
+                                Click="ViewerPdfRememberCheck_Click">
+                            <CheckBox.Template>
+                                <ControlTemplate TargetType="CheckBox">
+                                    <StackPanel Orientation="Horizontal"
+                                            Background="Transparent">
+                                        <Border x:Name="Box"
+                                                Width="13"
+                                                Height="13"
+                                                VerticalAlignment="Center"
+                                                Background="Transparent"
+                                                BorderBrush="{DynamicResource ControlBorder}"
+                                                BorderThickness="1"
+                                                CornerRadius="2"
+                                                SnapsToDevicePixels="True">
+                                            <Path x:Name="Mark"
+                                                    Data="M 1.5,5.5 L 4.5,8.5 L 9.5,2.5"
+                                                    Stroke="{DynamicResource DialogForeground}"
+                                                    StrokeThickness="1.6"
+                                                    StrokeStartLineCap="Round"
+                                                    StrokeEndLineCap="Round"
+                                                    StrokeLineJoin="Round"
+                                                    Visibility="Collapsed"/>
+                                        </Border>
+                                        <TextBlock Text="{x:Static services:Strings.ViewerPdfRememberPassword}"
+                                                Margin="6,0,0,0"
+                                                VerticalAlignment="Center"
+                                                FontSize="12"
+                                                Foreground="{DynamicResource DialogForeground}"/>
+                                    </StackPanel>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsChecked"
+                                                Value="True">
+                                            <Setter TargetName="Mark"
+                                                    Property="Visibility"
+                                                    Value="Visible"/>
+                                        </Trigger>
+                                        <Trigger Property="IsMouseOver"
+                                                Value="True">
+                                            <Setter TargetName="Box"
+                                                    Property="BorderBrush"
+                                                    Value="{DynamicResource DialogForeground}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </CheckBox.Template>
+                        </CheckBox>
                         <Button x:Name="ViewerPdfPasswordButton"
                                 Margin="0,8,0,0"
                                 HorizontalAlignment="Center"

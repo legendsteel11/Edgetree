@@ -725,6 +725,8 @@ public static class Strings
     // The box and button under a locked PDF's icon.
     public static string ViewerPdfPasswordPlaceholder = "암호";
     public static string ViewerPdfPasswordOpen = "열기";
+    // Under the box: keep this file's password (PdfPasswordStore).
+    public static string ViewerPdfRememberPassword = "암호 기억";
     // The text view's find box (AvalonEdit's SearchPanel). ErrorText is
     // followed by the regex engine's own message.
     public static string TextFindMatchCase = "대/소문자 구분";
@@ -1439,6 +1441,7 @@ public static class Strings
         ViewerPdfOpenFailed = "The PDF could not be opened";
         ViewerPdfPasswordPlaceholder = "Password";
         ViewerPdfPasswordOpen = "Open";
+        ViewerPdfRememberPassword = "Remember password";
         TextFindMatchCase = "Match case";
         TextFindWholeWords = "Whole words";
         TextFindRegex = "Regular expression";
