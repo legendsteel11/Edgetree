@@ -37537,15 +37537,14 @@ public partial class MainWindow : Window
 
     private void ViewerPdfPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerPdf();
 
-    // The PDF on screen, through Windows' print dialog with the page in view
-    // as its 현재 페이지 (PdfPrinter). The panel's own open document is the
+    // The PDF on screen, through Windows' print dialog (PdfPrinter). The panel's own open document is the
     // one printed - a locked file's password is not asked twice - and is
     // held open until the job is spooled, whatever the panel does meanwhile.
     private void PrintShownViewerPdf()
     {
         if (_viewerPdf is { } document && _viewerPdfPath is { } path)
         {
-            PdfPrinter.Print(this, document, Path.GetFileName(path), ViewerPdfColumn.PageInView, ReportPrintFailure);
+            PdfPrinter.Print(this, document, Path.GetFileName(path), ReportPrintFailure);
         }
     }
 
@@ -37570,7 +37569,7 @@ public partial class MainWindow : Window
                 : Strings.ViewerPdfOpenFailed);
             return;
         }
-        PdfPrinter.Print(this, document, Path.GetFileName(path), currentPage: -1, ReportPrintFailure);
+        PdfPrinter.Print(this, document, Path.GetFileName(path), ReportPrintFailure);
         PdfRenderService.Close(document);
     }
 

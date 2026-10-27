@@ -14,8 +14,21 @@ namespace SidebarExplorer.App.Services;
 // WINDOWS' PRINT DIALOG, THEN PDFIUM ONTO THE PRINTER. No preview window of
 // our own, unlike a text: a text's pages exist only once it is laid out on
 // paper, so its preview is the one place they can be seen, while a PDF's
-// pages are already on screen in the panel. The dialog brings the page range
-// and 현재 페이지 - the page in view.
+// pages are already on screen in the panel. The dialog brings the page range.
+//
+// NO 현재 페이지. It was offered at first (the page in view), and on a Windows
+// 11 that answers PrintDlgEx with its modern print dialog it broke single
+// pages: that dialog has no 현재 페이지 of its own (모든 페이지 and 사용자 지정
+// 범위 only), yet while the app allows one it reports a ONE-PAGE custom range
+// as CurrentPage - "1" came back as CurrentPage with From = To = 1, and the
+// app printed the page in view instead (2026-10-27: page 2 came out for "1",
+// twice). Measured by driving the dialog with UI Automation (scratchpad
+// dlgprobe): with current page allowed, "1", "2" and "2-2" all arrived as
+// CurrentPage, "1-2" as SomePages; with it disallowed every range arrived
+// as SomePages with the right pages, and a "2" printed through Microsoft
+// Print to PDF came out as page 2 alone - the dialog does not filter pages a
+// second time on its own side. A CurrentPage that still arrives is read as
+// the range it carries.
 //
 // GDI, NOT WPF'S PRINT PATH. WPF prints visuals, which for a PDF means a
 // bitmap per page: 35MB for an A4 page at 300 dpi, and pictures of text. A
@@ -30,11 +43,9 @@ namespace SidebarExplorer.App.Services;
 // own printer notification says the job went.
 internal static class PdfPrinter
 {
-    // currentPage: the page in view, 0-based, or -1 where there is none (a
-    // file printed from the tree without being on screen). onFailure gets a
-    // message on the UI thread.
+    // onFailure gets a message on the UI thread.
     public static void Print(Window owner, PdfRenderService.Document document, string fileName,
-        int currentPage, Action<string> onFailure)
+        Action<string> onFailure)
     {
         if (!PdfRenderService.Hold(document))
         {
@@ -63,7 +74,7 @@ internal static class PdfPrinter
                 Document = printDocument,
                 UseEXDialog = true,
                 AllowSomePages = true,
-                AllowCurrentPage = currentPage >= 0,
+                AllowCurrentPage = false,
                 AllowSelection = false,
             };
             if (dialog.ShowDialog(new OwnerWindow(owner)) != FormsDialogResult.OK)
@@ -73,8 +84,7 @@ internal static class PdfPrinter
 
             int[] pages = settings.PrintRange switch
             {
-                PrintRange.CurrentPage when currentPage >= 0 => new[] { currentPage },
-                PrintRange.SomePages => Enumerable
+                PrintRange.SomePages or PrintRange.CurrentPage => Enumerable
                     .Range(Math.Max(1, settings.FromPage), Math.Max(0, Math.Min(count, settings.ToPage) - Math.Max(1, settings.FromPage) + 1))
                     .Select(page => page - 1)
                     .ToArray(),
