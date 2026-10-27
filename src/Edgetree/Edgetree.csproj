@@ -82,6 +82,21 @@
   <ItemGroup>
     <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
   </ItemGroup>
+  <!-- PDFium for the panel's PDF view (2026-10-27), as a FILE WE EMBED rather
+       than a package asset. With its assets on, the native DLL is copied beside
+       the exe, and the light build (single file, no native self-extract) would
+       then lose PDFs the moment the exe is moved on its own. So the package is
+       only a pinned download: nothing of it reaches the build output, and the
+       x64 DLL rides inside the exe to be written out on the first PDF - see
+       PdfRenderService. 157.0.8100 = chromium/8100 (2026-10-12), no V8; the
+       x64 DLL is 7,512,064 bytes. -->
+  <ItemGroup>
+    <PackageReference Include="bblanchon.PDFium.Win32" Version="157.0.8100"
+                      IncludeAssets="none" PrivateAssets="all" GeneratePathProperty="true" />
+    <EmbeddedResource Include="$(Pkgbblanchon_PDFium_Win32)\runtimes\win-x64\native\pdfium.dll"
+                      LogicalName="Edgetree.Native.pdfium.dll"
+                      Visible="false" />
+  </ItemGroup>
 
   <!-- Microsoft.VisualBasic.FileIO.FileSystem.Delete*(..., RecycleOption.SendToRecycleBin)
        (the simplest reliable way to send deleted items to the Recycle Bin) is

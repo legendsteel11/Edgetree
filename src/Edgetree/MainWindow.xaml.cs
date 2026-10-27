@@ -1878,8 +1878,13 @@ public partial class MainWindow : Window
     //
     // The host, not the editor: naming the editor's type would make the JIT
     // load AvalonEdit on the first key press of every session.
+    //
+    // A PasswordBox is not a TextBoxBase either (the PDF password box,
+    // 2026-10-27): left out, every branch below would have taken keys typed
+    // into it - Space, M, and Backspace closing the panel mid-password.
     private bool KeyboardInTextField =>
         Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
+            or System.Windows.Controls.PasswordBox
         || ViewerTextHost.IsKeyboardFocusWithin;
 
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
@@ -2458,6 +2463,20 @@ public partial class MainWindow : Window
         // modifier). Only while the panel is open and showing something
         // zoomable, and never while a text box has the keyboard: rename and
         // the search field both take a literal "+".
+        //
+        // A PDF on screen takes the pair for its own zoom (2026-10-27). It has
+        // no picture pixels, so the picture's branch below would not fire.
+        if (Keyboard.Modifiers == ModifierKeys.None &&
+            _viewerOpen &&
+            _viewerPdf is not null &&
+            !KeyboardInTextField &&
+            e.Key is Key.OemPlus or Key.Add or Key.OemMinus or Key.Subtract)
+        {
+            ViewerPdfColumn.ZoomByStep(e.Key is Key.OemPlus or Key.Add ? +1 : -1);
+            e.Handled = true;
+            return;
+        }
+
         if (Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
             _viewerPixelWidth > 0 &&
@@ -24433,6 +24452,7 @@ public partial class MainWindow : Window
         ReleaseFilmstripCells();
         ViewerPlayOverlay.Visibility = Visibility.Collapsed;
         HideViewerText();
+        HideViewerPdf();
         ViewerImage.Source = null;
         ViewerIconImage.Source = null;
 
@@ -24792,6 +24812,7 @@ public partial class MainWindow : Window
             }
             ViewerPlayOverlay.Visibility = Visibility.Collapsed;
             HideViewerText();
+            HideViewerPdf();
             ViewerImage.Source = null;
             _viewerShowingDecodedImage = false;
             ViewerIconImage.Source = null;
@@ -24838,6 +24859,9 @@ public partial class MainWindow : Window
         // Back to the offer even when the next file is text too - see the
         // text view's own section.
         HideViewerText();
+        // And the last PDF closed, the next one included: each file is its
+        // own document (see the PDF view's section).
+        HideViewerPdf();
 
         ViewerFileName.Text = item.Name;
         // A NEW name is a new answer to "am I hearing this one", and this path
@@ -24860,6 +24884,10 @@ public partial class MainWindow : Window
             {
                 QueueViewerImageLoad(path, ViewerDecodeWidth());
             }
+        }
+        else if (!item.IsDirectory && IsViewerPdf(path))
+        {
+            ShowViewerPdf(path);
         }
         else if (!item.IsDirectory && IsViewerText(path))
         {
@@ -26555,7 +26583,12 @@ public partial class MainWindow : Window
            // a tagged music file answers with its EMBEDDED ALBUM ART, so the
            // picture side of this cost nothing at all. Files with no art fall
            // through to the file-type icon like anything else.
-           || AudioExtensions.Contains(Path.GetExtension(path));
+           || AudioExtensions.Contains(Path.GetExtension(path))
+           // PDF (2026-10-27), drawn by the app's own engine both here and in
+           // the thumbnail bar - see the PDF view's section. Every door this
+           // predicate guards applies to it as it does to a picture, the
+           // double-click with OpenMediaInViewer included.
+           || IsViewerPdf(path);
 
     // The file currently handed to MediaElement - null whenever nothing is
     // loaded, which is also the app's promise that the file is not held open.
@@ -30032,6 +30065,18 @@ public partial class MainWindow : Window
         // file instead of two.
         UpdateViewerParkedTransport();
 
+        // A PDF uses the same row with three of its controls (2026-10-27): 맞춤
+        // is the fit to the panel's width, the buttons step, and the number
+        // is the page against its real paper size. 1:1 and 자름맞춤 are about
+        // a picture's pixels, and the navigator about one picture, so they go.
+        if (_viewerPdf is not null)
+        {
+            ApplyViewerPdfZoomBar();
+            return;
+        }
+        ViewerActualChip.Visibility = Visibility.Visible;
+        ViewerFillChip.Visibility = Visibility.Visible;
+
         bool hasImage = _viewerPixelWidth > 0 && ViewerImage.Source is not null &&
             (!ViewerMediaIsSelection || ViewerShowingAudioCover);
         ViewerZoomBar.Visibility = hasImage ? Visibility.Visible : Visibility.Collapsed;
@@ -32994,7 +33039,11 @@ public partial class MainWindow : Window
         ".dng", ".cr2", ".cr3", ".crw", ".nef", ".nrw", ".arw", ".sr2", ".srf",
         ".orf", ".ori", ".raf", ".rw2", ".rwl", ".pef", ".ptx", ".srw", ".x3f",
         ".raw", ".mrw", ".dcr", ".dcs", ".kdc", ".k25", ".erf", ".mef", ".mos",
-        ".3fr", ".ari", ".bay", ".cap", ".drf", ".eip", ".fff", ".iiq", ".pxn"
+        ".3fr", ".ari", ".bay", ".cap", ".drf", ".eip", ".fff", ".iiq", ".pxn",
+        // A PDF's cell is an open of the document plus a first-page render on
+        // the one PDFium thread, which the panel's own pages queue on too - so
+        // it is never spent on a cell nobody is looking at (2026-10-27).
+        ".pdf"
     };
 
     private FilmstripCell? TrickleCandidate(int index)
@@ -36236,7 +36285,20 @@ public partial class MainWindow : Window
 
     // The three chips are the ONLY things that move the remembered rest
     // state - see _viewerRest.
-    private void ViewerFitChip_Click(object sender, RoutedEventArgs e) => SetViewerRestByHand(ViewerRestMode.Fit);
+    // A PDF's 맞춤 is its own zoom and remembers nothing - the rest state is
+    // the pictures' (see ApplyViewerPdfZoomBar).
+    private void ViewerFitChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewerPdf is not null)
+        {
+            ViewerPdfColumn.ResetZoom();
+            // The click has already flipped the chip; a fit that was already
+            // in place raises no zoom change to flip it back.
+            UpdateViewerZoomBar();
+            return;
+        }
+        SetViewerRestByHand(ViewerRestMode.Fit);
+    }
 
     private void ViewerActualChip_Click(object sender, RoutedEventArgs e) => SetViewerRestByHand(ViewerRestMode.Actual);
 
@@ -36350,9 +36412,19 @@ public partial class MainWindow : Window
 
     private bool ViewerRestIsFill => _viewerRest == ViewerRestMode.Fill;
 
-    private void ViewerZoomInButton_Click(object sender, RoutedEventArgs e) => StepViewerZoom(+1, null);
+    private void ViewerZoomInButton_Click(object sender, RoutedEventArgs e) => StepViewerOrPdfZoom(+1);
 
-    private void ViewerZoomOutButton_Click(object sender, RoutedEventArgs e) => StepViewerZoom(-1, null);
+    private void ViewerZoomOutButton_Click(object sender, RoutedEventArgs e) => StepViewerOrPdfZoom(-1);
+
+    private void StepViewerOrPdfZoom(int direction)
+    {
+        if (_viewerPdf is not null)
+        {
+            ViewerPdfColumn.ZoomByStep(direction);
+            return;
+        }
+        StepViewerZoom(direction, null);
+    }
 
     // Re-aims the panel at the side the current mode wants - screen-interior
     // (left column) when docked on the right edge, the right column
@@ -36654,6 +36726,10 @@ public partial class MainWindow : Window
     // reload below is the path a new file takes, which puts the text view
     // back to its 보기 offer - so releasing a width drag closed the file being
     // read, and cancelled one still being fetched.
+    //
+    // A PDF neither (2026-10-27): its column re-fits the panel live and
+    // re-draws its pages once the width rests, by itself. Taken through the
+    // new-file path here it would be closed and opened again, back at page 1.
     private void ReloadViewerAtSettledWidth()
     {
         if (_viewerGifDecoder is not null || _viewerVideoPath is not null)
@@ -36661,7 +36737,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_pendingViewerPath is { } shown && IsViewerText(shown))
+        if (_pendingViewerPath is { } shown && (IsViewerText(shown) || IsViewerPdf(shown)))
         {
             return;
         }
@@ -36859,6 +36935,289 @@ public partial class MainWindow : Window
         });
     }
 
+    // ----- The PDF view ---------------------------------------------------
+    //
+    // A PDF is shown the moment it is selected, its pages down one column the
+    // panel's width, Ctrl+wheel or the zoom row to zoom (2026-10-27, the
+    // author's choices: shown on selection, page view and zoom first, PDFs in
+    // the thumbnail bar). Unlike a text file it IS one of the panel's preview
+    // kinds - HasViewerPreview says yes - so it opens the panel, lights the
+    // chevron, takes the row menu's 보기 and has a cell in the thumbnail bar,
+    // whose first page the same engine draws (ShellThumbnailService asks
+    // PdfRenderService ahead of the shell, which on a stock Windows has no PDF
+    // thumbnailer at all).
+    //
+    // SELECTION MAY READ IT where it may not read a text file, because PDFium
+    // fetches only what it draws: ↓ past a 200MB scan on a share costs its
+    // cross-reference table and the pages in view, not the file. Each new file
+    // closes the last; nothing is held open behind the panel's back, and what
+    // is open is opened with delete sharing (see PdfRenderService).
+    //
+    // NOT YET: text selection, search, links, a right-click menu. Left out of
+    // the first round on purpose, to be decided after use.
+    private static bool IsViewerPdf(string path)
+        => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
+
+    // The file the panel is showing as a PDF - set from the moment it is asked
+    // for, through a failed open (whose reason the caption carries), until the
+    // panel leaves it. _viewerPdf is the open document, null until it arrives.
+    private string? _viewerPdfPath;
+    private PdfRenderService.Document? _viewerPdf;
+    private string? _viewerPdfFailure;
+    // The caption's size and date, kept so a page change rewrites the line
+    // without another stat.
+    private string? _viewerPdfInfoBody;
+    // Bumped by every show and every hide, so an open that comes back after
+    // the panel has moved on - or moved away and back to the same file - is
+    // closed instead of shown.
+    private int _viewerPdfTicket;
+
+    private void ShowViewerPdf(string path)
+    {
+        _viewerPdfPath = path;
+        _viewerPdfFailure = null;
+        _viewerPdfInfoBody = null;
+
+        // The host is opaque and goes up at once, so the last file's picture
+        // is covered before the first page arrives. The picture's state goes
+        // too: the zoom row reads it, and a photograph's 100% must not sit
+        // under a document.
+        ViewerImage.Source = null;
+        _viewerShowingDecodedImage = false;
+        ViewerIconImage.Visibility = Visibility.Collapsed;
+        ViewerIconImage.Source = null;
+        ClearViewerZoom();
+        ViewerPdfHost.Visibility = Visibility.Visible;
+        SetViewerFileInfo(path, 0, 0);
+
+        OpenViewerPdf(path, password: null);
+    }
+
+    // The first open (no password) and every press of the password row's 열기
+    // come through here. A password lives only in this call and the one to
+    // PDFium - nothing keeps it, by decision (see the row's XAML).
+    private async void OpenViewerPdf(string path, string? password)
+    {
+        int ticket = ++_viewerPdfTicket;
+        _viewerPdfOpening = true;
+        ViewerPdfPasswordButton.IsEnabled = false;
+
+        var result = await PdfRenderService.OpenAsync(path, password);
+        if (ticket != _viewerPdfTicket)
+        {
+            if (result.Document is { } late)
+            {
+                PdfRenderService.Close(late);
+            }
+            return;
+        }
+        _viewerPdfOpening = false;
+        ViewerPdfPasswordButton.IsEnabled = true;
+
+        if (result.Document is not { } document)
+        {
+            bool locked = result.Error == PdfRenderService.OpenError.Password;
+            bool retried = locked && password is not null;
+            _viewerPdfFailure = retried ? Strings.ViewerPdfWrongPassword
+                : locked ? Strings.ViewerPdfPassword
+                : Strings.ViewerPdfOpenFailed;
+
+            if (retried)
+            {
+                // The icon and the row are up already; the attempt is kept in
+                // the box, selected, so the next one types straight over it.
+                ViewerPdfPasswordBox.SelectAll();
+                ViewerPdfPasswordBox.Focus();
+            }
+            else
+            {
+                // The file-type icon, as for anything the panel cannot draw,
+                // with the reason in the caption's first slot - and for a
+                // locked file the box to answer it under the icon.
+                ViewerPdfHost.Visibility = Visibility.Collapsed;
+                ShowViewerFileTypeIcon(path, besideButton: false);
+                if (locked)
+                {
+                    ViewerPdfPasswordRow.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    HideViewerPdfPasswordRow();
+                }
+            }
+            UpdateViewerPdfCaption();
+            ViewerLoadLog($"pdf FAILED {result.Error}{(password is null ? "" : " (with password)")}  {path}");
+            return;
+        }
+
+        _viewerPdfFailure = null;
+        if (password is not null)
+        {
+            // Unlocked: the icon and the row give way to the pages, and a
+            // keyboard that was in the box goes back to the list.
+            ViewerIconImage.Visibility = Visibility.Collapsed;
+            ViewerIconImage.Source = null;
+            ViewerPdfHost.Visibility = Visibility.Visible;
+        }
+        HideViewerPdfPasswordRow();
+
+        _viewerPdf = document;
+        ViewerPdfColumn.SetDocument(document);
+        UpdateViewerPdfCaption();
+        UpdateViewerZoomBar();
+        ViewerLoadLog($"pdf {document.PageCount} pages  {path}");
+    }
+
+    // Every way the panel leaves a file goes through here, beside
+    // HideViewerText. Cheap when no PDF was up.
+    private void HideViewerPdf()
+    {
+        _viewerPdfTicket++;
+        _viewerPdfOpening = false;
+        if (_viewerPdfPath is null && _viewerPdf is null)
+        {
+            return;
+        }
+
+        _viewerPdfPath = null;
+        _viewerPdfFailure = null;
+        _viewerPdfInfoBody = null;
+        HideViewerPdfPasswordRow();
+        ViewerPdfHost.Visibility = Visibility.Collapsed;
+        ViewerPdfColumn.SetDocument(null);
+        if (_viewerPdf is { } document)
+        {
+            _viewerPdf = null;
+            PdfRenderService.Close(document);
+        }
+        UpdateViewerZoomBar();
+    }
+
+    // ----- the password row ------------------------------------------------
+
+    private bool _viewerPdfOpening;
+
+    // Cleared on the way out, so nothing typed outlives the file it was for.
+    private void HideViewerPdfPasswordRow()
+    {
+        bool hadKeyboard = ViewerPdfPasswordRow.IsKeyboardFocusWithin;
+        ViewerPdfPasswordRow.Visibility = Visibility.Collapsed;
+        ViewerPdfPasswordBox.Clear();
+        ViewerPdfPasswordButton.IsEnabled = true;
+        if (hadKeyboard)
+        {
+            HandViewerKeyboardBackToList();
+        }
+    }
+
+    private void SubmitViewerPdfPassword()
+    {
+        if (_viewerPdfOpening ||
+            _viewerPdfPath is not { } path ||
+            ViewerPdfPasswordBox.Password.Length == 0)
+        {
+            return;
+        }
+        OpenViewerPdf(path, ViewerPdfPasswordBox.Password);
+    }
+
+    private void ViewerPdfPasswordButton_Click(object sender, RoutedEventArgs e) => SubmitViewerPdfPassword();
+
+    private void ViewerPdfPasswordBox_PasswordChanged(object sender, RoutedEventArgs e)
+        => ViewerPdfPasswordPlaceholder.Visibility = ViewerPdfPasswordBox.Password.Length == 0
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+
+    // Enter opens; Esc gives up on the box and hands the keyboard back to the
+    // list, the way Esc leaves the tree's own rename box.
+    private void ViewerPdfPasswordBox_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            SubmitViewerPdfPassword();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Escape)
+        {
+            ViewerPdfPasswordBox.Clear();
+            HandViewerKeyboardBackToList();
+            e.Handled = true;
+        }
+    }
+
+    private string ViewerPdfCaptionHead()
+    {
+        if (_viewerPdfFailure is { } failure)
+        {
+            return failure;
+        }
+        if (_viewerPdf is { } document && ViewerPdfColumn.PageInView >= 0)
+        {
+            return string.Format(Strings.ViewerPdfPage, ViewerPdfColumn.PageInView + 1, document.PageCount);
+        }
+        return string.Empty;
+    }
+
+    // Until the stat is back the line has no body to keep; ApplyViewerFileInfo
+    // writes the whole line when it lands, head included.
+    private void UpdateViewerPdfCaption()
+    {
+        if (_viewerPdfInfoBody is not { } body)
+        {
+            return;
+        }
+        SetViewerCaption(string.Join("  ·  ",
+            new[] { ViewerPdfCaptionHead(), body }.Where(part => part.Length > 0)));
+    }
+
+    private void ViewerPdfColumn_PageInViewChanged(object? sender, EventArgs e) => UpdateViewerPdfCaption();
+
+    private void ViewerPdfColumn_ZoomChanged(object? sender, EventArgs e) => UpdateViewerZoomBar();
+
+    private void ApplyViewerPdfZoomBar()
+    {
+        ViewerZoomBar.Visibility = Visibility.Visible;
+        ViewerActualChip.Visibility = Visibility.Collapsed;
+        ViewerFillChip.Visibility = Visibility.Collapsed;
+        ViewerNavigatorChip.Visibility = Visibility.Collapsed;
+
+        double zoom = ViewerPdfColumn.Zoom;
+        ViewerZoomText.Text = $"{Math.Round(ViewerPdfColumn.PaperPercent)}%";
+        ViewerFitChip.IsChecked = Math.Abs(zoom - 1) < 0.001;
+        ViewerZoomOutButton.IsEnabled = zoom > PdfPageColumn.MinZoom + 0.001;
+        ViewerZoomInButton.IsEnabled = zoom < PdfPageColumn.MaxZoom - 0.001;
+    }
+
+    // The plain wheel scrolls - the ScrollViewer's own - because a document is
+    // read downward; zoom moves to Ctrl, where every PDF reader keeps it, and
+    // Shift scrolls sideways for a page zoomed wider than the panel.
+    private void ViewerPdfHost_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+    {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            ViewerPdfColumn.ZoomByWheel(e.Delta, e.GetPosition(ViewerPdfScroller));
+            e.Handled = true;
+        }
+        else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            ViewerPdfScroller.ScrollToHorizontalOffset(ViewerPdfScroller.HorizontalOffset - e.Delta);
+            e.Handled = true;
+        }
+    }
+
+    // Middle-click is full screen here as it is over a picture - the one
+    // gesture of the picture's host worth carrying over. A document wants the
+    // room more than a photograph does.
+    private void ViewerPdfHost_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.ChangedButton != MouseButton.Middle)
+        {
+            return;
+        }
+        SetViewerFullscreen(!_viewerFullscreen);
+        e.Handled = true;
+    }
+
     // ----- The text view (TXT / MD) ---------------------------------------
     //
     // A text file shows its icon with a small 보기 under it, and its text only
@@ -36970,34 +37329,39 @@ public partial class MainWindow : Window
         SetViewerTextChrome(false);
         ReleaseViewerTextDocument();
 
-        // A collapsed element keeps nothing, so the keyboard would be left
-        // with no owner and ↑↓ would answer nothing until something was
-        // clicked. Handed back to the row the panel follows instead - after
-        // the layout this selection change is about to run, since the row may
-        // only be realised by it.
         if (hadKeyboard)
         {
-            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
-            {
-                if (_isSearchViewActive)
-                {
-                    if (SearchResultsList.SelectedItem is { } row &&
-                        SearchResultsList.ItemContainerGenerator.ContainerFromItem(row) is ListBoxItem item)
-                    {
-                        item.Focus();
-                    }
-                    return;
-                }
-
-                if (ExplorerTree.SelectedItem is FileSystemItem selected &&
-                    FindRealizedContainer(selected) is { } container)
-                {
-                    container.Focus();
-                    return;
-                }
-                ExplorerTree.Focus();
-            }));
+            HandViewerKeyboardBackToList();
         }
+    }
+
+    // A collapsed element keeps nothing, so the keyboard would be left with
+    // no owner and ↑↓ would answer nothing until something was clicked.
+    // Handed back to the row the panel follows instead - after the layout
+    // the current selection change is about to run, since the row may only be
+    // realised by it. Shared by the text view and the PDF password box.
+    private void HandViewerKeyboardBackToList()
+    {
+        Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
+        {
+            if (_isSearchViewActive)
+            {
+                if (SearchResultsList.SelectedItem is { } row &&
+                    SearchResultsList.ItemContainerGenerator.ContainerFromItem(row) is ListBoxItem item)
+                {
+                    item.Focus();
+                }
+                return;
+            }
+
+            if (ExplorerTree.SelectedItem is FileSystemItem selected &&
+                FindRealizedContainer(selected) is { } container)
+            {
+                container.Focus();
+                return;
+            }
+            ExplorerTree.Focus();
+        }));
     }
 
     private void ViewerTextOpenButton_Click(object sender, RoutedEventArgs e) => OpenPendingViewerText(beginEdit: false);
@@ -38647,6 +39011,16 @@ public partial class MainWindow : Window
             string.Equals(_viewerFolderCount.Path, path, StringComparison.OrdinalIgnoreCase))
         {
             head = string.Format(Strings.ViewerFolderItemCount, _viewerFolderCount.Count);
+        }
+
+        // A PDF's slot is the page in view, or why it could not be opened.
+        // The body is kept, so turning a page rewrites the line without
+        // another stat (UpdateViewerPdfCaption).
+        if (head.Length == 0 &&
+            string.Equals(_viewerPdfPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            _viewerPdfInfoBody = body;
+            head = ViewerPdfCaptionHead();
         }
 
         // NoAudioNote is re-applied rather than assumed away. Now that the

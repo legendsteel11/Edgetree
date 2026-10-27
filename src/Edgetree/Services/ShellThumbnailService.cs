@@ -383,17 +383,31 @@ public static class ShellThumbnailService
                 fromCache = thumbnail is not null;
             }
 
+            // A PDF IS DRAWN BY THE APP (2026-10-27, PdfRenderService), never
+            // asked of the shell: a stock Windows has no PDF thumbnailer, so
+            // the shell's answer is whatever this machine happens to have
+            // installed - Acrobat, PowerToys, or nothing - and the same folder
+            // would show pictures on one PC and icons on the next. After the
+            // cache, so a share is read once; and not for the speculative
+            // header-only asks, since an open plus a render is no header read.
+            bool isPdf = IsPdf(path);
+
             // Then the file's own header, and the shell only if it has no
             // thumbnail of its own. Traced separately so the three costs stay
             // comparable - the whole point of this path is that they should not
             // be.
-            if (thumbnail is null && thumbnailOnly)
+            if (thumbnail is null && thumbnailOnly && !isPdf)
             {
                 source = "embedded";
                 thumbnail = TryReadEmbedded(path);
             }
 
-            if (thumbnail is null && !embeddedOnly)
+            if (thumbnail is null && isPdf && !embeddedOnly)
+            {
+                source = "pdf     ";
+                thumbnail = PdfRenderService.RenderFirstPage(path, pixelSize);
+            }
+            else if (thumbnail is null && !embeddedOnly)
             {
                 source = "shell   ";
                 thumbnail = Extract(path, pixelSize, thumbnailOnly);
@@ -437,7 +451,9 @@ public static class ShellThumbnailService
             }
 
             int pixelWidth = 0, pixelHeight = 0;
-            if (readDimensions)
+            // WIC has nothing to say about a PDF's header, and on a share the
+            // attempt is one more open of the file.
+            if (readDimensions && !isPdf)
             {
                 try
                 {
@@ -475,6 +491,9 @@ public static class ShellThumbnailService
 
     private static bool IsSvg(string path)
         => path.EndsWith(".svg", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPdf(string path)
+        => path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
 
     // Every pixel the same value, transparency included. An icon on a
     // transparent ground is never this - its shape differs from its ground -

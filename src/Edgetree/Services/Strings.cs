@@ -693,6 +693,15 @@ public static class Strings
     // says the row menu's word because it is the same request.
     public static string ViewerTextOpen = "보기";
     public static string ViewerTextReadFailed = "파일을 읽을 수 없습니다";
+    // The panel's PDF view (2026-10-27): the caption's first slot, the page
+    // in view against the count, or why the file did not open.
+    public static string ViewerPdfPage = "{0} / {1}쪽";
+    public static string ViewerPdfPassword = "암호로 보호된 PDF입니다";
+    public static string ViewerPdfWrongPassword = "암호가 맞지 않습니다";
+    public static string ViewerPdfOpenFailed = "PDF를 열 수 없습니다";
+    // The box and button under a locked PDF's icon.
+    public static string ViewerPdfPasswordPlaceholder = "암호";
+    public static string ViewerPdfPasswordOpen = "열기";
     // The text view's find box (AvalonEdit's SearchPanel). ErrorText is
     // followed by the regex engine's own message.
     public static string TextFindMatchCase = "대/소문자 구분";
@@ -1390,6 +1399,12 @@ public static class Strings
         ViewerMediaStalled = "Waiting for the file…";
         ViewerTextOpen = "View";
         ViewerTextReadFailed = "The file could not be read";
+        ViewerPdfPage = "Page {0} / {1}";
+        ViewerPdfPassword = "This PDF is password-protected";
+        ViewerPdfWrongPassword = "Incorrect password";
+        ViewerPdfOpenFailed = "The PDF could not be opened";
+        ViewerPdfPasswordPlaceholder = "Password";
+        ViewerPdfPasswordOpen = "Open";
         TextFindMatchCase = "Match case";
         TextFindWholeWords = "Whole words";
         TextFindRegex = "Regular expression";
