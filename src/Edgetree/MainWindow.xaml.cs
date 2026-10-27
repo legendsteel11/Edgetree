@@ -1895,6 +1895,23 @@ public partial class MainWindow : Window
             or System.Windows.Controls.PasswordBox
         || ViewerTextHost.IsKeyboardFocusWithin;
 
+    // The text view READING, not editing (2026-10-27, on request). It is still
+    // a text field above - its caret keys, Ctrl+C/A/F and the rest are its
+    // own - but no key types anything there, and a few keys it has no use for
+    // went dead with it: Backspace closed the panel over a picture or a PDF
+    // and did nothing over a text being read. Those few branches ask this as
+    // well: Backspace, Shift+Backspace, F8, F9 and Ctrl+1~5, the set a PDF's
+    // pages leave to the window. Not Ctrl+Shift+S: the text menu has 다른
+    // 이름으로 저장, and a hand used to VS Code's key for it would write over
+    // a preset without being asked. Not the find row, whose boxes type.
+    // IsViewerTextEditing only once an editor exists, so the key handler
+    // never makes the JIT load AvalonEdit.
+    private bool KeyboardInReadingText =>
+        ViewerTextHost.IsKeyboardFocusWithin &&
+        Keyboard.FocusedElement is not System.Windows.Controls.Primitives.TextBoxBase &&
+        _viewerTextEditor is not null &&
+        !IsViewerTextEditing();
+
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
         // A key pressed while a slow-click rename is waiting calls it off
@@ -1961,7 +1978,7 @@ public partial class MainWindow : Window
             !_viewerFullscreen &&
             Keyboard.Modifiers == ModifierKeys.None &&
             e.Key == Key.Back &&
-            !KeyboardInTextField)
+            (!KeyboardInTextField || KeyboardInReadingText))
         {
             CloseViewer();
             e.Handled = true;
@@ -1990,7 +2007,7 @@ public partial class MainWindow : Window
         // tree instead of deleting a character.
         if (e.Key == Key.Back &&
             Keyboard.Modifiers == ModifierKeys.Shift &&
-            !KeyboardInTextField)
+            (!KeyboardInTextField || KeyboardInReadingText))
         {
             CollapseEverything();
             e.Handled = true;
@@ -2129,7 +2146,7 @@ public partial class MainWindow : Window
         // not start, the same as the menu row.
         if (e.Key == Key.F8 && Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
-            !KeyboardInTextField)
+            (!KeyboardInTextField || KeyboardInReadingText))
         {
             if (IsSlideshowRunning)
             {
@@ -2198,7 +2215,7 @@ public partial class MainWindow : Window
         // the alternative is a press that appears to fail.
         if (Keyboard.Modifiers == ModifierKeys.Control &&
             PresetSlotForKey(e.Key) is { } slot &&
-            !KeyboardInTextField)
+            (!KeyboardInTextField || KeyboardInReadingText))
         {
             GoToPresetSlot(slot);
             e.Handled = true;
@@ -2215,7 +2232,7 @@ public partial class MainWindow : Window
         // silently does nothing in a window with no picture in it.
         if (e.Key == Key.F9 && Keyboard.Modifiers == ModifierKeys.None &&
             _viewerOpen &&
-            !KeyboardInTextField)
+            (!KeyboardInTextField || KeyboardInReadingText))
         {
             SetViewerClock(!_settings.ViewerClock);
             e.Handled = true;
