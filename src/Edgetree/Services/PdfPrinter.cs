@@ -1,6 +1,5 @@
 using System.ComponentModel;
 using System.Drawing.Printing;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using FormsDialogResult = System.Windows.Forms.DialogResult;
@@ -130,9 +129,13 @@ internal static class PdfPrinter
                 {
                     printDocument.Print();
                 }
-                catch (Exception ex) when (ex is Win32Exception or InvalidPrinterException
-                                               or InvalidOperationException or ExternalException)
+                // Everything, at the top of the thread: an exception leaving
+                // a thread ends the whole app, and a printer driver can throw
+                // more kinds than the four a print documents (2026-10-28
+                // review). The job is lost either way; the app need not be.
+                catch (Exception ex)
                 {
+                    System.Diagnostics.Debug.WriteLine($"pdf print: {ex}");
                     dispatcher.BeginInvoke(() => onFailure(ex.Message));
                 }
                 finally
