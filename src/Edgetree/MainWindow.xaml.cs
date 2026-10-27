@@ -36985,8 +36985,9 @@ public partial class MainWindow : Window
     // closes the last; nothing is held open behind the panel's back, and what
     // is open is opened with delete sharing (see PdfRenderService).
     //
-    // NOT YET: text selection, search, links, a right-click menu. Left out of
-    // the first round on purpose, to be decided after use.
+    // Text selection and copy came after the first use, with the pages'
+    // right-click menu of 복사 and 전체 선택 (PdfPageColumn.Selection.cs).
+    // NOT YET: search and links, left to be decided after more use.
     private static bool IsViewerPdf(string path)
         => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
 
@@ -37436,7 +37437,8 @@ public partial class MainWindow : Window
     // no owner and ↑↓ would answer nothing until something was clicked.
     // Handed back to the row the panel follows instead - after the layout
     // the current selection change is about to run, since the row may only be
-    // realised by it. Shared by the text view and the PDF password box.
+    // realised by it. Shared by the text view, the PDF password box and the
+    // PDF's pages (Esc with nothing selected, or the PDF closing under them).
     private void HandViewerKeyboardBackToList()
     {
         Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input, new Action(() =>
