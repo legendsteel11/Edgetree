@@ -193,7 +193,11 @@ public partial class PdfPageColumn
             return (page, 0);
         }
         var hit = text.Box(best);
-        onText = bestDy == 0 && bestDx <= hit.Height;
+        // Inside the line by the same half point the search above allows: a
+        // neighbour that much off the pointer's height can win on distance
+        // along the line, and an exact zero then called a word gap ground,
+        // panning where a selection should start (2026-10-28 review).
+        onText = bestDy <= 0.5 && bestDx <= hit.Height;
         return (page, px < (hit.Left + hit.Right) / 2 ? best : best + 1);
     }
 
