@@ -78,6 +78,25 @@ Apache License 2.0으로 배포됩니다. **§4a가 요구하는 라이선스 �
 (CC BY 4.0) 라이선스로 배포됩니다. 이 출처 표시는 배포물에도 들어갑니다. 실행 파일 안의
 고지 파일에 담겨 있고, 앱 정보 창의 "라이선스 고지 보기"로 열 수 있습니다.
 
+## PDFium
+
+The multimedia panel's PDF pages and the thumbnails of PDF files are drawn by
+[PDFium](https://pdfium.googlesource.com/pdfium/) 157.0.8100 (chromium/8100), in the Windows x64
+build published by [pdfium-binaries](https://github.com/bblanchon/pdfium-binaries), built without
+V8 and XFA. The DLL is embedded in the executable and written to `%LOCALAPPDATA%\Edgetree\pdfium\`
+the first time a PDF is shown.
+
+PDFium is under a BSD-style licence (Copyright 2014 The PDFium Authors), and pdfium-binaries under
+the MIT License. The build also compiles in Abseil (Apache 2.0), Anti-Grain Geometry 2.3, Dragonbox
+(Apache 2.0 with LLVM Exceptions, or Boost 1.0), fast_float (MIT), FreeType (FreeType License),
+HarfBuzz (Old MIT), ICU (Unicode License), Little CMS (MIT), libjpeg-turbo (IJG and BSD-3),
+OpenJPEG (BSD-2), libpng (libpng License), LLVM libc (Apache 2.0 with LLVM Exceptions), simdutf
+(MIT) and zlib (zlib License).
+
+The full text of every one of these licences ships in the distribution, inside the executable's
+notice file, opened from the About window's "라이선스 고지 보기". In the repository it is
+[src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt](src/Edgetree/Resources/THIRD-PARTY-NOTICES.txt).
+
 ## .NET 8 (Microsoft)
 
 독립 실행형(standalone) 빌드에는 .NET 8 런타임이 함께 들어갑니다. .NET은 MIT 라이선스로
