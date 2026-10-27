@@ -45,6 +45,41 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // EIGHT LINES, no fix line. The PDF view leads with five of them - shown
+    // on selection, zoom and text, printing, passwords, the reopen when
+    // another program writes the file - then the text view's two (more
+    // formats, encoding) and 새로 만들기 on a file row. The notes carry three
+    // changes the card leaves out: the window keys reaching a text being
+    // read, the tree row's 보기 mark showing only under the pointer and on
+    // the selection, and a click on the selected row reopening the panel
+    // with 자동 펼치기 on.
+    //
+    // No fix line because no fault that was in v2.7.0 was fixed. Everything
+    // repaired in this round - the PDF view taking the window's keys, a
+    // one-page range printing page 2 - was this release's own new code.
+    version: 'v2.8.0',
+    ko: [
+      'PDF 파일을 선택하면 멀티미디어 패널에 바로 표시되고, 썸네일 바에도 표시됩니다.',
+      'PDF에서 확대·축소와 텍스트 선택·복사를 지원합니다.',
+      'PDF를 미리 보기에서 확인한 뒤 인쇄할 수 있습니다.',
+      '암호로 보호된 PDF를 패널에서 열 수 있고, `암호 기억`으로 다음부터 암호 입력을 생략할 수 있습니다.',
+      '보고 있는 PDF를 다른 프로그램이 변경하면 보던 위치 그대로 다시 열립니다.',
+      '설정·로그·JSON·XML·CSV·스크립트 등 더 많은 형식을 텍스트 보기로 열 수 있습니다. 그 밖의 파일은 우클릭 `텍스트로 보기`로 열 수 있습니다.',
+      '텍스트 보기에서 파일의 인코딩을 확인하고, 다른 인코딩으로 다시 열거나 저장할 수 있습니다.',
+      '파일 행에서도 우클릭 `새로 만들기`를 사용할 수 있으며, 해당 파일이 있는 폴더에 만들어집니다.',
+    ],
+    en: [
+      'Select a PDF and it shows in the multimedia panel at once, and in the thumbnail bar too.',
+      'Zoom in and out of PDFs, and select and copy their text.',
+      'Print PDFs after checking them in a preview.',
+      'Open password-protected PDFs in the panel, and use Remember password to skip typing it next time.',
+      'When another program changes the PDF you are viewing, it reopens at the same place.',
+      'Settings, logs, JSON, XML, CSV, scripts and more now open in the text view. Anything else opens with View as text in the right-click menu.',
+      'The text view shows a file\'s encoding, and can reopen or save the file in another encoding.',
+      'New in the right-click menu now works on a file row too, creating the item in the folder that contains the file.',
+    ],
+  },
+  {
     // TEN LINES. The text view leads with four of them - viewing and editing,
     // find and line numbers, edits kept, Markdown - then the three other
     // additions, two changes, and the one fix of a fault that was already in

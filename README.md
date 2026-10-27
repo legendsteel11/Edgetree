@@ -1,4 +1,4 @@
-# Edgetree v2.7.0
+# Edgetree v2.8.0
 
 [한국어 안내](README-ko.md)
 
@@ -13,11 +13,11 @@ straight to a file without opening a full Explorer window.
 
 Grab the latest build from the [Releases page](https://github.com/legendsteel11/Edgetree/releases/latest). Three options are attached to each release:
 
-- **`Edgetree-<version>-win-x64-setup.exe`** (~49 MB) — the installer. Click
+- **`Edgetree-<version>-win-x64-setup.exe`** (~52 MB) — the installer. Click
   through it and Edgetree lands in your Start menu, with a clean uninstall.
-- **`Edgetree-<version>-win-x64-standalone.exe`** (~155 MB) — one file, nothing
+- **`Edgetree-<version>-win-x64-standalone.exe`** (~164 MB) — one file, nothing
   to install. Keep it wherever you like and run it.
-- **`Edgetree-<version>-win-x64.exe`** (~3 MB) — the same app, using the
+- **`Edgetree-<version>-win-x64.exe`** (~10 MB) — the same app, using the
   [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)
   already on the machine.
 
@@ -122,11 +122,20 @@ leaves them where they are.
   window to the screen, or fills the window you already have — pick which
   from the right-click menu. It works while docked, and the thumbnail bar
   steps aside for a film.
-- **Text and Markdown**: view and edit TXT and MD files in the panel. Find
-  and replace, line numbers that color the lines changed since the last save,
-  Markdown formatting (`Ctrl+B`/`Ctrl+I`) and links you can follow, headings
-  that stay at the top as you scroll, and printing. Unsaved changes are kept
-  across restarts, and quitting asks about them.
+- **Text and Markdown**: view and edit TXT and MD files in the panel, along
+  with settings, logs, JSON, XML, CSV and scripts; anything else opens through
+  View as text. Find and replace, line numbers that color the lines changed
+  since the last save, Markdown formatting (`Ctrl+B`/`Ctrl+I`) and links you
+  can follow, headings that stay at the top as you scroll, and printing. The
+  caption shows the file's encoding, and the file can be reopened or saved in
+  another one. Unsaved changes are kept across restarts, and quitting asks
+  about them.
+- **PDF**: a PDF shows as soon as you select it, and in the thumbnail bar too.
+  `Ctrl`+wheel zooms, dragging over text selects it for copying, and dragging
+  the blank space moves around. Print after a preview, open a
+  password-protected file in the panel (Remember password skips the typing
+  next time), and a PDF that another program changes reopens at the same
+  place.
 
 ### Bookmarks and search
 
@@ -224,6 +233,17 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.8.0 (2026-10-28)
+
+- Select a PDF and it shows in the multimedia panel at once, and in the thumbnail bar too.
+- Zoom in and out of PDFs, and select and copy their text.
+- Print PDFs after checking them in a preview.
+- Open password-protected PDFs in the panel, and use Remember password to skip typing it next time.
+- When another program changes the PDF you are viewing, it reopens at the same place.
+- Settings, logs, JSON, XML, CSV, scripts and more now open in the text view. Anything else opens with View as text in the right-click menu.
+- The text view shows a file's encoding, and can reopen or save the file in another encoding.
+- New in the right-click menu now works on a file row too, creating the item in the folder that contains the file.
 
 ### v2.7.0 (2026-10-14)
 
@@ -759,7 +779,8 @@ and live size and spacing measurement app.
 MIT — see [LICENSE.md](LICENSE.md). File and folder icons come from the Material
 Icon Theme project (MIT), the interface glyphs from Google's Material Symbols
 (Apache License 2.0), and the text viewer is built on AvalonEdit (MIT), with its
-two replace icons from Microsoft's Codicons (CC BY 4.0) — see
+two replace icons from Microsoft's Codicons (CC BY 4.0). PDFs are drawn by
+PDFium (BSD-style licence) — see
 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md). The app carries the licence
 texts itself and opens them from its About window; in the repository they are at
 [src/Edgetree/Resources/APACHE-2.0.txt](src/Edgetree/Resources/APACHE-2.0.txt) and
