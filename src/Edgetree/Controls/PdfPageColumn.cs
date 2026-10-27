@@ -143,8 +143,27 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
     // Hands the column a newly opened document (or null to clear it). The
     // previous document's queued pages are dropped; closing it is the
     // caller's, which owns its lifetime.
-    public void SetDocument(PdfRenderService.Document? document)
+    public void SetDocument(PdfRenderService.Document? document) => SetDocument(document, keepPlace: false);
+
+    // The same file opened again after it changed on disk: the zoom and the
+    // place being read stay - the page at the top of the view and how far
+    // down it the view starts - so a document rebuilt while it is being read
+    // carries on where it was. The selection does not: its characters may
+    // not exist any more.
+    public void ReloadDocument(PdfRenderService.Document document) => SetDocument(document, keepPlace: true);
+
+    private void SetDocument(PdfRenderService.Document? document, bool keepPlace)
     {
+        (int Page, double Down, double Across)? place = null;
+        if (keepPlace && _scroller is not null && _pageRects.Length > 0)
+        {
+            int top = FirstPageBelow(_scroller.VerticalOffset);
+            var rect = _pageRects[top];
+            place = (top,
+                rect.Height > 0 ? (_scroller.VerticalOffset - rect.Top) / rect.Height : 0,
+                _scroller.HorizontalOffset);
+        }
+
         if (_document is { } old)
         {
             PdfRenderService.CancelPages(old);
@@ -157,19 +176,48 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
         ResetTextState();
 
         _document = document;
-        _zoom = 1.0;
+        if (!keepPlace)
+        {
+            _zoom = 1.0;
+        }
         _zoomSettle.Stop();
         _zoomSettling = false;
         _layoutWidth = -1;
         PageInView = -1;
-        _scroller?.ScrollToHorizontalOffset(0);
-        _scroller?.ScrollToVerticalOffset(0);
+        if (place is null)
+        {
+            _scroller?.ScrollToHorizontalOffset(0);
+            _scroller?.ScrollToVerticalOffset(0);
+        }
         InvalidateMeasure();
         // Pages are made from ScrollChanged, which a new document of exactly
         // the old one's height and position would never raise; asked once
         // after the layout instead, so the first pages never wait on it.
-        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, RefreshSlots);
+        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
+        {
+            if (place is { } at && ReferenceEquals(_document, document))
+            {
+                RestorePlace(at.Page, at.Down, at.Across);
+            }
+            RefreshSlots();
+        });
         ZoomChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // After the new document's first layout, so the offsets land inside its
+    // extent rather than being clamped against the old one's. A document that
+    // came back shorter lands on its last page.
+    private void RestorePlace(int page, double down, double across)
+    {
+        ComputeLayout();
+        if (_scroller is null || _pageRects.Length == 0)
+        {
+            return;
+        }
+        var rect = _pageRects[Math.Min(page, _pageRects.Length - 1)];
+        _scroller.UpdateLayout();
+        _scroller.ScrollToVerticalOffset(rect.Top + down * rect.Height);
+        _scroller.ScrollToHorizontalOffset(across);
     }
 
     // ----- layout ------------------------------------------------------------

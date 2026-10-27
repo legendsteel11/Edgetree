@@ -37024,6 +37024,7 @@ public partial class MainWindow : Window
         SetViewerFileInfo(path, 0, 0);
 
         OpenViewerPdf(path, password: null);
+        WatchViewerPdf(path);
     }
 
     // The first open (no password) and every press of the password row's 열기
@@ -37107,6 +37108,7 @@ public partial class MainWindow : Window
     {
         _viewerPdfTicket++;
         _viewerPdfOpening = false;
+        UnwatchViewerPdf();
         if (_viewerPdfPath is null && _viewerPdf is null)
         {
             return;
@@ -37131,6 +37133,201 @@ public partial class MainWindow : Window
             PdfRenderService.Close(document);
         }
         UpdateViewerZoomBar();
+    }
+
+    // ----- the file changing under the panel --------------------------------
+    //
+    // THE PDF ON SCREEN IS READ LAZILY from a handle that lets other programs
+    // write (PdfRenderService.Open shares ReadWrite|Delete, so the panel never
+    // blocks a save). A program that rewrites the file IN PLACE - a LaTeX
+    // build, an export to the same name - leaves that handle reading new
+    // bytes at the old offsets: pages not drawn yet came out blank or broken,
+    // and stayed so until another file was selected (pre-release review,
+    // 2026-10-27). A writer that saves beside and renames over the name is
+    // harmless to the handle, which keeps the old file, but shows the old
+    // document just the same.
+    //
+    // So the file on screen is watched, alone - its folder, its name - and
+    // opened again once the writes rest, keeping the zoom and the place
+    // (PdfPageColumn.ReloadDocument). The new document is opened BESIDE the
+    // old one and swapped in only once it has opened; a build still writing
+    // fails to open, keeps what is on screen, and is tried again a few times
+    // a little later.
+    private FileSystemWatcher? _viewerPdfWatcher;
+    private int _viewerPdfWatchTicket;
+    private System.Windows.Threading.DispatcherTimer? _viewerPdfReloadTimer;
+    private int _viewerPdfReloadTries;
+    // The pause after the last write before the file is opened again, and
+    // after a reopen that failed - a writer mid-file.
+    private const int ViewerPdfReloadRestMs = 600;
+    private const int ViewerPdfReloadRetryMs = 2000;
+    private const int ViewerPdfReloadTriesMax = 3;
+
+    // Made on a worker: the watcher's constructor checks the folder and
+    // starting it opens a handle on it, two network trips on a share that the
+    // UI thread would otherwise wait on for every PDF the selection passes.
+    private void WatchViewerPdf(string path)
+    {
+        UnwatchViewerPdf();
+        int ticket = _viewerPdfWatchTicket;
+        Task.Run(() =>
+        {
+            FileSystemWatcher? watcher = null;
+            try
+            {
+                if (Path.GetDirectoryName(path) is not { Length: > 0 } folder)
+                {
+                    return;
+                }
+                watcher = new FileSystemWatcher(folder, Path.GetFileName(path))
+                {
+                    // Size and LastWrite for a rewrite in place; FileName for
+                    // one saved beside and renamed over this name.
+                    NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.FileName,
+                };
+                FileSystemEventHandler changed = (_, e) => OnViewerPdfFileEvent(e.FullPath);
+                watcher.Changed += changed;
+                watcher.Created += changed;
+                watcher.Renamed += (_, e) => OnViewerPdfFileEvent(e.FullPath);
+                watcher.EnableRaisingEvents = true;
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                                           or ArgumentException or PlatformNotSupportedException)
+            {
+                // A folder that cannot be watched: the PDF shows as before,
+                // only without following changes.
+                watcher?.Dispose();
+                return;
+            }
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (ticket != _viewerPdfWatchTicket)
+                {
+                    Task.Run(watcher.Dispose);
+                    return;
+                }
+                _viewerPdfWatcher = watcher;
+            });
+        });
+    }
+
+    private void UnwatchViewerPdf()
+    {
+        _viewerPdfWatchTicket++;
+        _viewerPdfReloadTimer?.Stop();
+        _viewerPdfReloadTries = 0;
+        if (_viewerPdfWatcher is { } watcher)
+        {
+            _viewerPdfWatcher = null;
+            // Off the UI thread for the same reason it was made off it.
+            Task.Run(watcher.Dispose);
+        }
+    }
+
+    // A watcher thread. A rename AWAY from the name is reported under the old
+    // name's filter too; only events whose path is the file's own count.
+    private void OnViewerPdfFileEvent(string fullPath)
+    {
+        Dispatcher.BeginInvoke(() =>
+        {
+            if (_viewerPdfPath is not { } path ||
+                !string.Equals(path, fullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+            _viewerPdfReloadTries = 0;
+            ScheduleViewerPdfReload(ViewerPdfReloadRestMs);
+        });
+    }
+
+    private void ScheduleViewerPdfReload(int delayMs)
+    {
+        _viewerPdfReloadTimer ??= CreateViewerPdfReloadTimer();
+        _viewerPdfReloadTimer.Stop();
+        _viewerPdfReloadTimer.Interval = TimeSpan.FromMilliseconds(delayMs);
+        _viewerPdfReloadTimer.Start();
+    }
+
+    private System.Windows.Threading.DispatcherTimer CreateViewerPdfReloadTimer()
+    {
+        var timer = new System.Windows.Threading.DispatcherTimer();
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ReloadViewerPdf();
+        };
+        return timer;
+    }
+
+    private async void ReloadViewerPdf()
+    {
+        if (_viewerPdfPath is not { } path)
+        {
+            return;
+        }
+        // An open still out (the first one, or a password being tried) will
+        // read the file as it is when it runs; asked again after it.
+        if (_viewerPdfOpening)
+        {
+            ScheduleViewerPdfReload(ViewerPdfReloadRestMs);
+            return;
+        }
+        // Not on screen as a document - it failed to open, or waits for its
+        // password. Shown afresh: a file that failed mid-write may open now,
+        // and a locked one asks again as on any visit.
+        if (_viewerPdf is not { } old)
+        {
+            if (_viewerPdfFailure != Strings.ViewerPdfPassword &&
+                _viewerPdfFailure != Strings.ViewerPdfWrongPassword)
+            {
+                HideViewerPdf();
+                ShowViewerPdf(path);
+            }
+            return;
+        }
+
+        int ticket = _viewerPdfTicket;
+        var result = await PdfRenderService.OpenAsync(path, password: null);
+        if (ticket != _viewerPdfTicket ||
+            !ReferenceEquals(_viewerPdf, old) ||
+            !string.Equals(_viewerPdfPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (result.Document is { } late)
+            {
+                PdfRenderService.Close(late);
+            }
+            return;
+        }
+
+        if (result.Document is not { } document)
+        {
+            // Locked: it was opened with a password, which nothing kept, or
+            // it has just been locked. Asked for as on a fresh visit.
+            if (result.Error == PdfRenderService.OpenError.Password)
+            {
+                HideViewerPdf();
+                ShowViewerPdf(path);
+                return;
+            }
+            // Still being written, most likely. What is on screen stays.
+            ViewerLoadLog($"pdf reload FAILED {result.Error} (try {_viewerPdfReloadTries + 1})  {path}");
+            if (++_viewerPdfReloadTries < ViewerPdfReloadTriesMax)
+            {
+                ScheduleViewerPdfReload(ViewerPdfReloadRetryMs);
+            }
+            return;
+        }
+
+        _viewerPdfReloadTries = 0;
+        _viewerPdf = document;
+        ViewerPdfColumn.ReloadDocument(document);
+        PdfRenderService.Close(old);
+        // The caption's size and date are the old file's.
+        SetViewerFileInfo(path, 0, 0);
+        UpdateViewerPdfCaption();
+        UpdateViewerZoomBar();
+        ViewerLoadLog($"pdf reloaded {document.PageCount} pages  {path}");
     }
 
     // ----- the password row ------------------------------------------------
