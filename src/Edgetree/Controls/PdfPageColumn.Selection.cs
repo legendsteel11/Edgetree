@@ -88,7 +88,8 @@ public partial class PdfPageColumn
             }
             if (text is null)
             {
-                // Asked again the next time the page is realised.
+                // A failed read, or one dropped unrun: asked again the next
+                // time the page is realised.
                 _textAsked.Remove(index);
                 return;
             }
@@ -100,6 +101,19 @@ public partial class PdfPageColumn
                 slot.Layer.InvalidateVisual();
             }
         });
+    }
+
+    // A page leaving the column's reach has its queued read dropped
+    // (PdfRenderService.CancelPage). Forgotten here at once, not only when the
+    // dropped request's null answer comes back through the dispatcher, so a
+    // page realised again before that answer is asked again rather than
+    // taken as already asked. A read already running still lands its text.
+    private void ForgetUnreadPageText(int index)
+    {
+        if (!_texts.ContainsKey(index))
+        {
+            _textAsked.Remove(index);
+        }
     }
 
     // ----- where the pointer is ----------------------------------------------

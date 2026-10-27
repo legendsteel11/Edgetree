@@ -126,10 +126,15 @@ public static class PdfRenderService
 
     private static readonly object Gate = new();
     // Page renders are taken NEWEST FIRST: after a fast scroll the page now in
-    // view was asked for last, and the ones scrolled past are still queued
-    // ahead of it. Opens and closes go in their own FIFO and always run before
-    // any page, so a close is never stuck behind renders of the document it
-    // closes.
+    // view was asked for last, and the ones scrolled past may still be queued
+    // ahead of it. Newest first changes the order, not the amount, so the
+    // column also drops a page's requests the moment the page leaves its
+    // reach (CancelPage) - a scrollbar dragged through 300 pages at 2x would
+    // otherwise have this thread draw every one of them, while the thumbnail
+    // workers waiting in RenderFirstPage, two in all and shared with every
+    // picture, sat behind it. Opens and closes go in their own FIFO and always
+    // run before any page, so a close is never stuck behind renders of the
+    // document it closes.
     private static readonly LinkedList<Action> Control = new();
     private static readonly LinkedList<PageRequest> Pages = new();
     // First pages for the thumbnail bar and the row menu: after the panel's
@@ -140,12 +145,23 @@ public static class PdfRenderService
 
     // One page's work for the panel - a render, or its text for selection
     // (2026-10-27) - run on the PDFium thread; Work posts its own answer.
-    // IsText tells the two apart for CancelPages, which drops renders only.
+    // IsText tells the two apart for CancelPages, which drops renders only
+    // unless told otherwise.
     private sealed class PageRequest
     {
         public required Document Document { get; init; }
+        public required int Index { get; init; }
         public required bool IsText { get; init; }
+        // A text read a copy is waiting on. Its page scrolling out of reach
+        // does not drop it - the copy needs that page whether or not it is
+        // on screen - only the document closing does.
+        public bool ForCopy { get; init; }
         public required Action Work { get; init; }
+        // Run on the UI thread when the request is dropped unrun. A text
+        // request answers null then, so a caller waiting on it always hears;
+        // a render stays silent, because the column clears its own record of
+        // what it asked when it cancels (see the zoom settle tick).
+        public Action? Dropped { get; init; }
     }
 
     private static void Post(Action work)
@@ -336,59 +352,74 @@ public static class PdfRenderService
     // page's request open until it hears, and an unanswered one would never
     // be asked again.
     public static void RequestPage(Document document, int index, int pixelWidth, Action<BitmapSource?> done)
-        => Enqueue(document, isText: false, () =>
+        => Enqueue(new PageRequest
         {
-            BitmapSource? bitmap = null;
-            try
+            Document = document,
+            Index = index,
+            IsText = false,
+            Work = () =>
             {
-                if (!document.Closed)
+                BitmapSource? bitmap = null;
+                try
                 {
-                    bitmap = RenderPage(document, index, pixelWidth);
+                    if (!document.Closed)
+                    {
+                        bitmap = RenderPage(document, index, pixelWidth);
+                    }
                 }
-            }
-            finally
-            {
-                Application.Current?.Dispatcher.BeginInvoke(() => done(bitmap));
-            }
+                finally
+                {
+                    Application.Current?.Dispatcher.BeginInvoke(() => done(bitmap));
+                }
+            },
         });
 
     // One page's characters and where they sit, for text selection. Queued
     // with the renders, newest first; the caller asks right BEFORE the page's
-    // render, so the picture still comes first.
+    // render, so the picture still comes first. Dropped unrun, it answers
+    // null like a failed read.
     public static void RequestPageText(Document document, int index, Action<PageText?> done)
-        => Enqueue(document, isText: true, () =>
-        {
-            PageText? text = null;
-            try
-            {
-                if (!document.Closed)
-                {
-                    text = ExtractText(document, index);
-                }
-            }
-            finally
-            {
-                Application.Current?.Dispatcher.BeginInvoke(() => done(text));
-            }
-        });
+        => Enqueue(TextRequest(document, index, forCopy: false, done));
 
+    // For a copy: answered whatever happens, and not dropped when its page
+    // scrolls out of reach (PageRequest.ForCopy).
     public static Task<PageText?> RequestPageTextAsync(Document document, int index)
     {
         var done = new TaskCompletionSource<PageText?>(TaskCreationOptions.RunContinuationsAsynchronously);
-        RequestPageText(document, index, text => done.TrySetResult(text));
+        Enqueue(TextRequest(document, index, forCopy: true, text => done.TrySetResult(text)));
         return done.Task;
     }
 
-    private static void Enqueue(Document document, bool isText, Action work)
+    private static PageRequest TextRequest(Document document, int index, bool forCopy, Action<PageText?> done)
+        => new()
+        {
+            Document = document,
+            Index = index,
+            IsText = true,
+            ForCopy = forCopy,
+            Work = () =>
+            {
+                PageText? text = null;
+                try
+                {
+                    if (!document.Closed)
+                    {
+                        text = ExtractText(document, index);
+                    }
+                }
+                finally
+                {
+                    Application.Current?.Dispatcher.BeginInvoke(() => done(text));
+                }
+            },
+            Dropped = () => done(null),
+        };
+
+    private static void Enqueue(PageRequest request)
     {
         lock (Gate)
         {
-            Pages.AddLast(new PageRequest
-            {
-                Document = document,
-                IsText = isText,
-                Work = work,
-            });
+            Pages.AddLast(request);
             EnsureThread();
             Monitor.Pulse(Gate);
         }
@@ -397,20 +428,43 @@ public static class PdfRenderService
     // Drops queued renders of one document - the panel moving to another file,
     // or a zoom that makes every queued width wrong. A render already running
     // finishes; its callback is the caller's to ignore. Text requests stay
-    // unless textToo: a page's text is the same at every zoom, and a dropped
-    // one is never asked again (the column asks once per page).
+    // unless textToo: a page's text is the same at every zoom.
     public static void CancelPages(Document document, bool textToo = false)
+        => Drop(request => ReferenceEquals(request.Document, document) && (textToo || !request.IsText));
+
+    // Drops one page's queued render and text read - the page has left the
+    // column's reach. A copy's text read stays.
+    public static void CancelPage(Document document, int index)
+        => Drop(request => ReferenceEquals(request.Document, document) &&
+                           request.Index == index && !request.ForCopy);
+
+    private static void Drop(Func<PageRequest, bool> match)
     {
+        List<Action>? dropped = null;
         lock (Gate)
         {
             for (var node = Pages.First; node is not null;)
             {
                 var next = node.Next;
-                if (ReferenceEquals(node.Value.Document, document) && (textToo || !node.Value.IsText))
+                if (match(node.Value))
                 {
                     Pages.Remove(node);
+                    if (node.Value.Dropped is { } tell)
+                    {
+                        (dropped ??= new()).Add(tell);
+                    }
                 }
                 node = next;
+            }
+        }
+        // Outside the lock, and through the dispatcher even from the UI
+        // thread: a caller's answer arrives the way a run request's does,
+        // never inside the call that dropped it.
+        if (dropped is not null && Application.Current?.Dispatcher is { } dispatcher)
+        {
+            foreach (var tell in dropped)
+            {
+                dispatcher.BeginInvoke(tell);
             }
         }
     }

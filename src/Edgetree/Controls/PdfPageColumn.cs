@@ -343,6 +343,11 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
                 slot.Image.Source = null;
                 Children.Remove(slot.Paper);
                 _slots.Remove(index);
+                // And whatever it still had queued: the page is not coming
+                // back into view on this scroll, and a fast one would leave
+                // the PDFium thread drawing every page it passed.
+                PdfRenderService.CancelPage(document, index);
+                ForgetUnreadPageText(index);
             }
         }
 
