@@ -797,6 +797,8 @@ public static class Strings
     // A printed text's page footer: {0} this page, {1} all pages.
     public static string TextPrintPageFormat = "{0} / {1}";
     public static string TextPrintFailedTitle = "인쇄할 수 없습니다";
+    // 인쇄 on a locked PDF row that is not open in the panel, with no remembered password.
+    public static string PdfPrintLocked = "암호로 보호된 PDF입니다. 패널에서 암호를 입력해 연 다음 인쇄할 수 있습니다.";
     // The print preview window: its title, the button that opens Windows'
     // print dialog, and the page in view beside it ({0} that page, {1} all
     // pages - the printed footer's form).
@@ -1491,6 +1493,7 @@ public static class Strings
         TextSaveFailedTitle = "Could not save";
         TextPrintPageFormat = "{0} / {1}";
         TextPrintFailedTitle = "Could not print";
+        PdfPrintLocked = "This PDF is password-protected. Open it in the panel with its password, then print it.";
         PrintPreviewTitle = "Print preview";
         PrintPreviewPrint = "Print…";
         PrintPreviewPages = "{0} / {1}";

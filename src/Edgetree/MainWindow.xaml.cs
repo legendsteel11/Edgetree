@@ -2610,6 +2610,14 @@ public partial class MainWindow : Window
                 PrintShownViewerText();
                 e.Handled = true;
                 break;
+            // And the PDF's, with the keyboard in its pages (2026-10-27) - the
+            // pages' menu row. PdfPageColumn.HandleKey does not answer it, so
+            // it arrives here.
+            case Key.P when Keyboard.Modifiers == ModifierKeys.Control
+                            && ViewerPdfColumn.IsKeyboardFocused:
+                PrintShownViewerPdf();
+                e.Handled = true;
+                break;
             // Ctrl+H is the same row opened for replacing (2026-10-13), the
             // key Notepad gives it. The app had no Ctrl+H of its own.
             case Key.H when Keyboard.Modifiers == ModifierKeys.Control
@@ -17734,14 +17742,15 @@ public partial class MainWindow : Window
                         : Visibility.Collapsed;
             }
 
-            // 인쇄 on one picture or text row (2026-10-13), absent otherwise:
-            // a picture only where Windows has a print for its type (the
-            // answer is remembered per extension - ShellFileService.CanPrint).
+            // 인쇄 on one picture, text or PDF row (2026-10-13; PDF 10-27),
+            // absent otherwise: a picture only where Windows has a print for
+            // its type (the answer is remembered per extension -
+            // ShellFileService.CanPrint). A PDF always: the app prints it.
             if (FindTaggedMenuElement<MenuItem>(menu, "print") is { } printItem)
             {
                 bool printable = _multiSelection.Count <= 1 &&
                     ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } printRow &&
-                    (IsViewerText(printRow.FullPath) ||
+                    (IsViewerText(printRow.FullPath) || IsViewerPdf(printRow.FullPath) ||
                      (ThumbnailExtensions.Contains(Path.GetExtension(printRow.FullPath)) && ShellFileService.CanPrint(printRow.FullPath)));
                 printItem.Visibility = printable ? Visibility.Visible : Visibility.Collapsed;
             }
@@ -27009,6 +27018,9 @@ public partial class MainWindow : Window
 
     // 인쇄 from the tree (2026-10-13). A picture is Windows' to print; a text
     // is the app's, so its unsaved edits go on paper too (PrintViewerTextFile).
+    // A PDF is the app's as well since 2026-10-27 (PrintPdfFile) - it went to
+    // the shell's print verb before, which on a stock Windows has no PDF
+    // printer behind it and elsewhere is whatever reader is installed.
     private void PrintItem_Click(object sender, RoutedEventArgs e)
     {
         if (ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } item)
@@ -27019,6 +27031,10 @@ public partial class MainWindow : Window
         if (IsViewerText(item.FullPath))
         {
             PrintViewerTextFile(item.FullPath);
+        }
+        else if (IsViewerPdf(item.FullPath))
+        {
+            PrintPdfFile(item.FullPath);
         }
         else
         {
@@ -37505,9 +37521,10 @@ public partial class MainWindow : Window
     // Esc in the pages with nothing selected.
     private void ViewerPdfColumn_KeyboardReleaseRequested(object? sender, EventArgs e) => HandViewerKeyboardBackToList();
 
-    // The pages' right-click menu (2026-10-27): 복사 and 전체 선택, nothing
-    // else - the file's own actions are the tree row's menu. 복사 is greyed
-    // with nothing selected rather than absent, so the menu keeps one shape.
+    // The pages' right-click menu (2026-10-27): 복사 and 전체 선택, then 인쇄
+    // (added the same day) - the file's other actions are the tree row's
+    // menu. 복사 is greyed with nothing selected rather than absent, so the
+    // menu keeps one shape.
     private void ViewerPdfContextMenu_Opened(object sender, RoutedEventArgs e)
     {
         ViewerPdfCopyItem.IsEnabled = ViewerPdfColumn.HasSelection;
@@ -37517,6 +37534,45 @@ public partial class MainWindow : Window
     private void ViewerPdfCopy_Click(object sender, RoutedEventArgs e) => ViewerPdfColumn.CopySelection();
 
     private void ViewerPdfSelectAll_Click(object sender, RoutedEventArgs e) => ViewerPdfColumn.SelectAll();
+
+    private void ViewerPdfPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerPdf();
+
+    // The PDF on screen, through Windows' print dialog with the page in view
+    // as its 현재 페이지 (PdfPrinter). The panel's own open document is the
+    // one printed - a locked file's password is not asked twice - and is
+    // held open until the job is spooled, whatever the panel does meanwhile.
+    private void PrintShownViewerPdf()
+    {
+        if (_viewerPdf is { } document && _viewerPdfPath is { } path)
+        {
+            PdfPrinter.Print(this, document, Path.GetFileName(path), ViewerPdfColumn.PageInView, ReportPrintFailure);
+        }
+    }
+
+    // 인쇄 on a PDF row that is not on screen: opened for the print alone and
+    // closed once it is spooled (Close waits for the print's hold). A locked
+    // file opens with its remembered password; without one there is nothing
+    // to open it with here, and the message says where to.
+    private async void PrintPdfFile(string path)
+    {
+        if (_viewerPdf is not null &&
+            string.Equals(_viewerPdfPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            PrintShownViewerPdf();
+            return;
+        }
+
+        var result = await PdfRenderService.OpenAsync(path, PdfPasswordStore.Get(path));
+        if (result.Document is not { } document)
+        {
+            ReportPrintFailure(result.Error == PdfRenderService.OpenError.Password
+                ? Strings.PdfPrintLocked
+                : Strings.ViewerPdfOpenFailed);
+            return;
+        }
+        PdfPrinter.Print(this, document, Path.GetFileName(path), currentPage: -1, ReportPrintFailure);
+        PdfRenderService.Close(document);
+    }
 
     private void ApplyViewerPdfZoomBar()
     {

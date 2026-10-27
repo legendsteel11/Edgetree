@@ -9654,6 +9654,10 @@
                                 <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
                                         InputGestureText="Ctrl+A"
                                         Click="ViewerPdfSelectAll_Click"/>
+                                <Separator/>
+                                <MenuItem Header="{x:Static services:Strings.MenuPrint}"
+                                        InputGestureText="Ctrl+P"
+                                        Click="ViewerPdfPrint_Click"/>
                             </ContextMenu>
                         </Border.ContextMenu>
                         <ScrollViewer x:Name="ViewerPdfScroller"

@@ -72,6 +72,10 @@ public static class PdfRenderService
         internal GCHandle StreamHandle;
         internal IntPtr FileAccess;
         internal bool Closed;
+        // Under Gate. A print in progress holds the document (Hold); a Close
+        // while it does only marks it, and the last Release closes it.
+        internal int Holds;
+        internal bool CloseRequested;
     }
 
     public readonly record struct OpenResult(Document? Document, OpenError Error);
@@ -393,10 +397,120 @@ public static class PdfRenderService
     // Queued behind whatever is already asked of the document; renders still
     // queued for it are dropped first, so closing a 300-page file does not
     // wait for pages nobody is looking at any more.
+    //
+    // A document a print holds stays open until the print lets go: the panel
+    // moving to another file, or reopening this one after a change on disk,
+    // must not pull the pages out from under a job half spooled.
     public static void Close(Document document)
     {
         CancelPages(document, textToo: true);
+        lock (Gate)
+        {
+            if (document.Holds > 0)
+            {
+                document.CloseRequested = true;
+                return;
+            }
+        }
         Post(() => CloseNow(document));
+    }
+
+    // False for a document already closed or on its way to closing.
+    public static bool Hold(Document document)
+    {
+        lock (Gate)
+        {
+            if (document.Closed || document.CloseRequested)
+            {
+                return false;
+            }
+            document.Holds++;
+            return true;
+        }
+    }
+
+    public static void Release(Document document)
+    {
+        lock (Gate)
+        {
+            if (--document.Holds > 0 || !document.CloseRequested)
+            {
+                return;
+            }
+        }
+        Post(() => CloseNow(document));
+    }
+
+    // ----- printing ----------------------------------------------------------
+
+    // One page drawn onto a printer's device context by PDFium itself
+    // (FPDF_RenderPage, the Windows-only entry), at the printer's own
+    // resolution: no page-sized bitmap is ever made, and text and vector art
+    // go to the driver as drawing rather than as a picture of them. Called on
+    // the print thread, which waits here while the render thread draws - the
+    // DC is used by one thread at a time, which is all GDI asks. Ahead of the
+    // panel's queued pages (the control FIFO), so a print is not paced by
+    // scrolling; the panel's pages still run between two printed ones.
+    //
+    // FITTED TO THE PRINTABLE AREA, centred, and turned a quarter when the
+    // page and the paper disagree about which way is long - the default of
+    // every PDF reader's print, and the one that never clips.
+    public static bool PrintPage(Document document, int index, IntPtr hdc)
+    {
+        using var done = new ManualResetEventSlim();
+        bool printed = false;
+        Post(() =>
+        {
+            try
+            {
+                printed = PrintPageNow(document, index, hdc);
+            }
+            finally
+            {
+                done.Set();
+            }
+        });
+        done.Wait();
+        return printed;
+    }
+
+    // Render thread only.
+    private static bool PrintPageNow(Document document, int index, IntPtr hdc)
+    {
+        if (document.Closed || index < 0 || index >= document.PageCount)
+        {
+            return false;
+        }
+        int areaWidth = Native.GetDeviceCaps(hdc, Native.HorzRes);
+        int areaHeight = Native.GetDeviceCaps(hdc, Native.VertRes);
+        var size = document.PageSizes[index];
+        if (areaWidth <= 0 || areaHeight <= 0 || size.Width <= 0 || size.Height <= 0)
+        {
+            return false;
+        }
+
+        bool turn = (size.Width > size.Height) != (areaWidth > areaHeight);
+        double across = turn ? size.Height : size.Width;
+        double down = turn ? size.Width : size.Height;
+        double scale = Math.Min(areaWidth / across, areaHeight / down);
+        int width = Math.Max(1, (int)Math.Round(across * scale));
+        int height = Math.Max(1, (int)Math.Round(down * scale));
+
+        IntPtr page = Native.FPDF_LoadPage(document.Handle, index);
+        if (page == IntPtr.Zero)
+        {
+            return false;
+        }
+        try
+        {
+            Native.FPDF_RenderPage(hdc, page, (areaWidth - width) / 2, (areaHeight - height) / 2,
+                width, height, turn ? 1 : 0, Native.RenderAnnotations | Native.RenderPrinting);
+            return true;
+        }
+        finally
+        {
+            Native.FPDF_ClosePage(page);
+        }
     }
 
     // The answer goes back even when the render failed: the column keeps a
@@ -878,6 +992,21 @@ public static class PdfRenderService
 
         public const uint ErrPassword = 4;
         public const int RenderAnnotations = 0x01;
+        // FPDF_PRINTING: the page as printed - a form field's print flag, an
+        // annotation marked not to print, are honoured.
+        public const int RenderPrinting = 0x800;
+
+        // wingdi.h, for the printable area of a printer's DC in its pixels.
+        public const int HorzRes = 8;
+        public const int VertRes = 10;
+
+        [DllImport("gdi32.dll")]
+        public static extern int GetDeviceCaps(IntPtr hdc, int index);
+
+        // fpdfview.h, _WIN32 only.
+        [DllImport(Library)]
+        public static extern void FPDF_RenderPage(IntPtr hdc, IntPtr page,
+            int startX, int startY, int sizeX, int sizeY, int rotate, int flags);
 
         public delegate int GetBlockCallback(IntPtr param, uint position, IntPtr buffer, uint size);
 
