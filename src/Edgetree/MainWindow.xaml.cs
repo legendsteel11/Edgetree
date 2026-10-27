@@ -37537,6 +37537,9 @@ public partial class MainWindow : Window
 
     private void ViewerPdfPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerPdf();
 
+    // The bar above the pages opens no menu: the host's is the pages'.
+    private void ViewerPdfBar_ContextMenuOpening(object sender, ContextMenuEventArgs e) => e.Handled = true;
+
     // The PDF on screen: the print preview, then from its 인쇄… Windows' print
     // dialog (PdfPrinter). The panel's own open document is the one shown and
     // printed - a locked file's password is not asked twice.

@@ -9660,17 +9660,59 @@
                                         Click="ViewerPdfPrint_Click"/>
                             </ContextMenu>
                         </Border.ContextMenu>
-                        <ScrollViewer x:Name="ViewerPdfScroller"
-                                Template="{StaticResource MinimalScrollViewerTemplate}"
-                                Focusable="False"
-                                CanContentScroll="False"
-                                HorizontalScrollBarVisibility="Auto"
-                                VerticalScrollBarVisibility="Auto">
-                            <local:PdfPageColumn x:Name="ViewerPdfColumn"
-                                    PageInViewChanged="ViewerPdfColumn_PageInViewChanged"
-                                    ZoomChanged="ViewerPdfColumn_ZoomChanged"
-                                    KeyboardReleaseRequested="ViewerPdfColumn_KeyboardReleaseRequested"/>
-                        </ScrollViewer>
+                        <DockPanel LastChildFill="True">
+                            <!-- THE BAR ABOVE THE PAGES (2026-10-27, on request):
+                                 the text view's edit bar without its editing -
+                                 인쇄 at the left, the panel's close at the right
+                                 end - built from the same style and size
+                                 resources, so a text and a PDF wear one strip and
+                                 Ctrl+/- moves both. Its right-click is its own
+                                 (nothing): the pages' menu is about the pages. -->
+                            <Border DockPanel.Dock="Top"
+                                    BorderThickness="0,0,0,1"
+                                    BorderBrush="{DynamicResource PanelDividerBrush}"
+                                    Padding="{DynamicResource ViewerTextBarsPadding}"
+                                    ContextMenuOpening="ViewerPdfBar_ContextMenuOpening">
+                                <Grid Margin="{DynamicResource ViewerTextBarMargin}"
+                                        Height="{DynamicResource PathBarRowHeight}">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <!-- Material Symbols print, as the text bar's. -->
+                                    <Button HorizontalAlignment="Left"
+                                            Style="{StaticResource ViewerTextBarButtonStyle}"
+                                            Click="ViewerPdfPrint_Click"
+                                            ToolTip="{x:Static services:Strings.TextPrint}">
+                                        <Path Data="M640-640v-120H320v120h-80v-200h480v200h-80Zm-480 80h640-640Zm560 100q17 0 28.5-11.5T760-500q0-17-11.5-28.5T720-540q-17 0-28.5 11.5T680-500q0 17 11.5 28.5T720-460Zm-80 260v-160H320v160h320Zm80 80H240v-160H80v-240q0-51 35-85.5t85-34.5h560q51 0 85.5 34.5T880-520v240H720v160Zm80-240v-160q0-17-11.5-28.5T760-560H200q-17 0-28.5 11.5T160-520v160h80v-80h480v80h80Z M0-960H960M0 0H960"
+                                                Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                    </Button>
+                                    <!-- The panel's close, as the text bar's. -->
+                                    <Button Grid.Column="1"
+                                            Style="{StaticResource ViewerTextBarButtonStyle}"
+                                            Margin="4,0,0,0"
+                                            Click="ViewerTextClosePanel_Click"
+                                            ToolTip="{x:Static services:Strings.ViewerClose}">
+                                        <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+                                                Fill="{DynamicResource ForegroundText}"
+                                                Stretch="Uniform"
+                                                Width="{DynamicResource PathBarGlyphSize}"
+                                                Height="{DynamicResource PathBarGlyphSize}"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                            <ScrollViewer x:Name="ViewerPdfScroller"
+                                    Template="{StaticResource MinimalScrollViewerTemplate}"
+                                    Focusable="False"
+                                    CanContentScroll="False"
+                                    HorizontalScrollBarVisibility="Auto"
+                                    VerticalScrollBarVisibility="Auto">
+                                <local:PdfPageColumn x:Name="ViewerPdfColumn"
+                                        PageInViewChanged="ViewerPdfColumn_PageInViewChanged"
+                                        ZoomChanged="ViewerPdfColumn_ZoomChanged"
+                                        KeyboardReleaseRequested="ViewerPdfColumn_KeyboardReleaseRequested"/>
+                            </ScrollViewer>
+                        </DockPanel>
                     </Border>
                     <!-- 잠금 화면의 시계, over whatever the panel is showing (F9).
                          Sized in code from the panel rather than the app's font:
