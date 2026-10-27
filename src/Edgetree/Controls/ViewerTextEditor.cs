@@ -637,9 +637,9 @@ public sealed partial class ViewerTextEditor : TextEditor
     // made it, and the UI thread takes it over in Show. Building the line
     // index of a ten-megabyte file is the one part of this worth keeping off
     // the UI thread.
-    public static LoadedText Load(string path, CancellationToken cancellation)
+    public static LoadedText Load(string path, CancellationToken cancellation, bool rejectBinary = false)
     {
-        var file = TextFileReader.Read(path, cancellation);
+        var file = TextFileReader.Read(path, cancellation, rejectBinary);
         cancellation.ThrowIfCancellationRequested();
 
         var document = new TextDocument(file.Text);

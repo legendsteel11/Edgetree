@@ -1544,6 +1544,15 @@
                     Visibility="Collapsed"
                     Header="{x:Static services:Strings.MenuEditHere}"
                     Click="EditHere_Click"/>
+            <!-- 텍스트로 보기 (2026-10-27): the text view for a file the list
+                 does not hold - a README with no extension, a .java, an .nfo.
+                 Present only where the file could be text (CanAskViewerText);
+                 a file that turns out not to be is refused with a line in the
+                 caption. Visibility is set in ExplorerItemContextMenu_Opened. -->
+            <MenuItem Tag="viewAsText"
+                    Visibility="Collapsed"
+                    Header="{x:Static services:Strings.MenuViewAsText}"
+                    Click="ViewAsTextHere_Click"/>
             <!-- The same way in, for a FOLDER: the panel's own folder play bar
                  (전체 재생, ViewerFolderPlay_Click) reachable from the tree, so
                  music can be set going without first opening the panel and
@@ -4881,12 +4890,45 @@
                             Property="Visibility"
                             Value="Visible"/>
                 </DataTrigger>
+                <!-- THE 보기 MARK SHOWS ON THE ROW UNDER THE POINTER AND THE
+                     SELECTED ROW ONLY (2026-10-27, the author's pick). Every
+                     text kind carries one since .ini, .log, .xml and the rest
+                     joined TXT/MD, and a folder of logs had a mark down every
+                     row. The press it offers is made on a row the pointer is
+                     already over, so nothing is lost by hiding it elsewhere.
+                     HIDDEN, NOT COLLAPSED, at rest: the column keeps its width,
+                     so a long name is trimmed once and does not re-trim as the
+                     pointer crosses it. The two status marks below - the
+                     unsaved dot, the text on screen - show whatever the
+                     pointer does; they say something, not offer something. -->
                 <DataTrigger Binding="{Binding IsViewableText}"
                         Value="True">
                     <Setter TargetName="ViewTextIconBorder"
                             Property="Visibility"
-                            Value="Visible"/>
+                            Value="Hidden"/>
                 </DataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsViewableText}"
+                                Value="True"/>
+                        <Condition Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="Visibility"
+                            Value="Visible"/>
+                </MultiDataTrigger>
+                <MultiDataTrigger>
+                    <MultiDataTrigger.Conditions>
+                        <Condition Binding="{Binding IsViewableText}"
+                                Value="True"/>
+                        <Condition Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=TreeViewItem}}"
+                                Value="True"/>
+                    </MultiDataTrigger.Conditions>
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="Visibility"
+                            Value="Visible"/>
+                </MultiDataTrigger>
                 <!-- UNSAVED EDITS turn the 보기 mark into a dot (2026-10-11),
                      the mark an editor's tab wears for the same thing - in the
                      same place and still the same press, which now opens the
@@ -4898,6 +4940,9 @@
                      be confirmed on screen. -->
                 <DataTrigger Binding="{Binding IsTextUnsaved}"
                         Value="True">
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="Visibility"
+                            Value="Visible"/>
                     <Setter TargetName="ViewTextIcon"
                             Property="Data"
                             Value="M160,-480 a320,320 0 1 1 640,0 a320,320 0 1 1 -640,0 Z M0,-960 H960 M0,0 H960"/>
@@ -4915,6 +4960,9 @@
                      the dot's shape still carries. -->
                 <DataTrigger Binding="{Binding IsTextShown}"
                         Value="True">
+                    <Setter TargetName="ViewTextIconBorder"
+                            Property="Visibility"
+                            Value="Visible"/>
                     <Setter TargetName="ViewTextIcon"
                             Property="Fill"
                             Value="{DynamicResource MutedFileNameForeground}"/>

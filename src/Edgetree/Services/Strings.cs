@@ -199,6 +199,8 @@ public static class Strings
     public static string MenuPlayHere = "재생";
     // A TXT/MD row's second way in: the panel opened straight into editing.
     public static string MenuEditHere = "편집";
+    // The text view for a file its list does not hold (2026-10-27).
+    public static string MenuViewAsText = "텍스트로 보기";
     // A picture or TXT/MD row, and the text view's menu (2026-10-13).
     public static string MenuPrint = "인쇄";
     public static string MenuOpenWith = "연결 프로그램";
@@ -693,6 +695,8 @@ public static class Strings
     // says the row menu's word because it is the same request.
     public static string ViewerTextOpen = "보기";
     public static string ViewerTextReadFailed = "파일을 읽을 수 없습니다";
+    // 텍스트로 보기 on a file that turned out to be binary (2026-10-27).
+    public static string ViewerTextNotText = "텍스트 파일이 아닙니다";
     // The panel's PDF view (2026-10-27): the caption's first slot, the page
     // in view against the count, or why the file did not open.
     public static string ViewerPdfPage = "{0} / {1}쪽";
@@ -1230,6 +1234,7 @@ public static class Strings
         MenuViewHere = "View";
         MenuPlayHere = "Play";
         MenuEditHere = "Edit";
+        MenuViewAsText = "View as text";
         MenuPrint = "Print";
         MenuOpenWith = "Open with";
         MenuCut = "Cut";
@@ -1399,6 +1404,7 @@ public static class Strings
         ViewerMediaStalled = "Waiting for the file…";
         ViewerTextOpen = "View";
         ViewerTextReadFailed = "The file could not be read";
+        ViewerTextNotText = "This is not a text file";
         ViewerPdfPage = "Page {0} / {1}";
         ViewerPdfPassword = "This PDF is password-protected";
         ViewerPdfWrongPassword = "Incorrect password";

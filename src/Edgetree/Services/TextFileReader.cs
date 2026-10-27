@@ -49,15 +49,45 @@ public static class TextFileReader
     public const int LongLineLimit = 20_000;
     public const int SplitLength = 10_000;
 
-    // The kinds the text view opens - one list, read by the panel and by the
-    // tree row's 보기 mark alike, so the mark can never offer a file the panel
-    // would then refuse. .log, .ini, .json and the like are one line each here.
+    // The kinds the text view offers 보기 for. TXT/MD alone until 2026-10-27,
+    // when the four groups below joined on the author's pick: settings and
+    // logs, shortcuts, data, scripts and code. They open as plain text - no
+    // highlighting yet; AvalonEdit's own definitions are coloured for a light
+    // ground and want the pass Markdown had before they suit the dark theme.
+    //
+    // NOT .ts: it is MPEG transport stream video here first (VideoExtensions),
+    // and UpdateViewerPreview asks text before it falls through to the icon -
+    // a film's still would have become a text offer. TypeScript loses its
+    // offer; a file the list does not hold opens from the row menu's
+    // 텍스트로 보기 instead (MainWindow, IsViewerText).
     private static readonly HashSet<string> Extensions = new(StringComparer.OrdinalIgnoreCase)
     {
-        ".txt", ".md", ".markdown"
+        ".txt", ".md", ".markdown",
+        ".ini", ".cfg", ".conf", ".log", ".inf", ".reg", ".properties", ".toml",
+        ".url", ".rdp",
+        ".xml", ".json", ".yaml", ".yml", ".csv", ".tsv",
+        ".bat", ".cmd", ".ps1", ".sh", ".py", ".js", ".cs", ".html", ".css", ".sql",
     };
 
+    // Read by the panel and by the tree row's 보기 mark alike, so the mark can
+    // never offer a file the panel would then refuse.
     public static bool IsTextFile(string path) => Extensions.Contains(Path.GetExtension(path));
+
+    // Markdown by name, and ONLY these two. The rule used to be "not .txt",
+    // which was true while the list held three entries and would have given
+    // an .ini file Markdown headings, the 서식 menu and sticky headings.
+    public static bool IsMarkdownFile(string path)
+        => Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase)
+           || Path.GetExtension(path).Equals(".markdown", StringComparison.OrdinalIgnoreCase);
+
+    // Raised by Read(rejectBinary: true) - a file the list does not hold,
+    // asked for as text, that turns out not to be.
+    public sealed class NotTextException : IOException
+    {
+        public NotTextException() : base("The file is not text.")
+        {
+        }
+    }
 
     // FileLength and LastWriteUtc are read from the open handle before a byte
     // of the text is, and are what a save compares the file against to tell
@@ -81,7 +111,11 @@ public static class TextFileReader
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    public static Result Read(string path, CancellationToken cancellation)
+    // rejectBinary is for files outside the list, opened by asking: a NUL in
+    // the first 8KB of a file with no Unicode BOM is a binary file, and its
+    // "text" would be noise. Listed kinds are never refused this way - a log
+    // cut off by a crash can carry a run of NULs and is still a log.
+    public static Result Read(string path, CancellationToken cancellation, bool rejectBinary = false)
     {
         // ReadWrite | Delete sharing so a log another program is still writing
         // to - the common case for exactly the files that hit the head limit -
@@ -118,6 +152,10 @@ public static class TextFileReader
 
         var span = new ReadOnlySpan<byte>(bytes, 0, read);
         var (encoding, bomLength) = Detect(span, truncated);
+        if (rejectBinary && bomLength == 0 && span[..Math.Min(span.Length, 8192)].IndexOf((byte)0) >= 0)
+        {
+            throw new NotTextException();
+        }
         string text = encoding.GetString(TrimIncompleteTail(span[bomLength..], encoding, truncated));
         cancellation.ThrowIfCancellationRequested();
 

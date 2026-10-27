@@ -244,6 +244,23 @@ public static class FileTypeFilter
         return false;
     }
 
+    // "Could this be plain text under a name the text view does not list?" -
+    // for the row menu's 텍스트로 보기 (2026-10-27). Code, the text line of
+    // the documents, and anything no category claims (a README or a LICENSE
+    // with no extension lands there). Not pictures, media, archives, office
+    // binaries or programs: the read would only refuse them, and a row that
+    // can only refuse is noise on every such menu.
+    public static bool MayBeText(string fileName)
+    {
+        string extension = Path.GetExtension(fileName).TrimStart('.');
+        return CodeExtensions.Contains(extension)
+               || TextDocumentExtensions.Contains(extension)
+               || Matches(Other, extension);
+    }
+
+    private static readonly HashSet<string> TextDocumentExtensions = Build(
+        "txt text md markdown mdown mkd rst adoc asciidoc tex latex bib rtf log nfo readme");
+
     private static bool Matches(string category, string extension) => category switch
     {
         Code => CodeExtensions.Contains(extension),

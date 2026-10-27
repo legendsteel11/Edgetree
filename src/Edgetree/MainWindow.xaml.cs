@@ -17664,7 +17664,8 @@ public partial class MainWindow : Window
                 }
             }
 
-            // 편집 on a TXT/MD row, present wherever its 보기 is, and greyed by
+            // 편집 on a text row (TXT/MD, and the kinds that joined them 2026-10-27),
+            // present wherever its 보기 is, and greyed by
             // 보기's rule: already done. That is its text on screen and being
             // edited - or on screen and not editable at all. It was first left
             // live while editing, to move the keyboard into the text, and read
@@ -17681,7 +17682,16 @@ public partial class MainWindow : Window
                                          || !ShownViewerTextHasNoEditToStart(editRow.FullPath);
             }
 
-            // 인쇄 on one picture or TXT/MD row (2026-10-13), absent otherwise:
+            if (FindTaggedMenuElement<MenuItem>(menu, "viewAsText") is { } viewAsTextItem)
+            {
+                viewAsTextItem.Visibility = _multiSelection.Count <= 1 &&
+                    ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false, IsPlaceholder: false, IsShowMore: false } askRow &&
+                    CanAskViewerText(askRow.FullPath)
+                        ? Visibility.Visible
+                        : Visibility.Collapsed;
+            }
+
+            // 인쇄 on one picture or text row (2026-10-13), absent otherwise:
             // a picture only where Windows has a print for its type (the
             // answer is remembered per extension - ShellFileService.CanPrint).
             if (FindTaggedMenuElement<MenuItem>(menu, "print") is { } printItem)
@@ -37241,10 +37251,50 @@ public partial class MainWindow : Window
     // and the theme refresh - are NoInlining, so the JIT never meets an
     // AvalonEdit type while compiling the code every session runs. A session
     // that opens no text file never loads the assembly.
-    private static bool IsViewerText(string path) => TextFileReader.IsTextFile(path);
+    //
+    // THREE WAYS A FILE IS TEXT HERE (2026-10-27). Its extension is on the
+    // list (TextFileReader); or it was asked for with the row menu's
+    // 텍스트로 보기 this session and read as text; or it holds unsaved edits -
+    // without that last one, an asked-for file restored after a crash would
+    // keep its edits where no selection could reach them.
+    private static bool IsViewerText(string path)
+        => TextFileReader.IsTextFile(path)
+           || ViewerTextAsked.Contains(path)
+           || FileSystemService.UnsavedTextPaths.Contains(path);
 
-    private static bool IsViewerMarkdown(string path)
-        => !string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase);
+    private static bool IsViewerMarkdown(string path) => TextFileReader.IsMarkdownFile(path);
+
+    // Files opened through 텍스트로 보기 that turned out to be text, for the
+    // rest of the session: coming back to one shows the 보기 offer like a
+    // listed kind. Kept nowhere else - a new session starts from the list.
+    private static readonly HashSet<string> ViewerTextAsked = new(StringComparer.OrdinalIgnoreCase);
+
+    // The file 텍스트로 보기 just found not to be text, until the panel leaves
+    // it - the caption's first slot says so (ApplyViewerFileInfo).
+    private string? _viewerTextRefusedPath;
+
+    // 텍스트로 보기 - the row menu's way in for a file the list does not hold
+    // (a README with no extension, a .java, an .nfo). Present only where it
+    // could be text: not a preview kind, not already text, and in the code,
+    // text-document or unknown categories (FileTypeFilter.MayBeText), so an
+    // .exe or a .zip does not carry a row that can only refuse.
+    private static bool CanAskViewerText(string path)
+        => !HasViewerPreview(path) && !IsViewerText(path) && FileTypeFilter.MayBeText(path);
+
+    private void ViewAsTextHere_Click(object sender, RoutedEventArgs e)
+    {
+        if (ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } item ||
+            !CanAskViewerText(item.FullPath))
+        {
+            return;
+        }
+
+        // Marked before the panel is asked, so every text gate on the way in
+        // - the offer, ViewHere's open - takes the file for text; taken back
+        // in OpenViewerText if the read finds it is not.
+        ViewerTextAsked.Add(item.FullPath);
+        ViewHere(item);
+    }
 
     private FrameworkElement? _viewerTextEditor;
     private CancellationTokenSource? _viewerTextLoad;
@@ -37312,6 +37362,7 @@ public partial class MainWindow : Window
     {
         _viewerTextLoad?.Cancel();
         _viewerTextLoad = null;
+        _viewerTextRefusedPath = null;
         ViewerTextOpenButton.Visibility = Visibility.Collapsed;
 
         if (_viewerTextPath is null)
@@ -37396,13 +37447,34 @@ public partial class MainWindow : Window
         ViewerTextOpenButton.IsEnabled = false;
         long started = System.Diagnostics.Stopwatch.GetTimestamp();
 
+        // A file off the list is checked for being text at all; a listed one
+        // is never refused (TextFileReader.Read).
+        bool rejectBinary = !TextFileReader.IsTextFile(path);
         ViewerTextEditor.LoadedText loaded;
         try
         {
-            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token), load.Token);
+            loaded = await Task.Run(() => ViewerTextEditor.Load(path, load.Token, rejectBinary), load.Token);
         }
         catch (OperationCanceledException)
         {
+            return;
+        }
+        catch (TextFileReader.NotTextException)
+        {
+            // Asked for as text and not text: no longer taken for text, the
+            // offer goes, and the caption says why nothing opened.
+            // The reason rides the caption's first slot (ApplyViewerFileInfo)
+            // rather than replacing the line, so the icon's own stat, which
+            // may land after this, cannot write over it.
+            ViewerTextAsked.Remove(path);
+            if (ReferenceEquals(_viewerTextLoad, load))
+            {
+                _viewerTextLoad = null;
+                ViewerTextOpenButton.Visibility = Visibility.Collapsed;
+                _viewerTextRefusedPath = path;
+                SetViewerFileInfo(path, 0, 0);
+            }
+            ViewerLoadLog($"text REFUSED (binary) {path}");
             return;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
@@ -39021,6 +39093,13 @@ public partial class MainWindow : Window
         {
             _viewerPdfInfoBody = body;
             head = ViewerPdfCaptionHead();
+        }
+
+        // 텍스트로 보기 refused the file (not text) - see OpenViewerText.
+        if (head.Length == 0 &&
+            string.Equals(_viewerTextRefusedPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            head = Strings.ViewerTextNotText;
         }
 
         // NoAudioNote is re-applied rather than assumed away. Now that the
