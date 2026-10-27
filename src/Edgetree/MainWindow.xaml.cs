@@ -1883,14 +1883,17 @@ public partial class MainWindow : Window
     // 2026-10-27): left out, every branch below would have taken keys typed
     // into it - Space, M, and Backspace closing the panel mid-password.
     //
-    // Nor is the PDF's page column, which holds the keyboard after a press for
-    // its text selection (2026-10-27): Ctrl+C, Ctrl+A and the scroll keys are
-    // the document's then, as they are the text view's.
+    // The PDF's page column is NOT one, though it holds the keyboard after a
+    // press for its text selection. It was counted here at first (2026-10-27),
+    // and every branch below then stood aside for a column that answers a
+    // dozen keys: after one click on a page, Backspace, F8, F9, Ctrl+1~5 and
+    // bare +/- all went dead, and full screen took three Esc presses to leave.
+    // The column's own keys are taken by name instead, at the top of
+    // MainWindow_PreviewKeyDown (PdfPageColumn.HandleKey).
     private bool KeyboardInTextField =>
         Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
             or System.Windows.Controls.PasswordBox
-        || ViewerTextHost.IsKeyboardFocusWithin
-        || ViewerPdfHost.IsKeyboardFocusWithin;
+        || ViewerTextHost.IsKeyboardFocusWithin;
 
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
@@ -1922,6 +1925,20 @@ public partial class MainWindow : Window
             !KeyboardInTextField)
         {
             SetViewerFullscreen(false);
+            e.Handled = true;
+            return;
+        }
+
+        // The PDF's pages, while they hold the keyboard, take the keys they
+        // answer - copy, select all, Esc, the scroll keys - and only those.
+        // Before every branch below, because several of them want the same
+        // keys for something else (Space for the next file, ←→ for the strip,
+        // Ctrl+A for every thumbnail); after the full screen's Esc, because
+        // that is the mode's one way out and a selection is cleared by a click
+        // as well. Anything the column does not answer goes on down as usual.
+        if (ViewerPdfColumn.IsKeyboardFocused &&
+            ViewerPdfColumn.HandleKey(e.Key))
+        {
             e.Handled = true;
             return;
         }

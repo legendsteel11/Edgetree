@@ -8,7 +8,6 @@ using SidebarExplorer.App.Services;
 using Brush = System.Windows.Media.Brush;
 using Color = System.Windows.Media.Color;
 using Cursors = System.Windows.Input.Cursors;
-using KeyEventArgs = System.Windows.Input.KeyEventArgs;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
 using SolidColorBrush = System.Windows.Media.SolidColorBrush;
@@ -467,21 +466,28 @@ public partial class PdfPageColumn
 
     // ----- the keys ----------------------------------------------------------
 
-    // Only while the column has the keyboard; the window's own key handler
-    // steps aside then (MainWindow.KeyboardInTextField). The scroll keys are
-    // the ScrollViewer's own steps, since the ScrollViewer itself is never
-    // focused (it would take the keyboard from the tree on every click).
-    protected override void OnKeyDown(KeyEventArgs e)
+    // Called by the window's own key handler while the column has the
+    // keyboard, ahead of its other branches (MainWindow_PreviewKeyDown); true
+    // for a key answered here, false to let the window have it. Not an
+    // OnKeyDown override: the window sees every key first, and several of its
+    // branches want these same keys, so the column has to be asked before
+    // them rather than after. The scroll keys are the ScrollViewer's own
+    // steps, since the ScrollViewer itself is never focused (it would take
+    // the keyboard from the tree on every click).
+    public bool HandleKey(Key key)
     {
-        base.OnKeyDown(e);
         if (_scroller is null)
         {
-            return;
+            return false;
         }
 
+        // Bare keys only, apart from the chords named: Ctrl+←/→ is the tree's
+        // history, and with the window now asking here first a bare-key case
+        // that ignored modifiers would swallow it.
+        bool none = Keyboard.Modifiers == ModifierKeys.None;
         bool ctrl = Keyboard.Modifiers == ModifierKeys.Control;
         bool shift = Keyboard.Modifiers == ModifierKeys.Shift;
-        switch (e.Key)
+        switch (key)
         {
             case Key.C when ctrl:
                 CopySelection();
@@ -489,7 +495,7 @@ public partial class PdfPageColumn
             case Key.A when ctrl:
                 SelectAll();
                 break;
-            case Key.Escape:
+            case Key.Escape when none:
                 if (HasSelection)
                 {
                     ClearSelection();
@@ -499,36 +505,36 @@ public partial class PdfPageColumn
                     KeyboardReleaseRequested?.Invoke(this, EventArgs.Empty);
                 }
                 break;
-            case Key.Down:
+            case Key.Down when none:
                 _scroller.LineDown();
                 break;
-            case Key.Up:
+            case Key.Up when none:
                 _scroller.LineUp();
                 break;
-            case Key.Right:
+            case Key.Right when none:
                 _scroller.LineRight();
                 break;
-            case Key.Left:
+            case Key.Left when none:
                 _scroller.LineLeft();
                 break;
-            case Key.PageDown:
-            case Key.Space when !shift:
+            case Key.PageDown when none:
+            case Key.Space when none:
                 _scroller.PageDown();
                 break;
-            case Key.PageUp:
+            case Key.PageUp when none:
             case Key.Space when shift:
                 _scroller.PageUp();
                 break;
-            case Key.Home when ctrl || Keyboard.Modifiers == ModifierKeys.None:
+            case Key.Home when ctrl || none:
                 _scroller.ScrollToTop();
                 break;
-            case Key.End when ctrl || Keyboard.Modifiers == ModifierKeys.None:
+            case Key.End when ctrl || none:
                 _scroller.ScrollToBottom();
                 break;
             default:
-                return;
+                return false;
         }
-        e.Handled = true;
+        return true;
     }
 }
 
