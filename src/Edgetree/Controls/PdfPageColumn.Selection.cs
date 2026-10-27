@@ -109,7 +109,7 @@ public partial class PdfPageColumn
             {
                 slot.Layer.InvalidateVisual();
             }
-        });
+        }, owner: this);
     }
 
     // A page leaving the column's reach has its queued read dropped

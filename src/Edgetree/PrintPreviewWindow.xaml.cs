@@ -12,8 +12,10 @@ namespace SidebarExplorer.App;
 // The text view's print preview (2026-10-13, on request): the pages as they
 // will print, then 인쇄… for Windows' print dialog, or 닫기. Every way into
 // printing a text comes here first - the view's menu row and bar button,
-// Ctrl+P, the tree row's 인쇄. Pictures do not: Windows' photo printing
-// window has a preview of its own.
+// Ctrl+P, the tree row's 인쇄. A PDF comes here too since 2026-10-27, with
+// its pages in a column of their own (PdfPrintPreviewColumn) instead of the
+// DocumentViewer. Pictures do not: Windows' photo printing window has a
+// preview of its own.
 //
 // Holds no AvalonEdit type: the pages arrive as a FixedDocument
 // (ViewerTextEditor.BuildPreview), and printing is a callback, so opening
@@ -26,18 +28,14 @@ public partial class PrintPreviewWindow : Window
     private readonly Func<bool> _print;
     private readonly AppSettings _settings;
     private readonly Action _onSave;
+    // A PDF's pages (the second constructor), or null for a text's.
+    private readonly PdfPrintPreviewColumn? _pdf;
 
     public PrintPreviewWindow(
         FixedDocument document, string fileName, Func<bool> print,
         AppSettings settings, Action onSave)
+        : this(fileName, print, settings, onSave, document.DocumentPaginator.PageSize)
     {
-        InitializeComponent();
-        ModalTitleFlash.Attach(this, HeaderGrid);
-        _print = print;
-        _settings = settings;
-        _onSave = onSave;
-
-        TitleText.Text = $"{Strings.PrintPreviewTitle} · {fileName}";
         // "page / pages" for the page in view, following the scroll - the
         // footer's own form (2026-10-13, on request: a bare "3쪽" read as a
         // count with nothing to say which page was showing).
@@ -50,33 +48,6 @@ public partial class PrintPreviewWindow : Window
         // the same day). Every page here is the same size, so the page under
         // the middle line falls out of the scroll position and the extent.
         Viewer.AddHandler(ScrollViewer.ScrollChangedEvent, new ScrollChangedEventHandler((_, _) => ShowPageInView()));
-
-        // THE SIZE IT WAS LEFT AT, or else ONE PAGE FITTED TO THE WIDTH
-        // (2026-10-13, on report). It first opened at 88% of the work area,
-        // which on a tall screen stood far taller than a page - the page sat
-        // in the middle of empty space - and came back that tall however it
-        // had been resized. Now the first size is a page's own height at the
-        // default width, plus the bars (estimated from the resources, so it
-        // can be a few pixels out either way), and a resize is kept as
-        // HelpWindow keeps its own.
-        var work = SystemParameters.WorkArea;
-        if (_settings.PrintPreviewWidth > 0 && _settings.PrintPreviewHeight > 0)
-        {
-            Width = Math.Min(_settings.PrintPreviewWidth, work.Width);
-            Height = Math.Min(_settings.PrintPreviewHeight, work.Height);
-        }
-        else
-        {
-            Width = Math.Min(640, Math.Round(work.Width * 0.5));
-            var page = document.DocumentPaginator.PageSize;
-            double aspect = page.Width > 0 ? page.Height / page.Width : Math.Sqrt(2);
-            double titleBar = TryFindResource("DialogTitleBarHeight") is double title ? title : 30;
-            // The bottom bar: its padding, a button, and the line above it.
-            double bottomBar = 20 + Math.Round((TryFindResource("DialogFontSize") is double font ? font : 13) * 1.4) + 12 + 2 + 1;
-            Height = Math.Min(
-                Math.Round(titleBar + bottomBar + 2 + (Width - 2) * aspect),
-                Math.Round(work.Height * 0.88));
-        }
 
         Viewer.Document = document;
         // Fitted once the viewer has a width to fit to, and again whenever the
@@ -97,6 +68,59 @@ public partial class PrintPreviewWindow : Window
         };
     }
 
+    // A PDF (2026-10-27): its pages on the default printer's paper, drawn as
+    // they come into view. The keys the viewer gave a text - the scroll keys
+    // - are this window's here (Window_PreviewKeyDown).
+    public PrintPreviewWindow(
+        PdfPrintPreviewColumn pages, System.Windows.Size paper, string fileName, Func<bool> print,
+        AppSettings settings, Action onSave)
+        : this(fileName, print, settings, onSave, paper)
+    {
+        _pdf = pages;
+        Viewer.Visibility = Visibility.Collapsed;
+        PdfScroller.Visibility = Visibility.Visible;
+        PdfScroller.Content = pages;
+        pages.PageInViewChanged += (_, _) => ShowPageInView();
+        Loaded += (_, _) => ShowPageInView();
+    }
+
+    private PrintPreviewWindow(string fileName, Func<bool> print, AppSettings settings, Action onSave,
+        System.Windows.Size pageSize)
+    {
+        InitializeComponent();
+        ModalTitleFlash.Attach(this, HeaderGrid);
+        _print = print;
+        _settings = settings;
+        _onSave = onSave;
+
+        TitleText.Text = $"{Strings.PrintPreviewTitle} · {fileName}";
+
+        // THE SIZE IT WAS LEFT AT, or else ONE PAGE FITTED TO THE WIDTH
+        // (2026-10-13, on report). It first opened at 88% of the work area,
+        // which on a tall screen stood far taller than a page - the page sat
+        // in the middle of empty space - and came back that tall however it
+        // had been resized. Now the first size is a page's own height at the
+        // default width, plus the bars (estimated from the resources, so it
+        // can be a few pixels out either way), and a resize is kept as
+        // HelpWindow keeps its own.
+        var work = SystemParameters.WorkArea;
+        if (_settings.PrintPreviewWidth > 0 && _settings.PrintPreviewHeight > 0)
+        {
+            Width = Math.Min(_settings.PrintPreviewWidth, work.Width);
+            Height = Math.Min(_settings.PrintPreviewHeight, work.Height);
+        }
+        else
+        {
+            Width = Math.Min(640, Math.Round(work.Width * 0.5));
+            double aspect = pageSize.Width > 0 ? pageSize.Height / pageSize.Width : Math.Sqrt(2);
+            double titleBar = TryFindResource("DialogTitleBarHeight") is double title ? title : 30;
+            // The bottom bar: its padding, a button, and the line above it.
+            double bottomBar = 20 + Math.Round((TryFindResource("DialogFontSize") is double font ? font : 13) * 1.4) + 12 + 2 + 1;
+            Height = Math.Min(
+                Math.Round(titleBar + bottomBar + 2 + (Width - 2) * aspect),
+                Math.Round(work.Height * 0.88));
+        }
+    }
     // On the way out, as HelpWindow does: RestoreBounds when maximized, so the
     // size kept is the one it comes back at.
     protected override void OnClosed(EventArgs e)
@@ -116,6 +140,13 @@ public partial class PrintPreviewWindow : Window
 
     private void ShowPageInView()
     {
+        if (_pdf is { } pdf)
+        {
+            PageCountText.Text = string.Format(
+                System.Globalization.CultureInfo.CurrentCulture, Strings.PrintPreviewPages,
+                pdf.PageInView + 1, Math.Max(pdf.PageCount, 1));
+            return;
+        }
         int pages = Viewer.PageCount;
         int page = 1;
         if (pages > 1 && Viewer.ExtentHeight > 0)
@@ -157,10 +188,49 @@ public partial class PrintPreviewWindow : Window
             Close();
             e.Handled = true;
         }
+        else if (_pdf is not null && ScrollPdf(e.Key))
+        {
+            e.Handled = true;
+        }
         else if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control)
         {
             PrintNow();
             e.Handled = true;
+        }
+    }
+
+    // The scroll keys a text's DocumentViewer answers itself, for a PDF's
+    // pages: the ScrollViewer is never focused, so the window steps it.
+    private bool ScrollPdf(Key key)
+    {
+        if (Keyboard.Modifiers is not (ModifierKeys.None or ModifierKeys.Control or ModifierKeys.Shift))
+        {
+            return false;
+        }
+        switch (key)
+        {
+            case Key.Down:
+                PdfScroller.LineDown();
+                return true;
+            case Key.Up:
+                PdfScroller.LineUp();
+                return true;
+            case Key.PageDown:
+            case Key.Space when Keyboard.Modifiers != ModifierKeys.Shift:
+                PdfScroller.PageDown();
+                return true;
+            case Key.PageUp:
+            case Key.Space:
+                PdfScroller.PageUp();
+                return true;
+            case Key.Home:
+                PdfScroller.ScrollToTop();
+                return true;
+            case Key.End:
+                PdfScroller.ScrollToBottom();
+                return true;
+            default:
+                return false;
         }
     }
 }

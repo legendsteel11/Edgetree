@@ -37537,14 +37537,14 @@ public partial class MainWindow : Window
 
     private void ViewerPdfPrint_Click(object sender, RoutedEventArgs e) => PrintShownViewerPdf();
 
-    // The PDF on screen, through Windows' print dialog (PdfPrinter). The panel's own open document is the
-    // one printed - a locked file's password is not asked twice - and is
-    // held open until the job is spooled, whatever the panel does meanwhile.
+    // The PDF on screen: the print preview, then from its 인쇄… Windows' print
+    // dialog (PdfPrinter). The panel's own open document is the one shown and
+    // printed - a locked file's password is not asked twice.
     private void PrintShownViewerPdf()
     {
         if (_viewerPdf is { } document && _viewerPdfPath is { } path)
         {
-            PdfPrinter.Print(this, document, Path.GetFileName(path), ReportPrintFailure);
+            ShowPdfPrintPreview(document, Path.GetFileName(path));
         }
     }
 
@@ -37569,8 +37569,40 @@ public partial class MainWindow : Window
                 : Strings.ViewerPdfOpenFailed);
             return;
         }
-        PdfPrinter.Print(this, document, Path.GetFileName(path), ReportPrintFailure);
+        ShowPdfPrintPreview(document, Path.GetFileName(path));
         PdfRenderService.Close(document);
+    }
+
+    // Modal, beside the header like the text's preview (ShowTextPrintPreview).
+    // The document is held for as long as the preview is up: a reopen after
+    // a change on disk would otherwise close it under the pages on show. The
+    // dialog opens over the preview, owned by it - owned by this window, it
+    // would enable this window again on closing while the preview is still
+    // modal.
+    private void ShowPdfPrintPreview(PdfRenderService.Document document, string fileName)
+    {
+        if (!PdfRenderService.Hold(document))
+        {
+            return;
+        }
+        try
+        {
+            var (paper, printable) = PdfPrinter.DefaultPaper();
+            PrintPreviewWindow? window = null;
+            window = new PrintPreviewWindow(
+                new PdfPrintPreviewColumn(document, paper, printable), paper, fileName,
+                () => PdfPrinter.Print(window!, document, fileName, ReportPrintFailure),
+                _settings, () => _settingsService.Save(_settings))
+            {
+                Owner = this,
+            };
+            PositionBesideHeader(window);
+            window.ShowDialog();
+        }
+        finally
+        {
+            PdfRenderService.Release(document);
+        }
     }
 
     private void ApplyViewerPdfZoomBar()

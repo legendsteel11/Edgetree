@@ -11,10 +11,15 @@ namespace SidebarExplorer.App.Services;
 
 // Printing a PDF (2026-10-27, on report: the PDF view had no 인쇄).
 //
-// WINDOWS' PRINT DIALOG, THEN PDFIUM ONTO THE PRINTER. No preview window of
-// our own, unlike a text: a text's pages exist only once it is laid out on
-// paper, so its preview is the one place they can be seen, while a PDF's
-// pages are already on screen in the panel. The dialog brings the page range.
+// THE APP'S PREVIEW, THEN WINDOWS' PRINT DIALOG, THEN PDFIUM ONTO THE
+// PRINTER. The preview (PrintPreviewWindow with a PdfPrintPreviewColumn) was
+// added the same day on request: at first a PDF went straight to the dialog,
+// its pages being on screen in the panel already, but the panel cannot show
+// how they land on paper - shrunk to the margins, turned. Windows 11's own
+// print window has a preview pane, but only for an app printing through
+// WinRT's PrintManager, which would cost the WinRT projection and turn the
+// pages into pictures; this preview is the app's instead, on the default
+// printer's paper (DefaultPaper). The dialog brings the page range.
 //
 // NO 현재 페이지. It was offered at first (the page in view), and on a Windows
 // 11 that answers PrintDlgEx with its modern print dialog it broke single
@@ -43,13 +48,14 @@ namespace SidebarExplorer.App.Services;
 // own printer notification says the job went.
 internal static class PdfPrinter
 {
-    // onFailure gets a message on the UI thread.
-    public static void Print(Window owner, PdfRenderService.Document document, string fileName,
+    // onFailure gets a message on the UI thread. True once the job is handed
+    // to the print thread; false when the dialog was cancelled or failed.
+    public static bool Print(Window owner, PdfRenderService.Document document, string fileName,
         Action<string> onFailure)
     {
         if (!PdfRenderService.Hold(document))
         {
-            return;
+            return false;
         }
 
         bool handedOver = false;
@@ -79,7 +85,7 @@ internal static class PdfPrinter
             };
             if (dialog.ShowDialog(new OwnerWindow(owner)) != FormsDialogResult.OK)
             {
-                return;
+                return false;
             }
 
             int[] pages = settings.PrintRange switch
@@ -92,7 +98,7 @@ internal static class PdfPrinter
             };
             if (pages.Length == 0)
             {
-                return;
+                return false;
             }
 
             int next = 0;
@@ -141,11 +147,13 @@ internal static class PdfPrinter
             };
             thread.Start();
             handedOver = true;
+            return true;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidPrinterException or InvalidOperationException)
         {
             // No printer installed, or the dialog could not be shown.
             onFailure(ex.Message);
+            return false;
         }
         finally
         {
@@ -155,6 +163,31 @@ internal static class PdfPrinter
                 PdfRenderService.Release(document);
             }
         }
+    }
+
+    // The default printer's paper and printable area, in hundredths of an
+    // inch, for the preview: the page the print meets before the dialog
+    // changes anything - another printer or paper chosen there can differ,
+    // as with the text preview. A4 with no margins where there is no
+    // printer to ask.
+    public static (System.Windows.Size Paper, Rect Printable) DefaultPaper()
+    {
+        try
+        {
+            var page = new PrinterSettings().DefaultPageSettings;
+            var bounds = page.Bounds;
+            var area = page.PrintableArea;
+            if (bounds.Width > 0 && bounds.Height > 0 && area.Width > 0 && area.Height > 0)
+            {
+                return (new System.Windows.Size(bounds.Width, bounds.Height),
+                    new Rect(area.X, area.Y, area.Width, area.Height));
+            }
+        }
+        catch (Exception ex) when (ex is InvalidPrinterException or Win32Exception)
+        {
+            System.Diagnostics.Debug.WriteLine($"default paper: {ex.Message}");
+        }
+        return (new System.Windows.Size(827, 1169), new Rect(0, 0, 827, 1169));
     }
 
     // The WinForms dialog's owner, so it opens over the app and is modal to it.

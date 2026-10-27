@@ -165,6 +165,21 @@
                 </DocumentViewer.Template>
             </DocumentViewer>
 
+            <!-- A PDF's pages instead (2026-10-27): a column of its own
+                 (PdfPrintPreviewColumn), set as the content in code. Not a
+                 FixedDocument in the viewer above - that would draw every
+                 page up front, where a PDF's are drawn as they come into
+                 view. -->
+            <ScrollViewer x:Name="PdfScroller"
+                    Grid.Row="1"
+                    Visibility="Collapsed"
+                    Template="{StaticResource MinimalScrollViewerTemplate}"
+                    Background="{DynamicResource DialogHeaderBackground}"
+                    CanContentScroll="False"
+                    HorizontalScrollBarVisibility="Auto"
+                    VerticalScrollBarVisibility="Auto"
+                    Focusable="False"/>
+
             <Border Grid.Row="2"
                     BorderThickness="0,1,0,0"
                     BorderBrush="{DynamicResource SeparatorBrush}"

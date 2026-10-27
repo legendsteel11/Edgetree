@@ -395,7 +395,7 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
                 // And whatever it still had queued: the page is not coming
                 // back into view on this scroll, and a fast one would leave
                 // the PDFium thread drawing every page it passed.
-                PdfRenderService.CancelPage(document, index);
+                PdfRenderService.CancelPage(document, index, this);
                 ForgetUnreadPageText(index);
             }
         }
@@ -468,7 +468,7 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
             }
             slot.Image.Source = bitmap;
             slot.ShownWidth = width;
-        });
+        }, owner: this);
     }
 
     // The first page whose bottom is below y (binary search; the rects are in

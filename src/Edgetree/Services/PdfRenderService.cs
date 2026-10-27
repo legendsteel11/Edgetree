@@ -156,6 +156,10 @@ public static class PdfRenderService
         public required Document Document { get; init; }
         public required int Index { get; init; }
         public required bool IsText { get; init; }
+        // Who asked - the panel's column or the print preview, which share
+        // one document. CancelPage drops only its asker's requests, so the
+        // preview leaving a page never drops the panel's ask for it.
+        public object? Owner { get; init; }
         // A text read a copy is waiting on. Its page scrolling out of reach
         // does not drop it - the copy needs that page whether or not it is
         // on screen - only the document closing does.
@@ -489,12 +493,9 @@ public static class PdfRenderService
             return false;
         }
 
-        bool turn = (size.Width > size.Height) != (areaWidth > areaHeight);
-        double across = turn ? size.Height : size.Width;
-        double down = turn ? size.Width : size.Height;
-        double scale = Math.Min(areaWidth / across, areaHeight / down);
-        int width = Math.Max(1, (int)Math.Round(across * scale));
-        int height = Math.Max(1, (int)Math.Round(down * scale));
+        var fit = FitOnPaper(size, new Size(areaWidth, areaHeight));
+        int width = Math.Max(1, (int)Math.Round(fit.Place.Width));
+        int height = Math.Max(1, (int)Math.Round(fit.Place.Height));
 
         IntPtr page = Native.FPDF_LoadPage(document.Handle, index);
         if (page == IntPtr.Zero)
@@ -503,8 +504,8 @@ public static class PdfRenderService
         }
         try
         {
-            Native.FPDF_RenderPage(hdc, page, (areaWidth - width) / 2, (areaHeight - height) / 2,
-                width, height, turn ? 1 : 0, Native.RenderAnnotations | Native.RenderPrinting);
+            Native.FPDF_RenderPage(hdc, page, (int)Math.Round(fit.Place.X), (int)Math.Round(fit.Place.Y),
+                width, height, fit.Turn ? 1 : 0, Native.RenderAnnotations | Native.RenderPrinting);
             return true;
         }
         finally
@@ -513,15 +514,37 @@ public static class PdfRenderService
         }
     }
 
+    // Where a page lands in a printable area, in the area's own units: fitted
+    // and centred, turned a quarter clockwise (PDFium's rotate 1) when the
+    // page and the area disagree about which way is long. ONE rule for the
+    // print and its preview (PdfPrintPreviewColumn), so the preview cannot
+    // show a page where the printer will not put it.
+    public static (Rect Place, bool Turn) FitOnPaper(Size page, Size area)
+    {
+        if (page.Width <= 0 || page.Height <= 0 || area.Width <= 0 || area.Height <= 0)
+        {
+            return (new Rect(0, 0, Math.Max(0, area.Width), Math.Max(0, area.Height)), false);
+        }
+        bool turn = (page.Width > page.Height) != (area.Width > area.Height);
+        double across = turn ? page.Height : page.Width;
+        double down = turn ? page.Width : page.Height;
+        double scale = Math.Min(area.Width / across, area.Height / down);
+        double width = across * scale, height = down * scale;
+        return (new Rect((area.Width - width) / 2, (area.Height - height) / 2, width, height), turn);
+    }
+
     // The answer goes back even when the render failed: the column keeps a
     // page's request open until it hears, and an unanswered one would never
     // be asked again.
-    public static void RequestPage(Document document, int index, int pixelWidth, Action<BitmapSource?> done)
+    // printing: drawn as it will print (FPDF_PRINTING) - the print preview.
+    public static void RequestPage(Document document, int index, int pixelWidth, Action<BitmapSource?> done,
+        object? owner = null, bool printing = false)
         => Enqueue(new PageRequest
         {
             Document = document,
             Index = index,
             IsText = false,
+            Owner = owner,
             Work = () =>
             {
                 BitmapSource? bitmap = null;
@@ -529,7 +552,7 @@ public static class PdfRenderService
                 {
                     if (!document.Closed)
                     {
-                        bitmap = RenderPage(document, index, pixelWidth);
+                        bitmap = RenderPage(document, index, pixelWidth, printing);
                     }
                 }
                 finally
@@ -543,8 +566,8 @@ public static class PdfRenderService
     // with the renders, newest first; the caller asks right BEFORE the page's
     // render, so the picture still comes first. Dropped unrun, it answers
     // null like a failed read.
-    public static void RequestPageText(Document document, int index, Action<PageText?> done)
-        => Enqueue(TextRequest(document, index, forCopy: false, done));
+    public static void RequestPageText(Document document, int index, Action<PageText?> done, object? owner = null)
+        => Enqueue(TextRequest(document, index, forCopy: false, done, owner));
 
     // For a copy: answered whatever happens, and not dropped when its page
     // scrolls out of reach (PageRequest.ForCopy).
@@ -555,13 +578,15 @@ public static class PdfRenderService
         return done.Task;
     }
 
-    private static PageRequest TextRequest(Document document, int index, bool forCopy, Action<PageText?> done)
+    private static PageRequest TextRequest(Document document, int index, bool forCopy, Action<PageText?> done,
+        object? owner = null)
         => new()
         {
             Document = document,
             Index = index,
             IsText = true,
             ForCopy = forCopy,
+            Owner = owner,
             Work = () =>
             {
                 PageText? text = null;
@@ -597,10 +622,11 @@ public static class PdfRenderService
     public static void CancelPages(Document document, bool textToo = false)
         => Drop(request => ReferenceEquals(request.Document, document) && (textToo || !request.IsText));
 
-    // Drops one page's queued render and text read - the page has left the
-    // column's reach. A copy's text read stays.
-    public static void CancelPage(Document document, int index)
+    // Drops one page's queued render and text read that owner asked for -
+    // the page has left its view's reach. A copy's text read stays.
+    public static void CancelPage(Document document, int index, object owner)
         => Drop(request => ReferenceEquals(request.Document, document) &&
+                           ReferenceEquals(request.Owner, owner) &&
                            request.Index == index && !request.ForCopy);
 
     private static void Drop(Func<PageRequest, bool> match)
@@ -843,7 +869,7 @@ public static class PdfRenderService
     private const long MaxPagePixels = 16L * 1024 * 1024;
 
     // Render thread only.
-    private static BitmapSource? RenderPage(Document document, int index, int pixelWidth)
+    private static BitmapSource? RenderPage(Document document, int index, int pixelWidth, bool printing = false)
     {
         if (index < 0 || index >= document.PageCount || pixelWidth <= 0)
         {
@@ -882,7 +908,8 @@ public static class PdfRenderService
             // filled form fields that carry one). No LCD text: the bitmap is
             // scaled on screen while a zoom settles, and subpixel colour
             // fringes would show through that.
-            Native.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0, Native.RenderAnnotations);
+            Native.FPDF_RenderPageBitmap(bitmap, page, 0, 0, width, height, 0,
+                Native.RenderAnnotations | (printing ? Native.RenderPrinting : 0));
 
             IntPtr pixels = Native.FPDFBitmap_GetBuffer(bitmap);
             int stride = Native.FPDFBitmap_GetStride(bitmap);
