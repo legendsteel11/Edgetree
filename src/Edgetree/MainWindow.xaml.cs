@@ -16703,8 +16703,29 @@ public partial class MainWindow : Window
         // inside that wait (a key now also calls the wait off - see
         // MainWindow_PreviewKeyDown). The tree still reads its pre-click focus
         // here: no branch above that moves the focus falls through to here.
+        //
+        // NOT WHILE 자동 펼치기 OPENS THE PANEL INSTEAD (2026-10-28, on report).
+        // 자동 펼치기 runs off a selection change, and a click on the row
+        // already selected changes none - so a PDF, picture or film left
+        // selected when the panel was shut by hand could not be brought back
+        // by clicking it: the click went to the rename wait and opened the
+        // name box. The search list has answered the same case since
+        // 2026-10-06 (SearchResultsList's click handler); this is that rule
+        // for the tree, asked with the timer's own test so a file the panel
+        // cannot show still renames. "Already selected" is the row's own
+        // IsSelected here, not selectedBeforePress: a selection a jump placed
+        // changes no selection on a click either. The next slow click, with
+        // the panel open, renames as before.
         bool treeHadKeyboard = ExplorerTree.IsKeyboardFocusWithin;
-        if (!clickedOnExpander && e.ClickCount == 1 && selectedBeforePress && treeHadKeyboard &&
+        bool reopensPanel = !clickedOnExpander && e.ClickCount == 1 && treeViewItem.IsSelected &&
+            !_viewerOpen && _settings.ViewerFollowsSelection &&
+            treeViewItem.DataContext is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false, IsEditing: false } shown &&
+            HasViewerPreview(shown.FullPath);
+        if (reopensPanel)
+        {
+            ScheduleViewerAutoToggle();
+        }
+        else if (!clickedOnExpander && e.ClickCount == 1 && selectedBeforePress && treeHadKeyboard &&
             Environment.TickCount64 - _lastActivatedTicks > ActivationClickGraceMs &&
             treeViewItem.DataContext is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false, IsEditing: false } file)
         {
