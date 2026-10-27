@@ -40,8 +40,9 @@ namespace SidebarExplorer.App;
 // again and need it again, every layout pass. Reserving the lane costs 13px on
 // a document short enough to have no bar, and breaks the loop for good.
 //
-// A left drag selects text (PdfPageColumn.Selection.cs). It panned the view
-// until 2026-10-27; the wheel, the scrollbars and Shift+wheel move it now.
+// A left drag that starts on text selects it, one that starts on the ground
+// pans the view (PdfPageColumn.Selection.cs); the wheel, the scrollbars and
+// Shift+wheel move it as well.
 public partial class PdfPageColumn : System.Windows.Controls.Panel
 {
     // Space around and between pages, in DIPs - the picture's own 10px margin.
@@ -86,7 +87,7 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
         SnapsToDevicePixels = true;
         // The paper shows only where a page is; between pages the panel's own
         // ground shows through, but the whole column still takes the pointer
-        // so a drag that starts in a gap selects like one that starts on paper.
+        // so a drag that starts in a gap pans like one on the paper's margin.
         Background = Brushes.Transparent;
         // Focusable for the keyboard a press hands it (Ctrl+C, Ctrl+A, the
         // scroll keys); no dotted focus frame round a whole document.

@@ -15,10 +15,19 @@ using SolidColorBrush = System.Windows.Media.SolidColorBrush;
 namespace SidebarExplorer.App;
 
 // Text selection and copy on the PDF's pages (2026-10-27, the author's three
-// calls: a left drag ALWAYS selects - the drag-to-pan it replaces is gone, the
-// wheel, the scrollbars and Shift+wheel move the view; a press in the PDF
-// takes the keyboard, as the text view does, so Ctrl+C and Ctrl+A act on the
-// document; the right-click menu is 복사 and 전체 선택).
+// calls: a left drag selects; a press in the PDF takes the keyboard, as the
+// text view does, so Ctrl+C and Ctrl+A act on the document; the right-click
+// menu is 복사 and 전체 선택).
+//
+// A DRAG THAT STARTS ON TEXT SELECTS; ONE THAT STARTS ANYWHERE ELSE PANS -
+// between paragraphs, in a margin, between pages. The first version had every
+// left drag select and no drag pan at all, and a zoomed page could then only
+// be moved by the wheel and the scrollbars, where a picture moves by a drag
+// (changed the same day, after use). The cursor says which a press will do:
+// the I-beam over text, the hand over ground that can be panned. "On text" is
+// generous (CaretAt): the gap between two words and a little past a line's
+// ends count, so a selection started a hair off the first letter still
+// selects. A click on the ground, without a drag, clears the selection.
 //
 // EACH PAGE'S CHARACTERS ARE READ ONCE, on the PDFium thread, when the page is
 // first realised (PdfRenderService.RequestPageText, asked just before the
@@ -133,10 +142,15 @@ public partial class PdfPageColumn
     // The caret nearest a point in the column: the line nearest in height,
     // then the character nearest along it, the caret on whichever side of
     // that character the point falls. Null while the page's text is not
-    // read yet. onChar says the point is ON a character - the I-beam's test.
-    private (int Page, int Caret)? CaretAt(Point point, out bool onChar)
+    // read yet. onText says a press there starts a selection rather than a
+    // pan, and the cursor is the I-beam: inside a line's height and within
+    // one character height of a character along it. That takes in the gap
+    // between two words (a space PDFium inferred has no box) and a little
+    // past the line's ends; between paragraphs, in the margins and between
+    // pages is ground.
+    private (int Page, int Caret)? CaretAt(Point point, out bool onText)
     {
-        onChar = false;
+        onText = false;
         if (_document is not { } document || _pageRects.Length == 0)
         {
             return null;
@@ -178,12 +192,20 @@ public partial class PdfPageColumn
         {
             return (page, 0);
         }
-        onChar = bestDy == 0 && bestDx == 0;
         var hit = text.Box(best);
+        onText = bestDy == 0 && bestDx <= hit.Height;
         return (page, px < (hit.Left + hit.Right) / 2 ? best : best + 1);
     }
 
     // ----- the gesture ---------------------------------------------------------
+
+    // A pan in progress: where it was pressed, in the scroller's own
+    // coordinates (which stay put while the pages move under them), and the
+    // offsets it started from. Moved is false until the pointer has gone past
+    // the system's drag distance, so a click on the ground stays a click.
+    private Point? _panStart;
+    private double _panStartX, _panStartY;
+    private bool _panMoved;
 
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -195,14 +217,14 @@ public partial class PdfPageColumn
         e.Handled = true;
 
         var point = e.GetPosition(this);
-        var caret = CaretAt(point, out bool onChar);
+        var caret = CaretAt(point, out bool onText);
 
-        // Double-click: the word on a character, back to the fit anywhere
-        // else - the fit's gesture before text could be selected, kept where
-        // it collides with nothing.
+        // Double-click: the word on text, back to the fit on the ground - the
+        // fit's gesture before text could be selected, kept where it collides
+        // with nothing.
         if (e.ClickCount == 2)
         {
-            if (onChar && caret is { } at)
+            if (onText && caret is { } at)
             {
                 SelectWordAt(at);
             }
@@ -216,13 +238,20 @@ public partial class PdfPageColumn
         // Shift+click moves only the far end: the anchor stays where the last
         // press put it - a plain click, a drag, 전체 선택 - and the selection
         // runs from there to here, as in every text box. The drag that may
-        // follow keeps extending from the same anchor.
+        // follow keeps extending from the same anchor. On the ground too:
+        // Shift says selection, wherever it lands.
         if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _anchor is not null && caret is { } end)
         {
             _focus = end;
             _selecting = true;
             CaptureMouse();
             InvalidateSelection();
+            return;
+        }
+
+        if (!onText)
+        {
+            BeginPan(e);
             return;
         }
 
@@ -236,19 +265,53 @@ public partial class PdfPageColumn
         InvalidateSelection();
     }
 
+    private void BeginPan(MouseButtonEventArgs e)
+    {
+        if (_scroller is null)
+        {
+            return;
+        }
+        _panStart = e.GetPosition(_scroller);
+        _panStartX = _scroller.HorizontalOffset;
+        _panStartY = _scroller.VerticalOffset;
+        _panMoved = false;
+        CaptureMouse();
+    }
+
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e);
-        var point = e.GetPosition(this);
         if (_selecting && IsMouseCaptured)
         {
-            ExtendSelectionTo(point);
+            ExtendSelectionTo(e.GetPosition(this));
             return;
         }
 
-        CaretAt(point, out bool onChar);
-        Cursor = onChar ? Cursors.IBeam : null;
+        if (_panStart is { } start && _scroller is not null && IsMouseCaptured)
+        {
+            var now = e.GetPosition(_scroller);
+            if (!_panMoved &&
+                Math.Abs(now.X - start.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(now.Y - start.Y) < SystemParameters.MinimumVerticalDragDistance)
+            {
+                return;
+            }
+            _panMoved = true;
+            _scroller.ScrollToHorizontalOffset(_panStartX - (now.X - start.X));
+            _scroller.ScrollToVerticalOffset(_panStartY - (now.Y - start.Y));
+            return;
+        }
+
+        CaretAt(e.GetPosition(this), out bool onText);
+        Cursor = onText ? Cursors.IBeam : CanPan ? Cursors.Hand : null;
     }
+
+    // The hand only where a drag would move something: a document that fits
+    // the panel both ways has nothing to pan, and the hand would promise it.
+    private bool CanPan =>
+        _scroller is not null &&
+        (_scroller.ExtentHeight > _scroller.ViewportHeight + 0.5 ||
+         _scroller.ExtentWidth > _scroller.ViewportWidth + 0.5);
 
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
@@ -259,14 +322,26 @@ public partial class PdfPageColumn
             ReleaseMouseCapture();
             e.Handled = true;
         }
+        else if (_panStart is not null)
+        {
+            // A click on the ground, not a drag: the selection goes, as a
+            // click beside the text does in any text view. A pan keeps it.
+            if (!_panMoved)
+            {
+                ClearSelection();
+            }
+            _panStart = null;
+            ReleaseMouseCapture();
+            e.Handled = true;
+        }
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
         _selecting = false;
+        _panStart = null;
     }
-
     private void ExtendSelectionTo(Point point)
     {
         // A page whose text is not back yet leaves the end where it was; the
