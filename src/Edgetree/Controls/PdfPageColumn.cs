@@ -497,11 +497,18 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
         {
             return;
         }
-        // The middle of the view, or the last page once the column's end is
-        // on screen - otherwise a short final page could never be "in view".
-        int page = _scroller.VerticalOffset + _scroller.ViewportHeight >= _scroller.ExtentHeight - 1
-            ? _pageRects.Length - 1
-            : FirstPageBelow(_scroller.VerticalOffset + _scroller.ViewportHeight / 2);
+        // The middle of the view, or the last page once the view has been
+        // scrolled to the column's end - otherwise a short final page could
+        // never be "in view". The first page while the view is at the top:
+        // a document short enough to fit the panel whole has its end on
+        // screen from the start, and the end rule alone read it as on its
+        // last page before anything was scrolled ("2 / 2쪽" over page 1,
+        // 2026-10-27).
+        int page = _scroller.VerticalOffset <= 0.5
+            ? 0
+            : _scroller.VerticalOffset + _scroller.ViewportHeight >= _scroller.ExtentHeight - 1
+                ? _pageRects.Length - 1
+                : FirstPageBelow(_scroller.VerticalOffset + _scroller.ViewportHeight / 2);
         if (page != PageInView)
         {
             PageInView = page;
