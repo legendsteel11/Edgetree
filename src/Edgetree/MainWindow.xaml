@@ -9567,15 +9567,32 @@
                          document the wheel has to scroll. Opaque so it covers
                          whatever picture the last file left behind the moment
                          it is shown, before the first page has arrived.
-                         The scroller is NOT focusable: the keyboard stays in
-                         the tree, so ↓ keeps walking the folder past a PDF the
-                         way it walks past a photograph. -->
+                         The scroller is NOT focusable, so arriving on a PDF
+                         leaves the keyboard in the tree and ↓ keeps walking
+                         the folder past it. A PRESS on the pages takes it
+                         (2026-10-27, for text selection - the column is the
+                         focusable one); a click on the tree or Esc with
+                         nothing selected gives it back. -->
                     <Border x:Name="ViewerPdfHost"
                             Grid.Row="0"
                             Visibility="Collapsed"
                             Background="{DynamicResource ViewerBackground}"
                             PreviewMouseWheel="ViewerPdfHost_PreviewMouseWheel"
                             MouseDown="ViewerPdfHost_MouseDown">
+                        <Border.ContextMenu>
+                            <ContextMenu Style="{StaticResource DarkContextMenuStyle}"
+                                    Opened="ViewerPdfContextMenu_Opened"
+                                    Closed="AnyMenu_Closed"
+                                    PreviewMouseRightButtonUp="ContextMenu_PreviewMouseRightButtonUp">
+                                <MenuItem x:Name="ViewerPdfCopyItem"
+                                        Header="{x:Static services:Strings.MenuCopy}"
+                                        InputGestureText="Ctrl+C"
+                                        Click="ViewerPdfCopy_Click"/>
+                                <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
+                                        InputGestureText="Ctrl+A"
+                                        Click="ViewerPdfSelectAll_Click"/>
+                            </ContextMenu>
+                        </Border.ContextMenu>
                         <ScrollViewer x:Name="ViewerPdfScroller"
                                 Template="{StaticResource MinimalScrollViewerTemplate}"
                                 Focusable="False"
@@ -9584,7 +9601,8 @@
                                 VerticalScrollBarVisibility="Auto">
                             <local:PdfPageColumn x:Name="ViewerPdfColumn"
                                     PageInViewChanged="ViewerPdfColumn_PageInViewChanged"
-                                    ZoomChanged="ViewerPdfColumn_ZoomChanged"/>
+                                    ZoomChanged="ViewerPdfColumn_ZoomChanged"
+                                    KeyboardReleaseRequested="ViewerPdfColumn_KeyboardReleaseRequested"/>
                         </ScrollViewer>
                     </Border>
                     <!-- 잠금 화면의 시계, over whatever the panel is showing (F9).

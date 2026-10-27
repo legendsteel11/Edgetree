@@ -1882,10 +1882,15 @@ public partial class MainWindow : Window
     // A PasswordBox is not a TextBoxBase either (the PDF password box,
     // 2026-10-27): left out, every branch below would have taken keys typed
     // into it - Space, M, and Backspace closing the panel mid-password.
+    //
+    // Nor is the PDF's page column, which holds the keyboard after a press for
+    // its text selection (2026-10-27): Ctrl+C, Ctrl+A and the scroll keys are
+    // the document's then, as they are the text view's.
     private bool KeyboardInTextField =>
         Keyboard.FocusedElement is System.Windows.Controls.Primitives.TextBoxBase
             or System.Windows.Controls.PasswordBox
-        || ViewerTextHost.IsKeyboardFocusWithin;
+        || ViewerTextHost.IsKeyboardFocusWithin
+        || ViewerPdfHost.IsKeyboardFocusWithin;
 
     private void MainWindow_PreviewKeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
@@ -37093,6 +37098,13 @@ public partial class MainWindow : Window
         _viewerPdfFailure = null;
         _viewerPdfInfoBody = null;
         HideViewerPdfPasswordRow();
+        // The pages had the keyboard after a press for selection; collapsed,
+        // they keep nothing, so it goes back to the list as the text view's
+        // does.
+        if (ViewerPdfHost.IsKeyboardFocusWithin)
+        {
+            HandViewerKeyboardBackToList();
+        }
         ViewerPdfHost.Visibility = Visibility.Collapsed;
         ViewerPdfColumn.SetDocument(null);
         if (_viewerPdf is { } document)
@@ -37183,6 +37195,22 @@ public partial class MainWindow : Window
     private void ViewerPdfColumn_PageInViewChanged(object? sender, EventArgs e) => UpdateViewerPdfCaption();
 
     private void ViewerPdfColumn_ZoomChanged(object? sender, EventArgs e) => UpdateViewerZoomBar();
+
+    // Esc in the pages with nothing selected.
+    private void ViewerPdfColumn_KeyboardReleaseRequested(object? sender, EventArgs e) => HandViewerKeyboardBackToList();
+
+    // The pages' right-click menu (2026-10-27): 복사 and 전체 선택, nothing
+    // else - the file's own actions are the tree row's menu. 복사 is greyed
+    // with nothing selected rather than absent, so the menu keeps one shape.
+    private void ViewerPdfContextMenu_Opened(object sender, RoutedEventArgs e)
+    {
+        ViewerPdfCopyItem.IsEnabled = ViewerPdfColumn.HasSelection;
+        AnyMenu_Opened(sender, e);
+    }
+
+    private void ViewerPdfCopy_Click(object sender, RoutedEventArgs e) => ViewerPdfColumn.CopySelection();
+
+    private void ViewerPdfSelectAll_Click(object sender, RoutedEventArgs e) => ViewerPdfColumn.SelectAll();
 
     private void ApplyViewerPdfZoomBar()
     {

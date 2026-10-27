@@ -39,7 +39,10 @@ namespace SidebarExplorer.App;
 // a document just about one screen tall would then stop needing the bar, widen
 // again and need it again, every layout pass. Reserving the lane costs 13px on
 // a document short enough to have no bar, and breaks the loop for good.
-public class PdfPageColumn : System.Windows.Controls.Panel
+//
+// A left drag selects text (PdfPageColumn.Selection.cs). It panned the view
+// until 2026-10-27; the wheel, the scrollbars and Shift+wheel move it now.
+public partial class PdfPageColumn : System.Windows.Controls.Panel
 {
     // Space around and between pages, in DIPs - the picture's own 10px margin.
     private const double Pad = 10;
@@ -53,6 +56,7 @@ public class PdfPageColumn : System.Windows.Controls.Panel
     {
         public required Border Paper { get; init; }
         public required Image Image { get; init; }
+        public required PdfSelectionLayer Layer { get; init; }
         // The pixel width now on screen, and the one asked for and not back
         // yet; 0 for none. A request for the width already asked is not sent
         // twice, and a bitmap of a width nobody wants any more is thrown away.
@@ -76,19 +80,18 @@ public class PdfPageColumn : System.Windows.Controls.Panel
     // DIPs per PDF point, from the last layout.
     private double _scale;
 
-    // Pan by dragging the page.
-    private Point? _panStart;
-    private double _panStartX, _panStartY;
-
     public PdfPageColumn()
     {
         UseLayoutRounding = true;
         SnapsToDevicePixels = true;
         // The paper shows only where a page is; between pages the panel's own
         // ground shows through, but the whole column still takes the pointer
-        // so a drag that starts in a gap pans like one that starts on paper.
+        // so a drag that starts in a gap selects like one that starts on paper.
         Background = Brushes.Transparent;
-        Cursor = Cursors.Hand;
+        // Focusable for the keyboard a press hands it (Ctrl+C, Ctrl+A, the
+        // scroll keys); no dotted focus frame round a whole document.
+        Focusable = true;
+        FocusVisualStyle = null;
 
         _zoomSettle = new DispatcherTimer(DispatcherPriority.Background)
         {
@@ -102,6 +105,15 @@ public class PdfPageColumn : System.Windows.Controls.Panel
             {
                 // Every queued width is the old zoom's.
                 PdfRenderService.CancelPages(document);
+            }
+            // And none of them is coming back now, so no page may go on
+            // waiting for one. A resize that ended at the width it started
+            // from asks for the very width it cancelled, which the check in
+            // RefreshSlots would otherwise take as already asked - a page left
+            // blank until it was scrolled away.
+            foreach (var slot in _slots.Values)
+            {
+                slot.RequestedWidth = 0;
             }
             RefreshSlots();
         };
@@ -142,6 +154,7 @@ public class PdfPageColumn : System.Windows.Controls.Panel
             Children.Remove(slot.Paper);
         }
         _slots.Clear();
+        ResetTextState();
 
         _document = document;
         _zoom = 1.0;
@@ -291,7 +304,11 @@ public class PdfPageColumn : System.Windows.Controls.Panel
         BeginSettle();
     }
 
-    private void Scroller_ScrollChanged(object sender, ScrollChangedEventArgs e) => RefreshSlots();
+    private void Scroller_ScrollChanged(object sender, ScrollChangedEventArgs e)
+    {
+        RefreshSlots();
+        FollowDragAfterScroll();
+    }
 
     // ----- which pages exist -------------------------------------------------
 
@@ -339,17 +356,25 @@ public class PdfPageColumn : System.Windows.Controls.Panel
                     Stretch = Stretch.Fill,
                 };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.HighQuality);
+                var layer = new PdfSelectionLayer(this, index, document.PageSizes[index].Width);
+                var stack = new Grid();
+                stack.Children.Add(image);
+                stack.Children.Add(layer);
                 slot = new PageSlot
                 {
                     Image = image,
+                    Layer = layer,
                     Paper = new Border
                     {
                         Background = Brushes.White,
-                        Child = image,
+                        Child = stack,
                     },
                 };
                 _slots[index] = slot;
                 Children.Add(slot.Paper);
+                // Before the render request: renders are taken newest first,
+                // so the page's picture still comes back ahead of its text.
+                AskPageText(document, index);
             }
 
             // A page already showing a bitmap keeps it while a zoom moves; one
@@ -490,58 +515,5 @@ public class PdfPageColumn : System.Windows.Controls.Panel
         _zoomSettling = true;
         _zoomSettle.Stop();
         _zoomSettle.Start();
-    }
-
-    // ----- pan ---------------------------------------------------------------
-
-    protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
-    {
-        base.OnMouseLeftButtonDown(e);
-        if (_scroller is null)
-        {
-            return;
-        }
-        // Double-click is back to the fit - the picture's double-click is its
-        // fit/1:1 toggle, and the fit is the state a document rests in.
-        if (e.ClickCount == 2)
-        {
-            ResetZoom();
-            e.Handled = true;
-            return;
-        }
-        _panStart = e.GetPosition(_scroller);
-        _panStartX = _scroller.HorizontalOffset;
-        _panStartY = _scroller.VerticalOffset;
-        CaptureMouse();
-        e.Handled = true;
-    }
-
-    protected override void OnMouseMove(MouseEventArgs e)
-    {
-        base.OnMouseMove(e);
-        if (_panStart is not { } start || _scroller is null || !IsMouseCaptured)
-        {
-            return;
-        }
-        var now = e.GetPosition(_scroller);
-        _scroller.ScrollToHorizontalOffset(_panStartX - (now.X - start.X));
-        _scroller.ScrollToVerticalOffset(_panStartY - (now.Y - start.Y));
-    }
-
-    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
-    {
-        base.OnMouseLeftButtonUp(e);
-        if (_panStart is not null)
-        {
-            _panStart = null;
-            ReleaseMouseCapture();
-            e.Handled = true;
-        }
-    }
-
-    protected override void OnLostMouseCapture(MouseEventArgs e)
-    {
-        base.OnLostMouseCapture(e);
-        _panStart = null;
     }
 }

@@ -76,6 +76,52 @@ public static class PdfRenderService
 
     public readonly record struct OpenResult(Document? Document, OpenError Error);
 
+    // One page's text as PDFium reads it, in reading order, with each
+    // character's box in the page's DISPLAY space (2026-10-27): points from the
+    // top-left of the page as drawn, /Rotate and the crop already applied, so
+    // the column scales them like the page itself. A character with no box -
+    // the spaces and line breaks PDFium inserts between words and lines -
+    // carries NaN, takes part in copying and is never drawn or hit.
+    public sealed class PageText
+    {
+        internal PageText(int[] codePoints, float[] boxes)
+        {
+            CodePoints = codePoints;
+            Boxes = boxes;
+        }
+
+        public int Count => CodePoints.Length;
+
+        // Unicode scalar values; 0 for one PDFium could not map.
+        public int[] CodePoints { get; }
+
+        // Left, top, right, bottom per character, four floats each.
+        public float[] Boxes { get; }
+
+        public bool HasBox(int index) => !float.IsNaN(Boxes[index * 4]);
+
+        public Rect Box(int index) => new(
+            Boxes[index * 4], Boxes[index * 4 + 1],
+            Boxes[index * 4 + 2] - Boxes[index * 4],
+            Boxes[index * 4 + 3] - Boxes[index * 4 + 1]);
+
+        // [start, end) as a string; a character PDFium could not map is left
+        // out rather than written as U+0000.
+        public string Slice(int start, int end)
+        {
+            var builder = new System.Text.StringBuilder(Math.Max(0, end - start));
+            for (int i = Math.Max(0, start); i < Math.Min(end, Count); i++)
+            {
+                int codePoint = CodePoints[i];
+                if (codePoint > 0 && codePoint <= 0x10FFFF && codePoint is < 0xD800 or > 0xDFFF)
+                {
+                    builder.Append(char.ConvertFromUtf32(codePoint));
+                }
+            }
+            return builder.ToString();
+        }
+    }
+
     // ----- the thread --------------------------------------------------------
 
     private static readonly object Gate = new();
@@ -92,12 +138,14 @@ public static class PdfRenderService
     private static readonly LinkedList<Action> Thumbnails = new();
     private static Thread? _thread;
 
+    // One page's work for the panel - a render, or its text for selection
+    // (2026-10-27) - run on the PDFium thread; Work posts its own answer.
+    // IsText tells the two apart for CancelPages, which drops renders only.
     private sealed class PageRequest
     {
         public required Document Document { get; init; }
-        public required int Index { get; init; }
-        public required int PixelWidth { get; init; }
-        public required Action<BitmapSource?> Done { get; init; }
+        public required bool IsText { get; init; }
+        public required Action Work { get; init; }
     }
 
     private static void Post(Action work)
@@ -165,21 +213,7 @@ public static class PdfRenderService
                 }
                 else if (page is not null)
                 {
-                    // The answer goes back even when the render failed: the
-                    // column keeps a page's request open until it hears, and
-                    // an unanswered one would never be asked again.
-                    BitmapSource? bitmap = null;
-                    try
-                    {
-                        if (!page.Document.Closed)
-                        {
-                            bitmap = RenderPage(page.Document, page.Index, page.PixelWidth);
-                        }
-                    }
-                    finally
-                    {
-                        Application.Current?.Dispatcher.BeginInvoke(() => page.Done(bitmap));
-                    }
+                    page.Work();
                 }
             }
             catch (Exception ex)
@@ -294,20 +328,66 @@ public static class PdfRenderService
     // wait for pages nobody is looking at any more.
     public static void Close(Document document)
     {
-        CancelPages(document);
+        CancelPages(document, textToo: true);
         Post(() => CloseNow(document));
     }
 
+    // The answer goes back even when the render failed: the column keeps a
+    // page's request open until it hears, and an unanswered one would never
+    // be asked again.
     public static void RequestPage(Document document, int index, int pixelWidth, Action<BitmapSource?> done)
+        => Enqueue(document, isText: false, () =>
+        {
+            BitmapSource? bitmap = null;
+            try
+            {
+                if (!document.Closed)
+                {
+                    bitmap = RenderPage(document, index, pixelWidth);
+                }
+            }
+            finally
+            {
+                Application.Current?.Dispatcher.BeginInvoke(() => done(bitmap));
+            }
+        });
+
+    // One page's characters and where they sit, for text selection. Queued
+    // with the renders, newest first; the caller asks right BEFORE the page's
+    // render, so the picture still comes first.
+    public static void RequestPageText(Document document, int index, Action<PageText?> done)
+        => Enqueue(document, isText: true, () =>
+        {
+            PageText? text = null;
+            try
+            {
+                if (!document.Closed)
+                {
+                    text = ExtractText(document, index);
+                }
+            }
+            finally
+            {
+                Application.Current?.Dispatcher.BeginInvoke(() => done(text));
+            }
+        });
+
+    public static Task<PageText?> RequestPageTextAsync(Document document, int index)
+    {
+        var done = new TaskCompletionSource<PageText?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        RequestPageText(document, index, text => done.TrySetResult(text));
+        return done.Task;
+    }
+
+    private static void Enqueue(Document document, bool isText, Action work)
     {
         lock (Gate)
         {
             Pages.AddLast(new PageRequest
             {
                 Document = document,
-                Index = index,
-                PixelWidth = pixelWidth,
-                Done = done,
+                IsText = isText,
+                Work = work,
             });
             EnsureThread();
             Monitor.Pulse(Gate);
@@ -316,15 +396,17 @@ public static class PdfRenderService
 
     // Drops queued renders of one document - the panel moving to another file,
     // or a zoom that makes every queued width wrong. A render already running
-    // finishes; its callback is the caller's to ignore.
-    public static void CancelPages(Document document)
+    // finishes; its callback is the caller's to ignore. Text requests stay
+    // unless textToo: a page's text is the same at every zoom, and a dropped
+    // one is never asked again (the column asks once per page).
+    public static void CancelPages(Document document, bool textToo = false)
     {
         lock (Gate)
         {
             for (var node = Pages.First; node is not null;)
             {
                 var next = node.Next;
-                if (ReferenceEquals(node.Value.Document, document))
+                if (ReferenceEquals(node.Value.Document, document) && (textToo || !node.Value.IsText))
                 {
                     Pages.Remove(node);
                 }
@@ -598,6 +680,84 @@ public static class PdfRenderService
         }
     }
 
+    // FPDF_PageToDevice answers in whole device pixels, so the page is mapped
+    // at eight device pixels per point: an eighth of a point is finer than any
+    // selection edge needs, and the boxes come back in points by dividing.
+    private const int TextMapScale = 8;
+
+    // Render thread only.
+    private static PageText? ExtractText(Document document, int index)
+    {
+        if (index < 0 || index >= document.PageCount)
+        {
+            return null;
+        }
+
+        IntPtr page = Native.FPDF_LoadPage(document.Handle, index);
+        if (page == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        IntPtr textPage = IntPtr.Zero;
+        try
+        {
+            textPage = Native.FPDFText_LoadPage(page);
+            if (textPage == IntPtr.Zero)
+            {
+                return null;
+            }
+
+            int count = Math.Max(0, Native.FPDFText_CountChars(textPage));
+            var codePoints = new int[count];
+            var boxes = new float[count * 4];
+            var size = document.PageSizes[index];
+            int sizeX = Math.Max(1, (int)Math.Round(size.Width * TextMapScale));
+            int sizeY = Math.Max(1, (int)Math.Round(size.Height * TextMapScale));
+
+            for (int i = 0; i < count; i++)
+            {
+                codePoints[i] = (int)Native.FPDFText_GetUnicode(textPage, i);
+
+                // The LOOSE box - the line's full ascent to descent - rather
+                // than the glyph's ink: a run of selected letters then reads
+                // as one even band instead of a ragged edge of x-heights.
+                bool hasBox = Native.FPDFText_GetLooseCharBox(textPage, i, out var loose) != 0;
+                double left = loose.Left, top = loose.Top, right = loose.Right, bottom = loose.Bottom;
+                if (!hasBox && Native.FPDFText_GetCharBox(textPage, i, out left, out right, out bottom, out top) != 0)
+                {
+                    hasBox = true;
+                }
+
+                if (!hasBox || right - left <= 0 || top - bottom <= 0)
+                {
+                    boxes[i * 4] = boxes[i * 4 + 1] = boxes[i * 4 + 2] = boxes[i * 4 + 3] = float.NaN;
+                    continue;
+                }
+
+                // Both corners through the page's own device mapping, which
+                // applies /Rotate and the crop box; min/max then gives the box
+                // whichever way round a rotation turned it.
+                Native.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, left, top, out int x1, out int y1);
+                Native.FPDF_PageToDevice(page, 0, 0, sizeX, sizeY, 0, right, bottom, out int x2, out int y2);
+                boxes[i * 4] = Math.Min(x1, x2) / (float)TextMapScale;
+                boxes[i * 4 + 1] = Math.Min(y1, y2) / (float)TextMapScale;
+                boxes[i * 4 + 2] = Math.Max(x1, x2) / (float)TextMapScale;
+                boxes[i * 4 + 3] = Math.Max(y1, y2) / (float)TextMapScale;
+            }
+
+            return new PageText(codePoints, boxes);
+        }
+        finally
+        {
+            if (textPage != IntPtr.Zero)
+            {
+                Native.FPDFText_ClosePage(textPage);
+            }
+            Native.FPDF_ClosePage(page);
+        }
+    }
+
     // ----- the C API ---------------------------------------------------------
 
     // Declarations from fpdfview.h of the build in use (157.0.8100). x64 has
@@ -625,6 +785,40 @@ public static class PdfRenderService
             public float Width;
             public float Height;
         }
+
+        // FS_RECTF: in PDF user space, so Top is the larger y.
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RectF
+        {
+            public float Left;
+            public float Top;
+            public float Right;
+            public float Bottom;
+        }
+
+        // fpdf_text.h
+        [DllImport(Library)]
+        public static extern IntPtr FPDFText_LoadPage(IntPtr page);
+
+        [DllImport(Library)]
+        public static extern void FPDFText_ClosePage(IntPtr textPage);
+
+        [DllImport(Library)]
+        public static extern int FPDFText_CountChars(IntPtr textPage);
+
+        [DllImport(Library)]
+        public static extern uint FPDFText_GetUnicode(IntPtr textPage, int index);
+
+        [DllImport(Library)]
+        public static extern int FPDFText_GetLooseCharBox(IntPtr textPage, int index, out RectF rect);
+
+        [DllImport(Library)]
+        public static extern int FPDFText_GetCharBox(IntPtr textPage, int index,
+            out double left, out double right, out double bottom, out double top);
+
+        [DllImport(Library)]
+        public static extern int FPDF_PageToDevice(IntPtr page, int startX, int startY, int sizeX, int sizeY,
+            int rotate, double pageX, double pageY, out int deviceX, out int deviceY);
 
         [DllImport(Library)]
         public static extern void FPDF_InitLibrary();
