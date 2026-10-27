@@ -344,9 +344,12 @@ public partial class PdfPageColumn
     // [start, end) of one page's characters that the selection covers, or
     // null where it covers none.
     internal (int Start, int End)? SelectedRange(int page, int count)
+        => OrderedSelection() is { } selection ? RangeOnPage(selection, page, count) : null;
+
+    private static (int Start, int End)? RangeOnPage(
+        ((int Page, int Caret) Start, (int Page, int Caret) End) selection, int page, int count)
     {
-        if (OrderedSelection() is not { } selection ||
-            page < selection.Start.Page || page > selection.End.Page)
+        if (page < selection.Start.Page || page > selection.End.Page)
         {
             return null;
         }
@@ -428,7 +431,10 @@ public partial class PdfPageColumn
 
     // Pages whose text is not read yet are read first - on the PDFium thread,
     // so a 300-page 전체 선택 copies without holding the UI. Pages are joined
-    // with a line break, as PDFium's own line ends are.
+    // with a line break, as PDFium's own line ends are. Every page is cut by
+    // the selection as it stood at the press: a new drag or an Esc during
+    // the reads would otherwise cut the later pages by the new one, and the
+    // clipboard would get half of each.
     public async void CopySelection()
     {
         if (_document is not { } document || OrderedSelection() is not { } selection)
@@ -453,7 +459,7 @@ public partial class PdfPageColumn
                 _texts[page] = text;
                 _textAsked.Add(page);
             }
-            if (SelectedRange(page, text.Count) is { } range)
+            if (RangeOnPage(selection, page, text.Count) is { } range)
             {
                 if (builder.Length > 0)
                 {
