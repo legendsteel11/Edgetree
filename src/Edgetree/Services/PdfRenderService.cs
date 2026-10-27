@@ -157,8 +157,9 @@ public static class PdfRenderService
         public required int Index { get; init; }
         public required bool IsText { get; init; }
         // Who asked - the panel's column or the print preview, which share
-        // one document. CancelPage drops only its asker's requests, so the
-        // preview leaving a page never drops the panel's ask for it.
+        // one document. CancelPage and CancelPages drop only their asker's
+        // requests, so the preview leaving a page never drops the panel's ask
+        // for it, nor the panel leaving the document the preview's.
         public object? Owner { get; init; }
         // A text read a copy is waiting on. Its page scrolling out of reach
         // does not drop it - the copy needs that page whether or not it is
@@ -398,33 +399,44 @@ public static class PdfRenderService
         return done.Task;
     }
 
-    // Queued behind whatever is already asked of the document; renders still
+    // Queued behind whatever is already asked of the document; requests still
     // queued for it are dropped first, so closing a 300-page file does not
     // wait for pages nobody is looking at any more.
     //
-    // A document a print holds stays open until the print lets go: the panel
-    // moving to another file, or reopening this one after a change on disk,
-    // must not pull the pages out from under a job half spooled.
+    // A document a print or its preview holds stays open until they let go:
+    // the panel moving to another file, or reopening this one after a change
+    // on disk, must not pull the pages out from under a job half spooled or a
+    // preview on screen. NOTHING IS DROPPED THEN. The preview's pages are
+    // still wanted, and every asker drops its own - the panel when it leaves
+    // the document (PdfPageColumn.SetDocument), the preview when it closes.
+    // Dropping everything here left a preview open over a reload with pages
+    // that stayed blank, never asked for again (2026-10-28 review).
     public static void Close(Document document)
     {
-        CancelPages(document, textToo: true);
         lock (Gate)
         {
+            // Set with no hold too, so a Hold arriving before CloseNow runs
+            // is refused rather than handed a document about to close.
+            document.CloseRequested = true;
             if (document.Holds > 0)
             {
-                document.CloseRequested = true;
                 return;
             }
         }
+        Drop(request => ReferenceEquals(request.Document, document));
         Post(() => CloseNow(document));
     }
 
-    // False for a document already closed or on its way to closing.
+    // False for a document already closed, or on its way to closing with
+    // nothing holding it. One already held cannot close while that hold
+    // stands, so it takes another even once a close is waiting: the preview's
+    // 인쇄… after the panel reopened the file on a change on disk was refused
+    // here, and the button did nothing at all (2026-10-28 review).
     public static bool Hold(Document document)
     {
         lock (Gate)
         {
-            if (document.Closed || document.CloseRequested)
+            if (document.Closed || (document.CloseRequested && document.Holds == 0))
             {
                 return false;
             }
@@ -442,6 +454,8 @@ public static class PdfRenderService
                 return;
             }
         }
+        // What a close while held left queued: a copy's text read, say.
+        Drop(request => ReferenceEquals(request.Document, document));
         Post(() => CloseNow(document));
     }
 
@@ -615,12 +629,17 @@ public static class PdfRenderService
         }
     }
 
-    // Drops queued renders of one document - the panel moving to another file,
-    // or a zoom that makes every queued width wrong. A render already running
-    // finishes; its callback is the caller's to ignore. Text requests stay
-    // unless textToo: a page's text is the same at every zoom.
-    public static void CancelPages(Document document, bool textToo = false)
-        => Drop(request => ReferenceEquals(request.Document, document) && (textToo || !request.IsText));
+    // Drops one asker's queued renders of a document - the panel moving to
+    // another file, or a zoom that makes every queued width wrong. A render
+    // already running finishes; its callback is the caller's to ignore. Text
+    // requests stay unless textToo: a page's text is the same at every zoom.
+    // The asker's own only: the print preview shares the panel's document,
+    // and the panel reopening the file under an open preview dropped the
+    // preview's pages along with its own (2026-10-28 review).
+    public static void CancelPages(Document document, object owner, bool textToo = false)
+        => Drop(request => ReferenceEquals(request.Document, document) &&
+                           ReferenceEquals(request.Owner, owner) &&
+                           (textToo || !request.IsText));
 
     // Drops one page's queued render and text read that owner asked for -
     // the page has left its view's reach. A copy's text read stays.

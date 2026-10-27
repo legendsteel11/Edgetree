@@ -105,7 +105,7 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
             if (_document is { } document)
             {
                 // Every queued width is the old zoom's.
-                PdfRenderService.CancelPages(document);
+                PdfRenderService.CancelPages(document, this);
             }
             // And none of them is coming back now, so no page may go on
             // waiting for one. A resize that ended at the width it started
@@ -167,7 +167,10 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
 
         if (_document is { } old)
         {
-            PdfRenderService.CancelPages(old);
+            // This column's asks only, text reads included: the print
+            // preview may share the old document and still want its pages,
+            // and Close leaves a held document's queue alone.
+            PdfRenderService.CancelPages(old, this, textToo: true);
         }
         foreach (var slot in _slots.Values)
         {
