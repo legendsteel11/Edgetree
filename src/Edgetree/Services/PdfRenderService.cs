@@ -244,41 +244,75 @@ public static class PdfRenderService
 
     // ----- loading the engine ------------------------------------------------
 
-    private static bool _engineTried;
     private static bool _engineReady;
     private static IntPtr _engineModule;
+
+    // A failure that cannot change within a session - the wrong architecture,
+    // a DLL that is not a loadable image - gives up for good. One that can -
+    // a scanner holding the copy just written, a share or profile folder
+    // briefly locked - is tried again after a pause, a few times. The first
+    // version gave up on the first failure of any kind, so one locked file
+    // on the first PDF left every PDF unopenable and every PDF thumbnail an
+    // icon until the app was restarted.
+    private static bool _engineGaveUp;
+    private static int _engineFailures;
+    private static long _engineRetryAt;
+    private const int EngineAttempts = 3;
+    private const int EngineRetryPauseMs = 10_000;
 
     // Render thread only.
     private static bool EnsureEngine()
     {
-        if (_engineTried)
+        if (_engineReady)
         {
-            return _engineReady;
+            return true;
         }
-        _engineTried = true;
+        // The pause keeps a folder of PDF thumbnails, each asking in turn,
+        // from spending every attempt inside the same second.
+        if (_engineGaveUp || Environment.TickCount64 < _engineRetryAt)
+        {
+            return false;
+        }
+
+        // The embedded DLL is the x64 build; an ARM64 process (a Debug run on
+        // an ARM machine - the release assets are x64 and run emulated there)
+        // could not load it, and saying so beats a BadImageFormat.
+        if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
+        {
+            _engineGaveUp = true;
+            return false;
+        }
 
         try
         {
-            // The embedded DLL is the x64 build; an ARM64 process (a Debug run
-            // on an ARM machine - the release assets are x64 and run emulated
-            // there) could not load it, and saying so beats a BadImageFormat.
-            if (RuntimeInformation.ProcessArchitecture != Architecture.X64)
-            {
-                return false;
-            }
-
             string path = ExtractEngine();
-            _engineModule = NativeLibrary.Load(path);
-            NativeLibrary.SetDllImportResolver(typeof(PdfRenderService).Assembly, (name, _, _) =>
-                name == Native.Library ? _engineModule : IntPtr.Zero);
+            if (_engineModule == IntPtr.Zero)
+            {
+                _engineModule = NativeLibrary.Load(path);
+                NativeLibrary.SetDllImportResolver(typeof(PdfRenderService).Assembly, (name, _, _) =>
+                    name == Native.Library ? _engineModule : IntPtr.Zero);
+            }
             Native.FPDF_InitLibrary();
             _engineReady = true;
         }
+        // LoadLibrary refused by a lock arrives as DllNotFoundException too.
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
-                                       or DllNotFoundException or BadImageFormatException
-                                       or InvalidOperationException)
+                                       or DllNotFoundException)
+        {
+            System.Diagnostics.Debug.WriteLine($"PDFium not loaded yet: {ex}");
+            if (++_engineFailures >= EngineAttempts)
+            {
+                _engineGaveUp = true;
+            }
+            else
+            {
+                _engineRetryAt = Environment.TickCount64 + EngineRetryPauseMs;
+            }
+        }
+        catch (Exception ex) when (ex is BadImageFormatException or InvalidOperationException)
         {
             System.Diagnostics.Debug.WriteLine($"PDFium unavailable: {ex}");
+            _engineGaveUp = true;
         }
         return _engineReady;
     }
@@ -312,9 +346,11 @@ public static class PdfRenderService
                     return target;
                 }
             }
-            catch (IOException)
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
-                // Unreadable - fall through and replace it.
+                // Unreadable - fall through and replace it. Access refused is
+                // the same case: if the write below is refused as well, that
+                // is the failure EnsureEngine counts and tries again.
             }
         }
 
