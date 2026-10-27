@@ -474,6 +474,13 @@ public partial class PdfPageColumn : System.Windows.Controls.Panel
         }
 
         ComputeLayout();
+        // No layout yet - the scroller has no width, right after the host is
+        // made visible and before its first pass. Nothing to keep in place,
+        // and _pageRects[-1] below would throw.
+        if (_pageRects.Length == 0)
+        {
+            return;
+        }
         var content = new Point(_scroller.HorizontalOffset + anchor.X, _scroller.VerticalOffset + anchor.Y);
         int page = Math.Min(FirstPageBelow(content.Y), _pageRects.Length - 1);
         var before = _pageRects[page];

@@ -335,7 +335,22 @@ public static class PdfRenderService
     public static Task<OpenResult> OpenAsync(string path, string? password = null)
     {
         var done = new TaskCompletionSource<OpenResult>(TaskCreationOptions.RunContinuationsAsynchronously);
-        Post(() => done.SetResult(Open(path, password)));
+        Post(() =>
+        {
+            try
+            {
+                done.SetResult(Open(path, password));
+            }
+            finally
+            {
+                // A managed fault inside Open still answers, as a file that
+                // would not open; Run logs the fault itself. Unanswered, the
+                // panel's await never returned and the PDF stayed a blank
+                // host with its password button greyed until the selection
+                // moved. RenderFirstPage guards its waiter the same way.
+                done.TrySetResult(new OpenResult(null, OpenError.Unreadable));
+            }
+        });
         return done.Task;
     }
 
@@ -528,21 +543,26 @@ public static class PdfRenderService
             return new OpenResult(null, OpenError.EngineUnavailable);
         }
 
-        FileStream stream;
+        FileStream? stream = null;
+        long length;
         try
         {
             stream = new FileStream(path, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete, bufferSize: 1, FileOptions.RandomAccess);
+            // Inside the try: on a share that drops between the open and this
+            // line, the length is a network read that throws too.
+            length = stream.Length;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
                                        or ArgumentException or NotSupportedException)
         {
+            stream?.Dispose();
             return new OpenResult(null, OpenError.Unreadable);
         }
 
         // FPDF_FILEACCESS carries the length as an unsigned long, which is 32
         // bits on Windows. A PDF past 4GB is not one this panel will open.
-        if (stream.Length is 0 or > uint.MaxValue)
+        if (length is 0 or > uint.MaxValue)
         {
             stream.Dispose();
             return new OpenResult(null, OpenError.Unreadable);
@@ -559,7 +579,7 @@ public static class PdfRenderService
         document.FileAccess = Marshal.AllocHGlobal(Marshal.SizeOf<Native.FileAccess>());
         Marshal.StructureToPtr(new Native.FileAccess
         {
-            FileLength = (uint)stream.Length,
+            FileLength = (uint)length,
             GetBlock = GetBlockPointer,
             Param = GCHandle.ToIntPtr(document.StreamHandle),
         }, document.FileAccess, fDeleteOld: false);
