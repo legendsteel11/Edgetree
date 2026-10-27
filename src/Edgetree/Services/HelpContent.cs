@@ -717,6 +717,11 @@ public static class HelpContent
                 {
                     R("보기 버튼 · 트리 행의 보기 아이콘", "텍스트 표시, 아이콘을 다시 클릭하면 패널 닫기",
                       "View button · View icon on a tree row", "Show the text; click the icon again to close the panel"),
+                    // Which files the view takes (2.8.0 widened it past TXT/MD),
+                    // the way the picture and film groups name theirs; the menu
+                    // row is the door for everything else, so it rides along.
+                    R("표시 형식", "TXT · MD · 설정 · 로그 · JSON · XML · CSV · 스크립트 등, 그 밖의 파일은 우클릭 → 텍스트로 보기",
+                      "Formats it shows", "TXT, MD, settings, logs, JSON, XML, CSV, scripts and more; anything else through right-click → View as text"),
                     R("텍스트 파일에서 Ctrl+W", "패널을 열며 텍스트까지 표시",
                       "Ctrl+W on a text file", "Open the panel and show the text"),
                     R("트리 우클릭 → 새로 만들기", "폴더 · 텍스트 문서 · 마크다운 문서, 문서는 만든 뒤 바로 편집",
@@ -729,6 +734,11 @@ public static class HelpContent
                       "Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z", "Undo · redo"),
                     R("편집 취소 · 다시 불러오기", "저장하지 않은 변경 사항 취소, 편집 중 Ctrl+Z로 복구",
                       "Cancel editing · Reload", "Discard unsaved changes - Ctrl+Z while editing brings them back"),
+                    // The submenu labels say what they do; what they cannot say
+                    // is where the current encoding shows, and the one file kind
+                    // that breaks when saved in the wrong one.
+                    R("우클릭 → 인코딩", "현재 인코딩은 캡션 첫 칸에 표시 (.reg는 UTF-16 LE 또는 ANSI로 저장)",
+                      "Right-click → Encoding", "The current encoding shows first in the caption (save .reg files as UTF-16 LE or ANSI)"),
                     R("저장하지 않은 파일", "트리 행에 점 표시, 다른 파일로 이동하거나 다시 시작해도 유지, 종료 시 저장 여부 확인",
                       "Unsaved file", "A dot on its tree row; kept when you switch files or restart, and Exit asks whether to save"),
                     R("줄 번호 색", "마지막 저장 이후 수정한 줄은 주황, 추가한 줄은 초록",
@@ -757,6 +767,28 @@ public static class HelpContent
                       "Ctrl+P · Right-click → Print", "Print after a preview"),
                     R("인쇄 미리 보기에서 Ctrl+휠", "확대 · 축소",
                       "Ctrl+wheel in the print preview", "Zoom in · out"),
+                }),
+
+                // The PDF view (2.8.0), on the text group's terms: gestures and
+                // what nothing on screen says. Left out on request, as too
+                // small to need a row: Ctrl+C and Ctrl+A (the menu shows them),
+                // Esc handing the keyboard back, the bar's close.
+                new Group(T("PDF", "PDF"), new[]
+                {
+                    R("Ctrl+휠 · + / −", "확대 · 축소",
+                      "Ctrl+wheel · + / −", "Zoom in · out"),
+                    R("글자 위 드래그 · Shift+클릭", "텍스트 선택",
+                      "Drag over text · Shift+click", "Select text"),
+                    R("빈 곳 드래그", "화면 이동",
+                      "Drag on blank space", "Move around"),
+                    R("더블클릭", "글자 위는 단어 선택, 빈 곳은 맞춤",
+                      "Double-click", "A word on text; back to fit elsewhere"),
+                    R("암호로 보호된 PDF", "아이콘 아래에 암호 입력, 암호 기억 체크 시 다음부터 열기 버튼만 표시",
+                      "Password-protected PDF", "Type the password under its icon; tick Remember password and next time Open alone opens it"),
+                    R("Ctrl+P · 인쇄 아이콘", "미리 보기 후 인쇄",
+                      "Ctrl+P · Print icon", "Print after a preview"),
+                    R("다른 프로그램이 파일을 변경하면", "자동으로 다시 열기, 보던 위치 유지",
+                      "When another program changes the file", "Reopens by itself, at the same place"),
                 }),
 
                 new Group(T("썸네일 바", "The thumbnail bar"), new[]
