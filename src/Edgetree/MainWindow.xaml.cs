@@ -34719,13 +34719,36 @@ public partial class MainWindow : Window
             target.Parent!.ShowChildrenUpTo(target);
         }
 
+        // A FOLDER THAT IS SELECTED BUT SHUT (2026-10-29, on report). With
+        // 클릭 시 바로 펼침 off, the first click on a folder only selects it, and
+        // the panel then shows the folder with its files on the strip - rows
+        // the tree has not made, the folder being collapsed. The walk below
+        // finds only rows the tree already has, so its twelve passes ran out in
+        // two milliseconds and every click on a cell did nothing ("select gave
+        // up: ... at=0 of 35" - the file first in the folder's list, and no
+        // container for it). A click on a cell asks to go into that folder, so
+        // every shut folder above the file opens first, outermost first, as
+        // the user would have opened them.
+        var shut = new List<FileSystemItem>();
+        for (var folder = target.Parent; folder is not null; folder = folder.Parent)
+        {
+            if (!folder.IsExpanded)
+            {
+                shut.Insert(0, folder);
+            }
+        }
+        foreach (var folder in shut)
+        {
+            folder.IsExpanded = true;
+        }
+
         // The other half of the strip-press instrument: whether the row this is
         // being asked to select is actually in the tree by the time it is asked
         // for. A row still missing after the reveal is a click that can only do
         // nothing, whatever happens below.
         LogClickLine(
             $"strip move: target={target.Name} wasHidden={(hidden ? "yes" : "-")} " +
-            $"wasStale={(stale ? "yes" : "-")} " +
+            $"wasStale={(stale ? "yes" : "-")} opened={shut.Count} " +
             $"nowInTree={(target.Parent?.Children.Contains(target) != false ? "yes" : "NO")}");
 
         // Selects, scrolls to and focuses the tree row; selection-follow then
