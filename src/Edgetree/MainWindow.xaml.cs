@@ -15365,13 +15365,21 @@ public partial class MainWindow : Window
         }
     }
 
-    // Selects and scrolls to an item that's already part of the currently-
-    // expanded tree (every ancestor is already expanded - see
-    // JumpToAdjacentVisibleFolder/FlattenVisible), WITHOUT expanding anything
-    // or recapping "더 보기" state the way NavigateToPath's reveal walk would.
+    // SelectVisibleItem (below) selects and scrolls to an item WITHOUT
+    // recapping "더 보기" state the way NavigateToPath's reveal walk would.
     // Still needs the same realize-container-then-recurse approach as that
     // walk, since a container this far from the current scroll position may
     // not exist yet - just without any of ITS side effects.
+    //
+    // It used to expand nothing either, on the premise that every ancestor
+    // was already open (JumpToAdjacentVisibleFolder/FlattenVisible pick from
+    // what is on screen). Most of its callers since are not that: a
+    // thumbnail's file, what a paste or a drop brought in, a file saved under
+    // another name - each can sit in a shut folder, and a row the tree has
+    // not made cannot be selected; the walk ran out its passes and the
+    // selection stayed where it was (2026-10-29). It opens the shut folders
+    // above the item first now (OpenShutAncestors), which for an item
+    // already on screen is nothing at all.
     // THE ROW SOMEONE ELSE IS HOLDING MAY NOT BE THE TREE'S ANY MORE.
     // RefreshChildren (rename, delete, paste, a reload of a folder) rebuilds a
     // folder's children as fresh instances, and anything that kept the old ones
@@ -15469,11 +15477,33 @@ public partial class MainWindow : Window
         return -1;
     }
 
+    // Every shut folder above the item, opened outermost first as a user
+    // would open them; the count is for the caller's log. Through the model,
+    // so a level whose row is not built yet opens when it is.
+    private static int OpenShutAncestors(FileSystemItem target)
+    {
+        var shut = new List<FileSystemItem>();
+        for (var folder = target.Parent; folder is not null; folder = folder.Parent)
+        {
+            if (!folder.IsExpanded)
+            {
+                shut.Insert(0, folder);
+            }
+        }
+        foreach (var folder in shut)
+        {
+            folder.IsExpanded = true;
+        }
+        return shut.Count;
+    }
+
     // focus: false selects the row and brings it into view but leaves the
     // keyboard where it is - for a caller whose user has already moved the
     // keyboard somewhere else (see KeepRenamedRowSelected).
     private void SelectVisibleItem(FileSystemItem target, bool focus = true)
     {
+        OpenShutAncestors(target);
+
         var chain = new List<FileSystemItem>();
         for (FileSystemItem? item = target; item is not null; item = item.Parent)
         {
@@ -17279,6 +17309,12 @@ public partial class MainWindow : Window
     // Run after the folder has been refreshed, so the rows exist to be found.
     // Anything not found is skipped rather than guessed at: a file can land past
     // the "더 보기" cap, and one that failed to copy never landed at all.
+    //
+    // A SHUT FOLDER OPENS FOR IT (2026-10-29): a paste into a folder that is
+    // selected but collapsed, or a drop on a collapsed folder's row, picks out
+    // the arrivals inside it, and SelectVisibleItem opens the folder to do
+    // so. Before, the selection stayed on the folder and the marks went on
+    // rows nobody could see.
     private void SelectArrivedFiles(FileSystemItem folder, IReadOnlyList<string> paths)
     {
         if (paths.Count == 0)
@@ -34727,20 +34763,10 @@ public partial class MainWindow : Window
         // two milliseconds and every click on a cell did nothing ("select gave
         // up: ... at=0 of 35" - the file first in the folder's list, and no
         // container for it). A click on a cell asks to go into that folder, so
-        // every shut folder above the file opens first, outermost first, as
-        // the user would have opened them.
-        var shut = new List<FileSystemItem>();
-        for (var folder = target.Parent; folder is not null; folder = folder.Parent)
-        {
-            if (!folder.IsExpanded)
-            {
-                shut.Insert(0, folder);
-            }
-        }
-        foreach (var folder in shut)
-        {
-            folder.IsExpanded = true;
-        }
+        // every shut folder above the file opens first. SelectVisibleItem does
+        // that for every caller now; it is done here first only so the line
+        // below can say how many there were.
+        int opened = OpenShutAncestors(target);
 
         // The other half of the strip-press instrument: whether the row this is
         // being asked to select is actually in the tree by the time it is asked
@@ -34748,7 +34774,7 @@ public partial class MainWindow : Window
         // nothing, whatever happens below.
         LogClickLine(
             $"strip move: target={target.Name} wasHidden={(hidden ? "yes" : "-")} " +
-            $"wasStale={(stale ? "yes" : "-")} opened={shut.Count} " +
+            $"wasStale={(stale ? "yes" : "-")} opened={opened} " +
             $"nowInTree={(target.Parent?.Children.Contains(target) != false ? "yes" : "NO")}");
 
         // Selects, scrolls to and focuses the tree row; selection-follow then
