@@ -1,4 +1,4 @@
-# Edgetree v2.8.0
+# Edgetree v2.8.1
 
 [English](README.md)
 
@@ -257,6 +257,11 @@ dotnet publish src/Edgetree -c Release -r win-x64 --self-contained true -o publi
 csproj만 올리면 됩니다.
 
 ## 변경 이력
+
+### v2.8.1 (2026-10-30)
+
+- 폴더가 접혀 있을 때 썸네일 바에서 파일을 클릭해도 선택되지 않던 문제를 수정했습니다.
+- 접힌 폴더에 붙여넣거나 드롭한 파일이 트리에서 선택되지 않던 문제를 수정했습니다.
 
 ### v2.8.0 (2026-10-28)
 

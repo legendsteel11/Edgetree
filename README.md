@@ -1,4 +1,4 @@
-# Edgetree v2.8.0
+# Edgetree v2.8.1
 
 [한국어 안내](README-ko.md)
 
@@ -233,6 +233,11 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.8.1 (2026-10-30)
+
+- Fixed clicking a file in the thumbnail bar doing nothing while its folder was collapsed.
+- Fixed pasted or dropped files not being selected in the tree when their folder was collapsed.
 
 ### v2.8.0 (2026-10-28)
 

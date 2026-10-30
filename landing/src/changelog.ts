@@ -45,19 +45,28 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
-    // EIGHT LINES, no fix line. The PDF view leads with five of them - shown
-    // on selection, zoom and text, printing, passwords, the reopen when
-    // another program writes the file - then the text view's two (more
-    // formats, encoding) and 새로 만들기 on a file row. The notes carry three
-    // changes the card leaves out: the window keys reaching a text being
-    // read, the tree row's 보기 mark showing only under the pointer and on
-    // the selection, and a click on the selected row reopening the panel
-    // with 자동 펼치기 on.
+    // v2.8.0 AND v2.8.1 IN ONE ENTRY. 2.8.1 is two fixes two days after the
+    // PDF release, and a card of two fix lines would have stood above the
+    // download button in place of the features - the burial v2.5.1 and
+    // v2.5.3 caused. So the features stay first and the fixes go last, the
+    // label stays the tag GitHub calls latest (UpdateNotes.vue blanks the
+    // card on any other), and the v2.8.0 entry is gone; the READMEs'
+    // changelog and the release notes keep the two versions apart.
     //
-    // No fix line because no fault that was in v2.7.0 was fixed. Everything
-    // repaired in this round - the PDF view taking the window's keys, a
-    // one-page range printing page 2 - was this release's own new code.
-    version: 'v2.8.0',
+    // v2.8.0's eight: the PDF view leads with five - shown on selection,
+    // zoom and text, printing, passwords, the reopen when another program
+    // writes the file - then the text view's two (more formats, encoding)
+    // and 새로 만들기 on a file row. Its notes carry three changes the card
+    // leaves out: the window keys reaching a text being read, the tree
+    // row's 보기 mark showing only under the pointer and on the selection,
+    // and a click on the selected row reopening the panel with 자동 펼치기
+    // on. No fix line there: everything repaired in that round was its own
+    // new code.
+    //
+    // v2.8.1's two: faults that were in v2.8.0 and before, a click or an
+    // arrival inside a collapsed folder selecting nothing. Save as into a
+    // folder under a collapsed one is the same fix and rides in the notes.
+    version: 'v2.8.1',
     ko: [
       'PDF 파일을 선택하면 멀티미디어 패널에 바로 표시되고, 썸네일 바에도 표시됩니다.',
       'PDF에서 확대·축소와 텍스트 선택·복사를 지원합니다.',
@@ -67,6 +76,8 @@ export const changelog: ChangelogEntry[] = [
       '설정·로그·JSON·XML·CSV·스크립트 등 더 많은 형식을 텍스트 보기로 열 수 있습니다. 그 밖의 파일은 우클릭 `텍스트로 보기`로 열 수 있습니다.',
       '텍스트 보기에서 파일의 인코딩을 확인하고, 다른 인코딩으로 다시 열거나 저장할 수 있습니다.',
       '파일 행에서도 우클릭 `새로 만들기`를 사용할 수 있으며, 해당 파일이 있는 폴더에 만들어집니다.',
+      '폴더가 접혀 있을 때 썸네일 바에서 파일을 클릭해도 선택되지 않던 문제를 수정했습니다.',
+      '접힌 폴더에 붙여넣거나 드롭한 파일이 트리에서 선택되지 않던 문제를 수정했습니다.',
     ],
     en: [
       'Select a PDF and it shows in the multimedia panel at once, and in the thumbnail bar too.',
@@ -77,6 +88,8 @@ export const changelog: ChangelogEntry[] = [
       'Settings, logs, JSON, XML, CSV, scripts and more now open in the text view. Anything else opens with View as text in the right-click menu.',
       'The text view shows a file\'s encoding, and can reopen or save the file in another encoding.',
       'New in the right-click menu now works on a file row too, creating the item in the folder that contains the file.',
+      'Fixed clicking a file in the thumbnail bar doing nothing while its folder was collapsed.',
+      'Fixed pasted or dropped files not being selected in the tree when their folder was collapsed.',
     ],
   },
   {
