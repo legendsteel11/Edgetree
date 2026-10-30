@@ -874,6 +874,9 @@ public partial class MainWindow : Window
         };
         StartDriveWatchers();
         StartMemoryWatch();
+        // uilag.log: what held the UI thread, item by item (Debug only).
+        UiLagProbe.Start(Dispatcher, () =>
+            $"rows {CountRealizedRows(ExplorerTree)}  panel {(_viewerOpen ? "open" : "shut")}");
         FileSystemService.LateChildrenArrived += OnLateChildrenArrived;
 
         // Deferred one pass: the tree's own ScrollViewer only exists once the
