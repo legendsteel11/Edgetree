@@ -24224,7 +24224,9 @@ public partial class MainWindow : Window
     // by the three chips and the double-click that toggles the first two, so
     // picking one once carries down a folder - the wheel and +/- stay a
     // one-off zoom on the picture in front of you and are deliberately NOT
-    // remembered (2026-08-09). Session-only; nothing is persisted.
+    // remembered (2026-08-09). Kept in the settings as ViewerRest, read back
+    // at startup. A press made on a film moves nothing here (2026-11-02, see
+    // SetViewerRestByHand).
     private enum ViewerRestMode { Fit, Actual, Fill }
     private ViewerRestMode _viewerRest;
     // Fill is fit's sibling, not a number: cover the panel, cropping the
@@ -26519,6 +26521,14 @@ public partial class MainWindow : Window
            && ViewerImage.Visibility == Visibility.Visible
            && ViewerImage.Source is not null
            && _viewerPixelWidth > 0;
+
+    // "THE FILE ON SCREEN IS A FILM", playing or only selected (2026-11-02).
+    // The panel's file, not the transport's: a film held paused while a
+    // picture is browsed is not on screen, and the picture's chips are the
+    // picture's. Asked where a press must not write the pictures' rest - see
+    // SetViewerRestByHand.
+    private bool ViewerShowingFilm
+        => _pendingViewerPath is { } shown && IsViewerVideo(shown);
 
     private void ViewerBackgroundChip_Click(object sender, RoutedEventArgs e)
     {
@@ -30169,9 +30179,10 @@ public partial class MainWindow : Window
     {
         // ViewerMediaIsSelection, not "is anything loaded" (2026-08-11, and the
         // third guard in this panel to need the same correction). The two strips
-        // take turns because they describe the SAME file in ways that cannot
-        // both apply - a film has no fit-to-window and a picture has no
-        // timeline. Once background play let the transport hold a track while
+        // used to take turns, on the reading that they describe the SAME file
+        // in ways that cannot both apply - a film with no fit-to-window and a
+        // picture with no timeline (a film keeps the strip since 2026-11-02;
+        // see below). Once background play let the transport hold a track while
         // the panel shows a picture, that stopped being true: there is a real
         // picture to fit and real sound to pause, and both controls apply to
         // their own subject. Written as a null check it hid the zoom row for
@@ -30222,7 +30233,7 @@ public partial class MainWindow : Window
 
         // A FILM GETS THE STRIP TOO (2026-11-02, on report: the size of a film
         // could only be changed from the right-click menu, while a picture's
-        // sits under it). The rule above this one - the transport stands in
+        // sits under it). The rule this replaces - the transport stands in
         // the strip's place, never beside it, "since the two describe the same
         // picture in ways that can't both apply" - was written on 2026-08-10,
         // when a film had no rest states. It got all three four days later
@@ -30233,6 +30244,8 @@ public partial class MainWindow : Window
         // Not the number or the steppers: the menu row gave those up for a
         // film on purpose (a number that grows is no readout when the film
         // itself is one), and the navigator has never applied to a film.
+        // The chips change the film alone and remember nothing - see
+        // SetViewerRestByHand.
         //
         // The cost is one row of height, and in a sidebar it mostly comes out
         // of letterbox: a 16:9 film in a panel taller than wide is bound by
@@ -36501,6 +36514,9 @@ public partial class MainWindow : Window
     // clear the flag outright; if this row wrote the rest, the NEXT film would
     // arrive cropped and the clearing would be undone by the thing that set it.
     // So it moves the live flag only, and the next film starts fitted again.
+    // Since 2026-11-02 the chips' own door refuses a film as well (see
+    // SetViewerRestByHand), so what still keeps this handler apart is the
+    // toggle: this row's 채우기 pressed again goes back to 맞춤.
     //
     // Nothing else had to be built. The cover scale is measured from
     // _viewerPixelWidth/Height, which the film sets from its own natural size
@@ -36551,8 +36567,27 @@ public partial class MainWindow : Window
     // 쇼가 자름맞춤을 빌리고 돌려줄 때도 지나가므로, 거기서 담으면 쇼를 한 번
     // 돌린 것이 취향으로 굳는다. **반대로 쇼가 도는 중에 사람이 고른 것은
     // 담긴다** - 그때 고른 것도 "앞으로 이렇게 보겠다"는 말이기 때문.
+    //
+    // A FILM'S PRESSES ARE ITS OWN (2026-11-02). The film's 채우기 was never
+    // remembered (see ViewerMediaFill_Click), but once a playing film got the
+    // strip its chips came through this door and wrote the pictures' rest:
+    // 채우기 pressed on a film, and every picture after it arrived filled,
+    // across restarts. 맞춤 and 1:1 in the menu's 영상 크기 row had done the
+    // same all along, through the same handlers; on the strip 맞춤 is the
+    // natural way back from a film's 채우기, so it would have quietly undone
+    // a picture's 채우기 as well. So on a film - playing or only selected -
+    // every door here changes the film on screen and nothing else, and how
+    // pictures arrive is decided from a picture. Before the slideshow line:
+    // a press on a film says nothing about the rest, so a show still owes
+    // back the one it borrowed.
     private void SetViewerRestByHand(ViewerRestMode rest)
     {
+        if (ViewerShowingFilm)
+        {
+            ShowViewerRest(rest);
+            return;
+        }
+
         _slideshowRestBefore = null;
         SetViewerRest(rest);
 
@@ -36577,6 +36612,13 @@ public partial class MainWindow : Window
     private void SetViewerRest(ViewerRestMode rest)
     {
         _viewerRest = rest;
+        ShowViewerRest(rest);
+    }
+
+    // The state on screen alone, with the rest left where it was - what a
+    // film's presses do (see SetViewerRestByHand).
+    private void ShowViewerRest(ViewerRestMode rest)
+    {
         if (rest == ViewerRestMode.Fill)
         {
             // Not through SetViewerZoom - that method means "an explicit
@@ -36589,7 +36631,9 @@ public partial class MainWindow : Window
         }
         else
         {
-            SetViewerZoom(ViewerRestZoom, null);
+            // From the argument, not ViewerRestZoom: on a film the rest is
+            // not the state being shown.
+            SetViewerZoom(rest == ViewerRestMode.Actual ? 1 : null, null);
         }
     }
 

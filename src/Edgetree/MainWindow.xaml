@@ -11036,10 +11036,12 @@
                                             RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                             </ToggleButton>
                         </StackPanel>
-                        <!-- The transport strip: stands in the zoom strip's
-                             place (never beside it) while a video plays, since
-                             the two describe the same picture in ways that
-                             can't both apply. Deliberately short of a player's
+                        <!-- The transport strip: under the zoom strip, which a
+                             playing film keeps with its three size chips
+                             (2026-11-02). Until then it stood in the strip's
+                             place, on a rule written before a film had any
+                             size of its own to choose - see
+                             UpdateViewerZoomBar. Deliberately short of a player's
                              controls - no playlist, no speed, no subtitles -
                              the panel previews a file, it does not become a
                              media player. -->
