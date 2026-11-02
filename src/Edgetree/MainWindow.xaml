@@ -10986,7 +10986,8 @@
                                  font size and overran at every larger one.
                                  Same trick as the media time and the carousel
                                  counter. -->
-                            <Grid VerticalAlignment="Center"
+                            <Grid x:Name="ViewerZoomReadout"
+                                    VerticalAlignment="Center"
                                     Margin="{DynamicResource ViewerChipMargin}">
                                 <TextBlock Text="800%"
                                         Visibility="Hidden"

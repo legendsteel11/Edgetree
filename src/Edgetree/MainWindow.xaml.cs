@@ -27323,9 +27323,12 @@ public partial class MainWindow : Window
         }
         ViewerPlayOverlay.Visibility = Visibility.Collapsed;
         ViewerNavigatorPlate.Visibility = Visibility.Collapsed;
-        // The two strips describe the same picture in ways that cannot both
-        // apply, so they take turns rather than stack.
-        ViewerZoomBar.Visibility = Visibility.Collapsed;
+        // The size strip is decided where it always is rather than hidden
+        // here. It used to be hidden outright ("the two strips take turns
+        // rather than stack"); since 2026-11-02 a film keeps its three size
+        // chips above the transport - see UpdateViewerZoomBar. The transport
+        // path is already set, so that answer is the film's.
+        UpdateViewerZoomBar();
         ViewerMediaBar.Visibility = Visibility.Visible;
         // The row is built once and shown many times, so the switch's state is
         // put on it here rather than at startup - it has to be right every time
@@ -30210,11 +30213,44 @@ public partial class MainWindow : Window
         // a picture's pixels, and the navigator about one picture, so they go.
         if (_viewerPdf is not null)
         {
+            SetViewerZoomStepsVisible(true);
             ApplyViewerPdfZoomBar();
             return;
         }
         ViewerActualChip.Visibility = Visibility.Visible;
         ViewerFillChip.Visibility = Visibility.Visible;
+
+        // A FILM GETS THE STRIP TOO (2026-11-02, on report: the size of a film
+        // could only be changed from the right-click menu, while a picture's
+        // sits under it). The rule above this one - the transport stands in
+        // the strip's place, never beside it, "since the two describe the same
+        // picture in ways that can't both apply" - was written on 2026-08-10,
+        // when a film had no rest states. It got all three four days later
+        // (채우기, 2026-08-14) and they went into the menu's 영상 크기 row,
+        // leaving the premise false and the strip hidden. So the strip now
+        // stacks above the transport, as it already does for a picture seen
+        // while a track plays, with the same three chips the menu row has.
+        // Not the number or the steppers: the menu row gave those up for a
+        // film on purpose (a number that grows is no readout when the film
+        // itself is one), and the navigator has never applied to a film.
+        //
+        // The cost is one row of height, and in a sidebar it mostly comes out
+        // of letterbox: a 16:9 film in a panel taller than wide is bound by
+        // the width. Asked of the SCREEN, not the transport alone (see
+        // ViewerMediaIsSelection): a film held paused while a picture is
+        // browsed is not the thing on screen.
+        bool filmOnScreen = ViewerMediaIsSelection &&
+            _viewerVideoPath is { } film && IsViewerVideo(film);
+        SetViewerZoomStepsVisible(!filmOnScreen);
+        if (filmOnScreen)
+        {
+            ViewerZoomBar.Visibility = Visibility.Visible;
+            ViewerNavigatorChip.Visibility = Visibility.Collapsed;
+            ViewerFitChip.IsChecked = _viewerZoom is null && !_viewerFill;
+            ViewerFillChip.IsChecked = _viewerZoom is null && _viewerFill;
+            ViewerActualChip.IsChecked = _viewerZoom is { } filmZoom && Math.Abs(filmZoom - 1) < 0.001;
+            return;
+        }
 
         bool hasImage = _viewerPixelWidth > 0 && ViewerImage.Source is not null &&
             (!ViewerMediaIsSelection || ViewerShowingAudioCover);
@@ -37679,6 +37715,15 @@ public partial class MainWindow : Window
         {
             PdfRenderService.Release(document);
         }
+    }
+
+    // The number and its two steppers, which a film's strip leaves out.
+    private void SetViewerZoomStepsVisible(bool visible)
+    {
+        var visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        ViewerZoomOutButton.Visibility = visibility;
+        ViewerZoomReadout.Visibility = visibility;
+        ViewerZoomInButton.Visibility = visibility;
     }
 
     private void ApplyViewerPdfZoomBar()
