@@ -4417,6 +4417,11 @@
                 TargetType="Slider">
             <Setter Property="Focusable"
                     Value="False"/>
+            <!-- The hand every chip in the strip shows (2026-11-02, on report):
+                 the two bars were the only controls in the row the pointer
+                 passed over without changing, and so read as readouts. -->
+            <Setter Property="Cursor"
+                    Value="Hand"/>
             <Setter Property="Height"
                     Value="{DynamicResource ViewerMediaSliderHeight}"/>
             <Setter Property="Template">
@@ -9993,6 +9998,11 @@
                                     <Setter Property="Padding" Value="0"/>
                                     <Setter Property="Margin" Value="0,0,3,0"/>
                                     <Setter Property="Focusable" Value="False"/>
+                                    <!-- A cell is pressed to open its file, like
+                                         the chips around it, and now shows the
+                                         same hand (2026-11-02, on report). The
+                                         rename box keeps its own I-beam. -->
+                                    <Setter Property="Cursor" Value="Hand"/>
                                     <!-- On the CONTAINER, not inside the cell:
                                          the whole frame answers, including the
                                          letterboxed margins a portrait picture
