@@ -8792,7 +8792,7 @@
                                         Margin="2,0,0,0"
                                         Click="ViewerCropSaveSelection_Click"
                                         ToolTip="{x:Static services:Strings.ViewerCropSave}">
-                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M1.125 1H21.125M1.125 21H21.125"
+                                    <Path Data="M17,6v9.5q0,0.62-0.44,1.06T15.5,17H4.5q-0.62,0-1.06-0.44T3,15.5V4.5Q3,3.88 3.44,3.44T4.5,3H14l3,3ZM15.5,6.63L13.38,4.5H4.5v11h11V6.63Zm-3.91,7.47q0.66-0.66 0.66-1.59t-0.66-1.59T10,10.25T8.41,10.91T7.75,12.5t0.66,1.59T10,14.75t1.59-0.66ZM5.5,8.5h7v-3h-7v3Zm-1-1.6v8.6V4.5V6.9Z M0 0H20M0 20H20"
                                             Fill="White"
                                             Stretch="Uniform"
                                             Width="{DynamicResource PathBarListGlyphSize}"
@@ -8812,21 +8812,20 @@
                          the picture's cell; the host is pushed down by its
                          height (ApplyViewerPictureBarInset) so the picture
                          fits under it rather than behind it.
-                         The three crop marks are the author's own Material
-                         Symbols files (opsz 20, an 18 viewBox at 1,1), boxed to
-                         their 20 grid (M0 0H20M0 20H20) the way the others are
+                         The crop marks are the author's own Material Symbols
+                         files (opsz 20, an 18 viewBox at 1,1), boxed to their
+                         20 grid (M0 0H20M0 20H20) the way the others are
                          boxed to 960, so their own sizes survive Stretch.
-                         TWO BOXES ARE MOVED, measured on a 4x capture of the
-                         bar (2026-11-03): file_save's ink sits a unit right
-                         and down in its square (x 4-18.25, y 2-20, centre
-                         11.1,11), which read as a pixel off at 15px, so its
-                         box is centred on the ink (M1.125 1...); and undo is
-                         drawn 12 by 11 of the 20 where crop is 18, so it read
-                         small beside them - its box is a 16, a quarter
-                         larger, set a unit right and a unit and a half down
-                         from the ink's centre (M3 4H19...) so the mark sits
-                         about a pixel left and up of centre, where it looked
-                         centred on the second capture. -->
+                         저장 is "save" since 2026-11-03: "file_save" was
+                         too slight to read at 15px (and sat a unit off its
+                         box's centre); "save" is centred (x and y 3-17).
+                         UNDO'S BOX IS MOVED, measured on 4x and 6x captures of
+                         the bar (2026-11-03): it is drawn 12 by 11 of the 20
+                         where crop is 18, so it read small beside the others
+                         - its box is a 16, a quarter larger, set a unit right
+                         and a unit and a half down from the ink's centre
+                         (M3 4H19...), so the mark sits about a pixel left and
+                         up of centre, where it looked centred. -->
                     <Border x:Name="ViewerPictureBar"
                             Grid.Row="0"
                             VerticalAlignment="Top"
@@ -8855,6 +8854,48 @@
                                             Fill="{Binding Foreground,
                                                 RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
                                 </ToggleButton>
+                                <!-- 이전 영역 불러오기 (2026-11-03, on request): the
+                                     last area cut, back at the same place and size
+                                     (see MainWindow.Crop.cs).
+                                     THE CROP MARK WITH A LETTER IN IT, i here and p
+                                     on the panel one beside it (the author's
+                                     design, after "screenshot_region" and
+                                     "picture_in_picture_medium" were tried first):
+                                     the two are the crop again, and the letter says
+                                     which reading of the last area. The letters are
+                                     Segoe UI Bold 9.5 turned into geometry once
+                                     (FormattedText.BuildGeometry) and appended to
+                                     the crop's own path, so they scale with it and
+                                     cannot drift from it: ink 7 units tall, centred
+                                     on the mark's opening (5.5-14.5) at 10,10, a
+                                     stroke near the mark's own 1.5. A TextBlock
+                                     laid over the mark would centre its LINE box,
+                                     not the letter. -->
+                                <Button x:Name="ViewerCropReuseButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerCropReuse_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerCropReuse}">
+                                    <Path Data="M14.5,19V16h-9q-0.62,0-1.06-0.44T4,14.5v-9H1V4H4V1H5.5V14.5H19V16H16v3H14.5Zm0-6V5.5H7V4h7.5q0.62,0 1.06,0.44T16,5.5V13H14.5Z M9.258,8.755L10.724,8.755 10.724,13.505 9.258,13.505 9.258,8.755z M10,6.495C10.25,6.495 10.454,6.565 10.61,6.704 10.766,6.843 10.844,7.023 10.844,7.242 10.844,7.465 10.766,7.647 10.61,7.79 10.454,7.932 10.25,8.003 10,8.003 9.753,8.003 9.55,7.93 9.392,7.783 9.235,7.636 9.156,7.456 9.156,7.242 9.156,7.023 9.235,6.843 9.392,6.704 9.55,6.565 9.753,6.495 10,6.495z M0 0H20M0 20H20"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
+                                <!-- The same last area as it stood on the panel
+                                     (2026-11-03, on request): put back at that
+                                     place on the panel, over whatever picture and
+                                     zoom are under it. The crop mark with p, built
+                                     as the i beside it is. -->
+                                <Button x:Name="ViewerCropReusePanelButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerCropReusePanel_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerCropReusePanel}">
+                                    <Path Data="M14.5,19V16h-9q-0.62,0-1.06-0.44T4,14.5v-9H1V4H4V1H5.5V14.5H19V16H16v3H14.5Zm0-6V5.5H7V4h7.5q0.62,0 1.06,0.44T16,5.5V13H14.5Z M9.993,7.597C9.693,7.597 9.448,7.711 9.258,7.938 9.068,8.165 8.973,8.466 8.973,8.84L8.973,9.221C8.973,9.549 9.059,9.816 9.232,10.023 9.405,10.23 9.633,10.334 9.914,10.334 10.248,10.334 10.507,10.205 10.691,9.947 10.875,9.688 10.967,9.323 10.967,8.85 10.967,8.015 10.642,7.597 9.993,7.597z M10.54,6.475C11.156,6.475 11.631,6.686 11.967,7.108 12.302,7.53 12.47,8.104 12.47,8.831 12.47,9.623 12.274,10.258 11.883,10.738 11.492,11.217 10.972,11.457 10.322,11.457 9.75,11.457 9.314,11.234 9.014,10.789L8.996,10.789 8.996,13.525 7.53,13.525 7.53,6.591 8.996,6.591 8.996,7.305 9.014,7.305C9.376,6.751,9.885,6.475,10.54,6.475z M0 0H20M0 20H20"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
                                 <Button x:Name="ViewerCropSaveButton"
                                         Style="{StaticResource ViewerTextBarButtonStyle}"
                                         Margin="2,0,0,0"
@@ -8862,7 +8903,7 @@
                                         ToolTipService.ShowOnDisabled="True"
                                         Click="ViewerCropSaveApplied_Click"
                                         ToolTip="{x:Static services:Strings.ViewerCropSave}">
-                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M1.125 1H21.125M1.125 21H21.125"
+                                    <Path Data="M17,6v9.5q0,0.62-0.44,1.06T15.5,17H4.5q-0.62,0-1.06-0.44T3,15.5V4.5Q3,3.88 3.44,3.44T4.5,3H14l3,3ZM15.5,6.63L13.38,4.5H4.5v11h11V6.63Zm-3.91,7.47q0.66-0.66 0.66-1.59t-0.66-1.59T10,10.25T8.41,10.91T7.75,12.5t0.66,1.59T10,14.75t1.59-0.66ZM5.5,8.5h7v-3h-7v3Zm-1-1.6v8.6V4.5V6.9Z M0 0H20M0 20H20"
                                             Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                 </Button>
                                 <Button x:Name="ViewerCropRevertButton"

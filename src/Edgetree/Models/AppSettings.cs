@@ -1040,6 +1040,20 @@ public class AppSettings
     // 둔다. 쇼가 빌려 간 것까지 담기면 한 번 돌린 것이 취향으로 굳는다.
     public string ViewerRest { get; set; } = "fit";
 
+    // The last area a crop took, in the file's own pixels: x, y, width,
+    // height (2026-11-03, on request). The picture bar's 이전 영역 불러오기 puts
+    // it back on another picture, so a run of captures of the same page
+    // layout is cut the same way each time - across a restart too, which is
+    // why it is kept here. Null until a first rectangle is drawn. Not in presets:
+    // it is a piece of work in progress, not the app's shape.
+    public int[]? ViewerCropLastArea { get; set; }
+
+    // The same area as it stood ON THE PANEL when it was drawn: x, y, width,
+    // height in the picture host's own units (2026-11-03, on request). Put
+    // back by the bar's 패널 기준 button at the same place on the panel,
+    // whatever picture, size or zoom is under it then.
+    public double[]? ViewerCropLastPanelArea { get; set; }
+
     // ----- 창 모드 -------------------------------------------------------------
     //
     // 도킹을 풀고 자유롭게 놓아 둔 창인지, 그리고 그때의 자리와 크기.
@@ -1217,6 +1231,19 @@ public class AppSettings
             AutoHideHandleLengthPercent = Sane(handleLengthPercent, 18, min: 0, max: 100);
         }
         AutoHideHandlePositionPercent = Sane(AutoHideHandlePositionPercent, 50, min: 0, max: 100);
+        // Four whole numbers with a real width and height, or nothing - a
+        // hand-edited file must not hand the crop an area it cannot place.
+        if (ViewerCropLastArea is { } cropArea &&
+            (cropArea.Length != 4 || cropArea.Any(value => value < 0) || cropArea[2] <= 0 || cropArea[3] <= 0))
+        {
+            ViewerCropLastArea = null;
+        }
+        if (ViewerCropLastPanelArea is { } panelArea &&
+            (panelArea.Length != 4 || panelArea.Any(value => !double.IsFinite(value)) ||
+             panelArea[2] <= 0 || panelArea[3] <= 0))
+        {
+            ViewerCropLastPanelArea = null;
+        }
         SlideshowSeconds = (int)Sane(SlideshowSeconds, 5, min: 3);
         TreeFontSize = Sane(TreeFontSize, 12, min: 1);
         ViewerTextFontSize = Sane(ViewerTextFontSize, 12, min: 1);

@@ -589,6 +589,10 @@ public static class HelpContent
                     // this while cropping, and the tooltips name them as well.
                     R("상단 자르기 버튼", "드래그로 영역 지정, 손잡이로 크기 조절, 안쪽 드래그로 이동",
                       "The crop button at the top", "Drag out an area, size it by its handles, move it from inside"),
+                    R("이전 영역 불러오기 (이미지 기준)", "마지막으로 그린 영역을 이미지의 같은 위치 · 크기로 다시 지정",
+                      "Reuse the last area (on the image)", "Puts the last area drawn back at the same place and size on the image"),
+                    R("이전 영역 불러오기 (패널 기준)", "마지막으로 그린 영역을 패널의 같은 자리에 다시 지정",
+                      "Reuse the last area (on the panel)", "Puts the last area drawn back at the same place on the panel"),
                     R("자르기 중 Shift · Ctrl 드래그", "정사각형 · 16px 격자에 맞춤",
                       "Shift · Ctrl drag while cropping", "Square · snap to a 16px grid"),
                     R("자르기 중 휠 클릭 드래그", "확대 상태에서 화면 이동",
@@ -598,8 +602,10 @@ public static class HelpContent
                       "Preview the cut · save it beside the original as name-crop (WebP, HEIC and the like as PNG)"),
                     R("자르기 중 Ctrl+C", "영역을 원본 해상도로 클립보드에 복사",
                       "Ctrl+C while cropping", "Copies the area to the clipboard at full resolution"),
-                    R("자르기 중 Ctrl+Shift+S · Ctrl+Z · Esc", "다른 이름으로 저장 · 자르기 취소 · 자르기 종료",
-                      "Ctrl+Shift+S · Ctrl+Z · Esc while cropping", "Save as · undo the crop · stop cropping"),
+                    R("자르기 중 Ctrl+S · Ctrl+Shift+S", "이름-crop으로 저장 · 다른 이름으로 저장",
+                      "Ctrl+S · Ctrl+Shift+S while cropping", "Save beside it as name-crop · save under a name you choose"),
+                    R("자르기 중 Ctrl+Z · Esc", "자르기 취소 · 자르기 종료",
+                      "Ctrl+Z · Esc while cropping", "Undo the crop · stop cropping"),
                 }),
 
                 new Group(T("영상", "Film"), new[]

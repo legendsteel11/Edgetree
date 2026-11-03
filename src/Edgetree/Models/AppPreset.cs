@@ -291,9 +291,11 @@ public class AppPreset
     //     - DATA. The user made these, one at a time, and no change of shape
     //       should be able to take them away.
     //
-    //   ExpandedFolderPaths, LastSelectedPath
+    //   ExpandedFolderPaths, LastSelectedPath, ViewerCropLastArea,
+    //   ViewerCropLastPanelArea
     //     - where you ARE, not what the app looks like. A preset that moved the
-    //       tree would also have to read every folder in it off disk.
+    //       tree would also have to read every folder in it off disk, and one
+    //       that moved the crop's last area would break a run of crops.
     //
     //   StartWithWindows, AlwaysShowTrayIcon, Language
     //     - about the machine and the install, not about this window.

@@ -77,6 +77,12 @@ public partial class MainWindow
 
     private ViewerCropOriginal? _viewerCropOriginal;
 
+    // Where the temporary crop on screen starts in the FILE's pixels - every
+    // cut that made it, added up - so a rectangle drawn on it is remembered
+    // as the part of the file it really covers (see RememberViewerCropArea).
+    // Zero while the picture on screen is the file's.
+    private Point _viewerCropAppliedOrigin;
+
     private bool _viewerCropSaving;
 
     // ----- The bar -----------------------------------------------------------
@@ -135,6 +141,15 @@ public partial class MainWindow
         bool applied = _viewerCropApplied is not null;
         ViewerCropSaveButton.IsEnabled = applied && !_viewerCropSaving;
         ViewerCropRevertButton.IsEnabled = applied;
+
+        // The two 이전 영역 불러오기 buttons; the image one names the place and
+        // size it would put back.
+        var lastArea = LastViewerCropArea;
+        ViewerCropReuseButton.IsEnabled = canCrop && lastArea is not null;
+        ViewerCropReuseButton.ToolTip = lastArea is { } area
+            ? string.Format(Strings.ViewerCropReuseFormat, area.X, area.Y, area.Width, area.Height)
+            : Strings.ViewerCropReuse;
+        ViewerCropReusePanelButton.IsEnabled = canCrop && LastViewerCropPanelArea is not null;
 
         if (!wanted)
         {
@@ -218,6 +233,7 @@ public partial class MainWindow
             _viewerCropDrag = CropDrag.None;
             ViewerImageHost.ReleaseMouseCapture();
         }
+        StopViewerCropEdgePan();
         ViewerCropOverlay.Show(null, null);
         ViewerCropOverlay.Visibility = Visibility.Collapsed;
         ViewerCropActions.Visibility = Visibility.Collapsed;
@@ -233,6 +249,7 @@ public partial class MainWindow
         ExitViewerCropMode();
         _viewerCropApplied = null;
         _viewerCropOriginal = null;
+        _viewerCropAppliedOrigin = default;
         ViewerCropSaveButton.IsEnabled = false;
         ViewerCropRevertButton.IsEnabled = false;
     }
@@ -270,11 +287,10 @@ public partial class MainWindow
     // to run on past the panel's edge, and an edge out there can neither be
     // seen nor taken hold of: the cut would be decided where nobody can look.
     // So the hand's point stops at the panel's edge; more than the panel
-    // shows is a wheel turn out, and a handle at each zoom is how one corner
-    // is set close up and the other from further away. The panel is NOT
-    // scrolled for the hand - motion the app drives itself is what this app
-    // does not do. A MOVE keeps the whole picture as its room: the rectangle
-    // is carried, not drawn.
+    // shows is a wheel turn out, a handle at each zoom - or, since the same
+    // day on request, the hand held at the edge, which pans the picture in
+    // from that side (see the edge pan below). A MOVE keeps the whole picture
+    // as its room: the rectangle is carried, not drawn.
     private Rect ViewerCropReach
     {
         get
@@ -321,7 +337,12 @@ public partial class MainWindow
             picture.Y + selection.Y * display,
             selection.Width * display,
             selection.Height * display);
-        ViewerCropOverlay.Show(onScreen, $"{selection.Width:0} × {selection.Height:0}");
+        // Where it starts as well as how big it is (2026-11-03, on request) -
+        // in the FILE's pixels, the numbers 이전 영역 불러오기 (이미지 기준)
+        // will remember and show, so the two always agree.
+        ViewerCropOverlay.Show(onScreen,
+            $"x {selection.X + _viewerCropAppliedOrigin.X:0}, y {selection.Y + _viewerCropAppliedOrigin.Y:0}" +
+            $"  ·  {selection.Width:0} × {selection.Height:0}");
         PlaceViewerCropActions(onScreen);
     }
 
@@ -406,6 +427,8 @@ public partial class MainWindow
             UpdateViewerCropOverlay();
         }
 
+        _viewerCropDragChanged = false;
+        _viewerCropLastHost = host;
         ViewerImageHost.CaptureMouse();
         e.Handled = true;
         return true;
@@ -429,8 +452,23 @@ public partial class MainWindow
             return false;
         }
 
-        var pixel = HostToPicturePixel(e.GetPosition(ViewerImageHost));
+        _viewerCropLastHost = e.GetPosition(ViewerImageHost);
+        UpdateViewerCropDrag(_viewerCropLastHost);
+        UpdateViewerCropAutoPan();
+        return true;
+    }
+
+    // Where the hand is on the host, for the edge pan's frames, which arrive
+    // with no mouse move of their own.
+    private Point _viewerCropLastHost;
+
+    // The drag's one step, from a point on the host: a mouse move, or a frame
+    // of the edge pan moving the picture under a hand that has not moved.
+    private void UpdateViewerCropDrag(Point host)
+    {
+        var pixel = HostToPicturePixel(host);
         bool square = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        var before = _viewerCropSelection;
         switch (_viewerCropDrag)
         {
             case CropDrag.Draw:
@@ -441,11 +479,12 @@ public partial class MainWindow
                 {
                     break;
                 }
-                _viewerCropSelection = SpanCrop(_viewerCropAnchor, corner, square);
+                _viewerCropSelection = AtLeastOnePixel(SpanCrop(_viewerCropAnchor, corner, square), _viewerCropAnchor, corner);
                 break;
 
             case CropDrag.Resize when _viewerCropSelection is { } current:
-                _viewerCropSelection = ResizeCrop(current, ClampToReach(pixel), square);
+                var pulled = ClampToReach(pixel);
+                _viewerCropSelection = AtLeastOnePixel(ResizeCrop(current, pulled, square), _viewerCropAnchor, pulled);
                 break;
 
             case CropDrag.Move when _viewerCropSelection is { } moving:
@@ -461,8 +500,182 @@ public partial class MainWindow
                 break;
         }
 
+        if (_viewerCropSelection != before)
+        {
+            _viewerCropDragChanged = true;
+        }
         UpdateViewerCropOverlay();
-        return true;
+    }
+
+    // ----- The edge pan ------------------------------------------------------
+    //
+    // A DRAWN OR PULLED POINT THAT REACHES THE PANEL'S EDGE MOVES THE PICTURE
+    // (2026-11-03, on request). The point stops at what is on screen
+    // (ViewerCropReach), and before this a rectangle bigger than the panel
+    // could only be had by zooming out and pulling a handle; now holding the
+    // hand at the edge brings more of the picture in from that side, and the
+    // rectangle follows it out.
+    //
+    // This is the auto-scroll this app has otherwise turned down (2026-08-07,
+    // the tree's 더 보기 drag): motion the app keeps going is the one kind that
+    // shows every dropped frame. Asked for here, and cheaper than a list: a
+    // frame is the picture's two pan values, the rectangle and the navigator -
+    // no decode, no layout. Timed by CompositionTarget.Rendering, so it moves
+    // once per frame the screen draws and by the time since the last one, and
+    // it is subscribed only while the hand is at an edge with picture left
+    // beyond it.
+    //
+    // The edge is a band just inside the panel as well as anything past it: a
+    // panel against the screen's own edge leaves the pointer nowhere past it.
+    // Faster the further in - or out - the hand goes.
+    // Slowed by about two fifths after the first try (500 / 40 / 3000, read
+    // as a touch fast); smooth as it was, so nothing else changed.
+    private const double CropEdgePanBand = 8;
+    private const double CropEdgePanSpeed = 300;      // per second, at the band's inner edge
+    private const double CropEdgePanGrowth = 25;      // per second, per unit deeper
+    private const double CropEdgePanMaxSpeed = 2000;
+
+    private bool _viewerCropEdgePanning;
+    private TimeSpan _viewerCropEdgePanLast;
+
+    // Draw and resize only: a move carries a rectangle the picture already
+    // holds, and its room is the whole picture (ViewerCropReach's note).
+    private Vector ViewerCropEdgePanVelocity(Point host)
+    {
+        if (_viewerCropDrag is not (CropDrag.Draw or CropDrag.Resize))
+        {
+            return default;
+        }
+
+        double width = ViewerImageHost.ActualWidth;
+        double height = ViewerImageHost.ActualHeight;
+        double Speed(double depth) => depth <= 0
+            ? 0
+            : Math.Min(CropEdgePanMaxSpeed, CropEdgePanSpeed + depth * CropEdgePanGrowth);
+
+        double vx = host.X < CropEdgePanBand ? -Speed(CropEdgePanBand - host.X)
+            : host.X > width - CropEdgePanBand ? Speed(host.X - (width - CropEdgePanBand))
+            : 0;
+        double vy = host.Y < CropEdgePanBand ? -Speed(CropEdgePanBand - host.Y)
+            : host.Y > height - CropEdgePanBand ? Speed(host.Y - (height - CropEdgePanBand))
+            : 0;
+        return new Vector(vx, vy);
+    }
+
+    // Started and stopped from the drag's own moves; each frame asks again.
+    private void UpdateViewerCropAutoPan()
+    {
+        bool wanted = ViewerCropEdgePanVelocity(_viewerCropLastHost) != default && ViewerCanPan;
+        if (wanted == _viewerCropEdgePanning)
+        {
+            return;
+        }
+
+        _viewerCropEdgePanning = wanted;
+        if (wanted)
+        {
+            _viewerCropEdgePanLast = TimeSpan.Zero;
+            CompositionTarget.Rendering += ViewerCropEdgePan_Rendering;
+        }
+        else
+        {
+            CompositionTarget.Rendering -= ViewerCropEdgePan_Rendering;
+        }
+    }
+
+    private void StopViewerCropEdgePan()
+    {
+        if (_viewerCropEdgePanning)
+        {
+            _viewerCropEdgePanning = false;
+            CompositionTarget.Rendering -= ViewerCropEdgePan_Rendering;
+        }
+    }
+
+    private void ViewerCropEdgePan_Rendering(object? sender, EventArgs e)
+    {
+        if (_viewerCropDrag == CropDrag.None)
+        {
+            StopViewerCropEdgePan();
+            return;
+        }
+
+        // Rendering can be raised more than once for the same frame; only a
+        // new frame time moves anything.
+        var now = ((RenderingEventArgs)e).RenderingTime;
+        if (now == _viewerCropEdgePanLast)
+        {
+            return;
+        }
+
+        // The first frame only takes the time; after a stall, no jump.
+        double seconds = _viewerCropEdgePanLast == TimeSpan.Zero
+            ? 0
+            : Math.Min(0.05, (now - _viewerCropEdgePanLast).TotalSeconds);
+        _viewerCropEdgePanLast = now;
+
+        var velocity = ViewerCropEdgePanVelocity(_viewerCropLastHost);
+        if (velocity == default)
+        {
+            StopViewerCropEdgePan();
+            return;
+        }
+
+        // The hand past the right edge wants what lies to the right, so the
+        // picture moves left.
+        double panX = ViewerZoomPan.X;
+        double panY = ViewerZoomPan.Y;
+        ViewerZoomPan.X -= velocity.X * seconds;
+        ViewerZoomPan.Y -= velocity.Y * seconds;
+        ClampViewerPan();
+        if (ViewerZoomPan.X == panX && ViewerZoomPan.Y == panY)
+        {
+            // The picture's own edge, or the first frame: nothing to redraw.
+            return;
+        }
+
+        UpdateViewerNavigator();
+        UpdateViewerCropDrag(_viewerCropLastHost);
+    }
+
+    // Whether the drag under way has changed the rectangle - a press inside it
+    // that never moved is not a new area to remember.
+    private bool _viewerCropDragChanged;
+
+    // NEVER EMPTY (2026-11-03, on request): a side pulled down to nothing - the
+    // hand back over the anchor, an edge laid onto its opposite - stays one
+    // pixel wide on the side the hand is on. It used to read 0 and, released
+    // there, took the whole rectangle with it.
+    private Rect AtLeastOnePixel(Rect area, Point anchor, Point hand)
+    {
+        double left = area.Left, top = area.Top, right = area.Right, bottom = area.Bottom;
+        if (right - left < 1)
+        {
+            if (hand.X >= anchor.X)
+            {
+                right = left + 1;
+            }
+            else
+            {
+                left = right - 1;
+            }
+        }
+        if (bottom - top < 1)
+        {
+            if (hand.Y >= anchor.Y)
+            {
+                bottom = top + 1;
+            }
+            else
+            {
+                top = bottom - 1;
+            }
+        }
+
+        // Kept on the picture: an anchor on its far edge has no room past it.
+        double shiftX = left < 0 ? -left : right > _viewerPixelWidth ? _viewerPixelWidth - right : 0;
+        double shiftY = top < 0 ? -top : bottom > _viewerPixelHeight ? _viewerPixelHeight - bottom : 0;
+        return new Rect(new Point(left + shiftX, top + shiftY), new Point(right + shiftX, bottom + shiftY));
     }
 
     private bool HandleViewerCropRelease()
@@ -486,6 +699,7 @@ public partial class MainWindow
         }
 
         _viewerCropDrag = CropDrag.None;
+        StopViewerCropEdgePan();
         if (ViewerImageHost.IsMouseCaptured)
         {
             ViewerImageHost.ReleaseMouseCapture();
@@ -495,6 +709,14 @@ public partial class MainWindow
         {
             _viewerCropSelection = null;
         }
+
+        // The rectangle the hand has just finished drawing, moving or sizing
+        // is the last area from now on (see RememberViewerCropArea).
+        if (_viewerCropDragChanged && _viewerCropSelection is { } finished)
+        {
+            RememberViewerCropArea(finished);
+        }
+        _viewerCropDragChanged = false;
         UpdateViewerCropOverlay();
     }
 
@@ -660,12 +882,17 @@ public partial class MainWindow
 
     // ----- Keys --------------------------------------------------------------
 
-    // Esc ends crop mode. Ctrl+C copies, and Ctrl+Shift+S saves under a name
-    // asked for - the text view's key for it - whatever there is to cut: the
-    // rectangle while there is one, else the temporary crop. With neither,
-    // both keys go on to mean what they always have (Ctrl+C copies the FILE).
-    // Asked ahead of every other window key, since all three mean something
-    // else further down.
+    // Esc ends crop mode. Ctrl+C copies, Ctrl+S saves beside the original as
+    // the 저장 buttons do (2026-11-03, on request), and Ctrl+Shift+S saves
+    // under a name asked for - the text view's key for it - whatever there is
+    // to cut: the rectangle while there is one, else the temporary crop. With
+    // neither, the keys go on to mean what they always have: Ctrl+C copies
+    // the FILE, Ctrl+Shift+S saves the active preset. That second one is
+    // OVERRIDDEN while there is a cut to take - the price of the text view's
+    // save-as key, which the crop was given on purpose. Ctrl+S takes nothing
+    // from the text view: with a picture on screen there is no text being
+    // edited. Asked ahead of every other window key, since all of these mean
+    // something else further down.
     private bool HandleViewerCropKey(KeyEventArgs e)
     {
         if (KeyboardInTextField)
@@ -698,6 +925,12 @@ public partial class MainWindow
         if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
         {
             CopyViewerCropToClipboard();
+            return true;
+        }
+
+        if (e.Key == Key.S && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            SaveViewerCrop(askName: false);
             return true;
         }
 
@@ -739,7 +972,7 @@ public partial class MainWindow
     // do on a file. Crop mode stays on with no rectangle, for that second one.
     private async void ApplyViewerCrop()
     {
-        if (_viewerCropSelection is null || _pendingViewerPath is not { } path)
+        if (_viewerCropSelection is not { } selection || _pendingViewerPath is not { } path)
         {
             return;
         }
@@ -749,6 +982,10 @@ public partial class MainWindow
         {
             return;
         }
+
+        // The cut's place in the file, before it becomes the picture on screen.
+        _viewerCropAppliedOrigin = new Point(
+            _viewerCropAppliedOrigin.X + selection.X, _viewerCropAppliedOrigin.Y + selection.Y);
 
         _viewerCropOriginal ??= new ViewerCropOriginal(
             ViewerImage.Source, _viewerPixelWidth, _viewerPixelHeight, _viewerDecodedWidth,
@@ -782,6 +1019,7 @@ public partial class MainWindow
         ExitViewerCropMode();
         _viewerCropApplied = null;
         _viewerCropOriginal = null;
+        _viewerCropAppliedOrigin = default;
 
         if (original.WasAnimated)
         {
@@ -862,6 +1100,133 @@ public partial class MainWindow
         {
             await PutImageOnClipboard(cut);
         }
+    }
+
+    // ----- The last area, again -----------------------------------------------
+    //
+    // 이전 영역 불러오기 (2026-11-03, on request): the last rectangle, put back
+    // on the picture on screen at the same place and size - a run of captures
+    // of the same page layout, cut the same way one after another. In the
+    // file's own pixels, so one drawn on a temporary crop counts where it
+    // really falls in the file; kept in the settings, so the run survives a
+    // restart.
+    //
+    // REMEMBERED WHEN THE HAND FINISHES A RECTANGLE - drawn, moved or sized
+    // (EndViewerCropDrag). It was "when a rectangle is used" (cut, saved,
+    // copied) for the first hours, on the argument that the button promises
+    // the area that was cut; in use that kept two areas in play: a rectangle
+    // set with care, then lost to a wrong picture chosen, could not be had
+    // back, and the button brought the older one instead. Now a new rectangle
+    // simply IS the last area, and nothing is asked of the hand to keep it.
+    // A rectangle the buttons PUT back changes nothing until the hand moves
+    // it - cut down to a smaller picture, it must not overwrite the whole one.
+    //
+    // On a picture of another size the area is cut down to what falls on it
+    // and NOT moved: the place is the point.
+    //
+    // THE PANEL'S VERSION (2026-11-03, on request): the same moment also
+    // records where the rectangle stood on the panel, in the host's own
+    // units, and the second button puts it back THERE - over whatever picture,
+    // size or zoom is under it now - reading off the pixels that place
+    // covers. One area is the file's, the other the screen's; both are written
+    // together, so the two buttons always mean the same last crop.
+
+    private Rect? LastViewerCropArea
+        => _settings.ViewerCropLastArea is [var x, var y, var width, var height] && width > 0 && height > 0
+            ? new Rect(x, y, width, height)
+            : null;
+
+    private Rect? LastViewerCropPanelArea
+        => _settings.ViewerCropLastPanelArea is [var x, var y, var width, var height] && width > 0 && height > 0
+            ? new Rect(x, y, width, height)
+            : null;
+
+    private void RememberViewerCropArea(Rect selection)
+    {
+        int[] area =
+        {
+            (int)(selection.X + _viewerCropAppliedOrigin.X),
+            (int)(selection.Y + _viewerCropAppliedOrigin.Y),
+            (int)selection.Width,
+            (int)selection.Height,
+        };
+
+        // Where the overlay draws it now (UpdateViewerCropOverlay's mapping).
+        var picture = ViewerPictureRectInHost();
+        double display = ViewerDisplayScale;
+        double[] panelArea =
+        {
+            Math.Round(picture.X + selection.X * display, 2),
+            Math.Round(picture.Y + selection.Y * display, 2),
+            Math.Round(selection.Width * display, 2),
+            Math.Round(selection.Height * display, 2),
+        };
+
+        if (_settings.ViewerCropLastArea is { } held && held.SequenceEqual(area) &&
+            _settings.ViewerCropLastPanelArea is { } heldPanel && heldPanel.SequenceEqual(panelArea))
+        {
+            return;
+        }
+
+        _settings.ViewerCropLastArea = area;
+        _settings.ViewerCropLastPanelArea = panelArea;
+        _settingsService.Save(_settings);
+        UpdateViewerPictureBar();
+    }
+
+    private void ViewerCropReuse_Click(object sender, RoutedEventArgs e)
+    {
+        if (LastViewerCropArea is not { } area)
+        {
+            return;
+        }
+
+        // Into the pixels of the picture on screen - the file's, less where a
+        // temporary crop starts.
+        PlaceViewerCropSelection(new Rect(area.X - _viewerCropAppliedOrigin.X, area.Y - _viewerCropAppliedOrigin.Y,
+            area.Width, area.Height));
+    }
+
+    private void ViewerCropReusePanel_Click(object sender, RoutedEventArgs e)
+    {
+        if (LastViewerCropPanelArea is not { } onPanel)
+        {
+            return;
+        }
+
+        // The pixels that place on the panel covers now, to the NEAREST whole
+        // ones - outward rounding would grow the same area by a pixel on the
+        // same picture, out of nothing but float noise.
+        var topLeft = HostToPicturePixel(onPanel.TopLeft);
+        var bottomRight = HostToPicturePixel(onPanel.BottomRight);
+        PlaceViewerCropSelection(new Rect(
+            new Point(Math.Round(topLeft.X), Math.Round(topLeft.Y)),
+            new Point(Math.Round(bottomRight.X), Math.Round(bottomRight.Y))));
+    }
+
+    // Either button's last step: crop mode on, the area cut down to the
+    // picture, shown with its buttons. Nothing when none of it falls on the
+    // picture.
+    private void PlaceViewerCropSelection(Rect area)
+    {
+        if (!_viewerCropMode)
+        {
+            EnterViewerCropMode();
+            if (!_viewerCropMode)
+            {
+                return;
+            }
+        }
+
+        area.Intersect(new Rect(0, 0, _viewerPixelWidth, _viewerPixelHeight));
+        if (area.IsEmpty || area.Width < 1 || area.Height < 1)
+        {
+            return;
+        }
+
+        _viewerCropSelection = area;
+        _viewerCropDrag = CropDrag.None;
+        UpdateViewerCropOverlay();
     }
 
     // ----- Save --------------------------------------------------------------
