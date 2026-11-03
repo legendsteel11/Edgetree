@@ -207,6 +207,9 @@ public static class Strings
     public static string MenuCut = "잘라내기";
     public static string MenuCopy = "복사";
     public static string MenuPaste = "붙여넣기";
+    public static string MenuUndoCopy = "복사 취소";
+    public static string MenuUndoMove = "이동 취소";
+    public static string UndoArrivalLeftFormat = "{0}개 항목은 그 사이에 변경되어 그대로 두었습니다.";
     // 썸네일 목록의 오른쪽 클릭 메뉴에서 폴더 전체를 표시할 때.
     public static string MenuSelectAll = "전체 선택";
     public static string MenuCompress = "압축";
@@ -1282,6 +1285,9 @@ public static class Strings
         MenuCut = "Cut";
         MenuCopy = "Copy";
         MenuPaste = "Paste";
+        MenuUndoCopy = "Undo copy";
+        MenuUndoMove = "Undo move";
+        UndoArrivalLeftFormat = "{0} item(s) changed in the meantime and were left as they are.";
         MenuSelectAll = "Select all";
         MenuCompress = "Compress";
         MenuExtract = "Extract";

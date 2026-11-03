@@ -265,6 +265,8 @@ public static class HelpContent
                     R("Ctrl+A", "같은 폴더의 항목 전체 선택", "Ctrl+A", "Select all in the same folder"),
                     R("Ctrl+C · Ctrl+X · Ctrl+V", "복사 · 잘라내기 · 붙여넣기",
                       "Ctrl+C · Ctrl+X · Ctrl+V", "Copy · cut · paste"),
+                    R("Ctrl+Z", "마지막 붙여넣기 · 드롭 취소 (복사본은 휴지통으로, 이동은 원래 위치로)",
+                      "Ctrl+Z", "Undo the last paste or drop (copies to the Recycle Bin, moves back where they were)"),
                     R("Ctrl+Shift+C", "경로 복사", "Ctrl+Shift+C", "Copy path"),
                     R("Alt+Enter", "속성", "Alt+Enter", "Properties"),
                     // Said as COPY since 2026-08-13. It always was one - the row

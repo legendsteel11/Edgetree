@@ -1624,6 +1624,13 @@
             <MenuItem Header="{x:Static services:Strings.MenuPaste}"
                     InputGestureText="Ctrl+V"
                     Click="PasteItem_Click"/>
+            <!-- 복사 취소 · 이동 취소 (2026-11-03): under the paste it takes
+                 back, named for what it undoes, and only there while there is
+                 one (ConfigureSharedRowMenuItems). -->
+            <MenuItem Tag="undoArrival"
+                    InputGestureText="Ctrl+Z"
+                    Visibility="Collapsed"
+                    Click="UndoArrival_Click"/>
             <!-- Next to paste, because both make something new in this folder.
                  It used to lead the folder group further up. A submenu since
                  the text files joined it - see the empty-space menu. -->
@@ -10234,6 +10241,10 @@
                                             InputGestureText="Ctrl+V"
                                             Tag="paste"
                                             Click="PasteItem_Click"/>
+                                    <MenuItem Tag="undoArrival"
+                                            InputGestureText="Ctrl+Z"
+                                            Visibility="Collapsed"
+                                            Click="UndoArrival_Click"/>
                                     <MenuItem Header="{x:Static services:Strings.MenuCreateShortcut}"
                                             Tag="createShortcut"
                                             Click="CreateShortcut_Click"/>

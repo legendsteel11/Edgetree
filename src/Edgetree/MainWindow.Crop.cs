@@ -975,9 +975,10 @@ public partial class MainWindow
 
         // 자르기 취소 (2026-11-03, on request). The whole way back to the
         // picture as the file has it, as the button does - not one cut at a
-        // time. Nothing else in the window answers Ctrl+Z (the text view's is
-        // its own, inside the editor), so with no temporary crop it is left
-        // alone.
+        // time. With no temporary crop the key is left alone: the text view
+        // answers it inside the editor, and the tree since the same evening
+        // with 복사 취소 · 이동 취소 - so a second Ctrl+Z after a crop is
+        // taken back undoes the last paste, as a second undo does anywhere.
         if (_viewerCropApplied is not null && e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
         {
             RevertViewerCrop();

@@ -102,11 +102,18 @@ public static class FileOperationService
     // out from the sources: a collision numbers up to " (2)", and a cut pasted
     // back into its own folder lands nowhere at all.
     public sealed record PasteOutcome(
-        bool WasMove, IReadOnlyList<string> SourcePaths, IReadOnlyList<string> CreatedPaths)
+        bool WasMove, IReadOnlyList<string> SourcePaths, IReadOnlyList<string> CreatedPaths,
+        IReadOnlyList<Landing> Landings)
     {
         public static readonly PasteOutcome None =
-            new(false, Array.Empty<string>(), Array.Empty<string>());
+            new(false, Array.Empty<string>(), Array.Empty<string>(), Array.Empty<Landing>());
     }
+
+    // WHERE ONE ITEM OF A PASTE OR A DROP LANDED, and from what (2026-11-03,
+    // for 복사 취소 / 이동 취소 - see ArrivalUndo). Replaced: it went over
+    // something already there, the drop's 대체 answer, which no undo can give
+    // back - so it is never taken away.
+    public readonly record struct Landing(string Source, string Path, bool Replaced);
 
     // Returns false only when the clipboard has nothing pasteable, so the
     // caller can distinguish "nothing to do" from "tried and failed".
@@ -134,7 +141,8 @@ public static class FileOperationService
         }
 
         var created = new List<string>();
-        outcome = new PasteOutcome(move, sourcePaths, created);
+        var landings = new List<Landing>();
+        outcome = new PasteOutcome(move, sourcePaths, created, landings);
 
         foreach (string sourcePath in sourcePaths)
         {
@@ -146,6 +154,8 @@ public static class FileOperationService
                 if (landed is not null)
                 {
                     created.Add(landed);
+                    // A paste never writes over anything (numbered instead).
+                    landings.Add(new Landing(sourcePath, landed, Replaced: false));
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -399,11 +409,14 @@ public static class FileOperationService
     // just skips that item and moves on to the next. A name the SAME drop has
     // already put there is numbered instead - see below.
     public static bool TryImportDroppedPaths(IReadOnlyList<string> sourcePaths, string destinationFolder,
-        Func<string, bool> confirmOverwrite, out IReadOnlyList<string> createdPaths, out string? error)
+        Func<string, bool> confirmOverwrite, out IReadOnlyList<string> createdPaths,
+        out IReadOnlyList<Landing> landings, out string? error)
     {
         error = null;
         var created = new List<string>();
+        var landed = new List<Landing>();
         createdPaths = created;
+        landings = landed;
         foreach (string sourcePath in sourcePaths)
         {
             try
@@ -468,11 +481,13 @@ public static class FileOperationService
 
                     CopyDirectoryRecursive(sourcePath, destPath, overwrite: exists);
                     created.Add(destPath);
+                    landed.Add(new Landing(sourcePath, destPath, Replaced: exists));
                 }
                 else if (File.Exists(sourcePath))
                 {
                     File.Copy(sourcePath, destPath, overwrite: exists);
                     created.Add(destPath);
+                    landed.Add(new Landing(sourcePath, destPath, Replaced: exists));
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -502,12 +517,15 @@ public static class FileOperationService
     // may well have them open: refreshing only the destination would leave the
     // rows that just left still sitting there.
     public static bool TryMoveDroppedPaths(IReadOnlyList<string> sourcePaths, string destinationFolder,
-        out IReadOnlyList<string> emptiedFolders, out IReadOnlyList<string> createdPaths, out string? error)
+        out IReadOnlyList<string> emptiedFolders, out IReadOnlyList<string> createdPaths,
+        out IReadOnlyList<Landing> landings, out string? error)
     {
         error = null;
         var folders = new List<string>();
         var created = new List<string>();
+        var moved = new List<Landing>();
         createdPaths = created;
+        landings = moved;
         foreach (string sourcePath in sourcePaths)
         {
             try
@@ -516,6 +534,7 @@ public static class FileOperationService
                 if (MoveEntry(sourcePath, destinationFolder) is { } landed)
                 {
                     created.Add(landed);
+                    moved.Add(new Landing(sourcePath, landed, Replaced: false));
                 }
                 if (parent is not null && !folders.Contains(parent, StringComparer.OrdinalIgnoreCase))
                 {
@@ -758,6 +777,211 @@ public static class FileOperationService
         }
 
         return true;
+    }
+
+    // WHAT A COPY LOOKED LIKE WHEN IT LANDED, to tell later whether anything
+    // has happened to it since: its size and time, or for a folder every
+    // entry under it - how many, how many bytes, the latest write. Read off
+    // the copy both times and never set against this machine's clock: on a
+    // NAS the times are the server's, which can be minutes away.
+    //
+    // What a NAS or the shell writes into a folder by itself is left out, or
+    // a Synology indexing a pasted photo folder (@eaDir, see the watcher's
+    // note on it) or Explorer caching its thumbnails would read as someone
+    // having changed it. A folder's own time is left out for the same reason
+    // - it moves whenever one of those lands - which lets a rename inside
+    // through: harmless, since the renamed file is still a copy.
+    public readonly record struct Fingerprint(long Count, long Bytes, DateTime Latest);
+
+    private static bool IsSelfWritten(string name)
+        => string.Equals(name, "@eaDir", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, "Thumbs.db", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, "desktop.ini", StringComparison.OrdinalIgnoreCase) ||
+           string.Equals(name, ".DS_Store", StringComparison.OrdinalIgnoreCase);
+
+    public static Fingerprint? TakeFingerprint(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                var file = new FileInfo(path);
+                return new Fingerprint(1, file.Length, file.LastWriteTimeUtc);
+            }
+            if (!Directory.Exists(path))
+            {
+                return null;
+            }
+
+            long count = 0, bytes = 0;
+            DateTime latest = DateTime.MinValue;
+            var pending = new Stack<DirectoryInfo>();
+            pending.Push(new DirectoryInfo(path));
+            while (pending.TryPop(out var folder))
+            {
+                foreach (var entry in folder.EnumerateFileSystemInfos("*",
+                             new EnumerationOptions { AttributesToSkip = 0, IgnoreInaccessible = false }))
+                {
+                    if (IsSelfWritten(entry.Name))
+                    {
+                        continue;
+                    }
+
+                    count++;
+                    if (entry is FileInfo file)
+                    {
+                        bytes += file.Length;
+                        if (file.LastWriteTimeUtc > latest)
+                        {
+                            latest = file.LastWriteTimeUtc;
+                        }
+                    }
+                    else if (entry is DirectoryInfo sub &&
+                             !sub.Attributes.HasFlag(FileAttributes.ReparsePoint))
+                    {
+                        pending.Push(sub);
+                    }
+                }
+            }
+            return new Fingerprint(count, bytes, latest);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    // 복사 취소 · 이동 취소 (2026-11-03, on request): the last paste or drop
+    // made in this app, taken back - Ctrl+Z, or the row under 붙여넣기. One
+    // level, as the request was for the paste just made; the next paste or
+    // drop replaces it.
+    //
+    // A COPY GOES TO THE RECYCLE BIN, through TryShellDelete like every
+    // other delete here - and on a share that has no bin it is gone for good,
+    // silently (FOF_WANTNUKEWARNING never warns, measured 2026-08-13). So a
+    // copy is only ever taken away while it is still exactly the copy, and
+    // while what it was copied from is still there: then nothing is lost
+    // that the original does not still hold. Anything else is left, and
+    // counted. Nothing asks first - a confirmation on taking back one's own
+    // paste would ask about the only thing the person just did.
+    //
+    // A MOVE GOES BACK where it came from, under its old name, never
+    // numbered: only while that name is free and its folder is still there.
+    // Changed since or not does not matter - a move loses nothing.
+    //
+    // A REPLACED item (the drop's 대체) is never part of it: what it went
+    // over is gone, and taking the new one away would leave nothing at all.
+    public sealed class ArrivalUndo
+    {
+        private readonly List<(Landing Landing, Fingerprint? Print)> _items;
+
+        private ArrivalUndo(bool wasMove, List<(Landing, Fingerprint?)> items)
+        {
+            WasMove = wasMove;
+            _items = items;
+        }
+
+        public bool WasMove { get; }
+
+        // Null when nothing landed that could be taken back. Read right after
+        // the paste or drop, on the same thread - a copy's print has to be
+        // taken before anyone has had the chance to touch it.
+        public static ArrivalUndo? Record(bool wasMove, IReadOnlyList<Landing> landings)
+        {
+            var items = landings
+                .Where(landing => !landing.Replaced)
+                .Select(landing => (landing, wasMove ? (Fingerprint?)null : TakeFingerprint(landing.Path)))
+                .Where(item => wasMove || item.Item2 is not null)
+                .ToList();
+            return items.Count == 0 ? null : new ArrivalUndo(wasMove, items);
+        }
+
+        // Removed: paths no longer where the paste put them. Restored: where
+        // the moved items are back. Left: items still there that were not
+        // taken back, for the caller to say so.
+        public sealed record Result(IReadOnlyList<string> Removed, IReadOnlyList<string> Restored, int Left, string? Error);
+
+        public Result Undo(IntPtr owner)
+            => WasMove ? MoveBack() : RemoveCopies(owner);
+
+        private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
+
+        private Result RemoveCopies(IntPtr owner)
+        {
+            var candidates = _items
+                .Where(item => Exists(item.Landing.Path) && Exists(item.Landing.Source) &&
+                               TakeFingerprint(item.Landing.Path) == item.Print)
+                .Select(item => item.Landing.Path)
+                .ToList();
+            int stillThere = _items.Count(item => Exists(item.Landing.Path));
+
+            // What the shell could not remove it has already said so about, in
+            // its own dialog; what went is read off the disk afterwards, as
+            // the delete row does.
+            string? error = null;
+            if (candidates.Count > 0)
+            {
+                TryShellDelete(candidates, owner, permanent: false, out _, out error);
+            }
+
+            var removed = candidates.Where(path => !Exists(path)).ToList();
+            return new Result(removed, Array.Empty<string>(), stillThere - removed.Count, error);
+        }
+
+        private Result MoveBack()
+        {
+            var removed = new List<string>();
+            var restored = new List<string>();
+            int left = 0;
+            string? error = null;
+            foreach (var (landing, _) in _items)
+            {
+                string from = landing.Path;
+                string to = landing.Source.TrimEnd(Path.DirectorySeparatorChar);
+                if (!Exists(from))
+                {
+                    continue;
+                }
+
+                if (Exists(to) || Path.GetDirectoryName(to) is not { } toFolder || !Directory.Exists(toFolder))
+                {
+                    left++;
+                    continue;
+                }
+
+                try
+                {
+                    if (Directory.Exists(from))
+                    {
+                        if (IsSameVolume(from, to))
+                        {
+                            Directory.Move(from, to);
+                        }
+                        else
+                        {
+                            // As MoveEntry does across volumes: the whole tree
+                            // first, the source only once that has landed.
+                            CopyDirectoryRecursive(from, to, overwrite: false);
+                            Directory.Delete(from, recursive: true);
+                        }
+                    }
+                    else
+                    {
+                        File.Move(from, to);
+                    }
+
+                    PathMoved?.Invoke(from, to);
+                    removed.Add(from);
+                    restored.Add(to);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    error = ex.Message;
+                    left++;
+                }
+            }
+            return new Result(removed, restored, left, error);
+        }
     }
 
     // The VB FileSystem delete that used to live here is GONE (2026-08-13).

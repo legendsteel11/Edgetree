@@ -15284,6 +15284,13 @@ public partial class MainWindow : Window
                 CopyPath_Click(sender, e);
                 e.Handled = true;
                 break;
+            // 복사 취소 · 이동 취소, where Ctrl+V is. A name box in the tree
+            // keeps its own Ctrl+Z: the box handles the key first, so it never
+            // bubbles up to here.
+            case Key.Z when Keyboard.Modifiers == ModifierKeys.Control:
+                UndoLastArrival();
+                e.Handled = true;
+                break;
             case Key.X when Keyboard.Modifiers == ModifierKeys.Control:
                 CutItem_Click(sender, e);
                 e.Handled = true;
@@ -15775,6 +15782,7 @@ public partial class MainWindow : Window
             Key.C when Keyboard.Modifiers == ModifierKeys.Control => () => CopyItem_Click(sender, e),
             Key.C when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) => () => CopyPath_Click(sender, e),
             Key.V when Keyboard.Modifiers == ModifierKeys.Control => () => PasteItem_Click(sender, e),
+            Key.Z when Keyboard.Modifiers == ModifierKeys.Control => () => UndoArrival_Click(sender, e),
             // As the window answers it: a file counts as the folder it is in.
             Key.F when Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift) &&
                        SearchFolderForSelection() is { } searchFolder => () => SearchInFolder(searchFolder),
@@ -17357,10 +17365,11 @@ public partial class MainWindow : Window
 
         string? error;
         IReadOnlyList<string> arrived;
+        IReadOnlyList<FileOperationService.Landing> landings;
         if (move)
         {
             if (!FileOperationService.TryMoveDroppedPaths(
-                    importablePaths, item.FullPath, out var emptied, out arrived, out error))
+                    importablePaths, item.FullPath, out var emptied, out arrived, out landings, out error))
             {
                 return;
             }
@@ -17381,11 +17390,12 @@ public partial class MainWindow : Window
             }
         }
         else if (!FileOperationService.TryImportDroppedPaths(
-                     importablePaths, item.FullPath, ConfirmOverwrite, out arrived, out error))
+                     importablePaths, item.FullPath, ConfirmOverwrite, out arrived, out landings, out error))
         {
             return;
         }
 
+        RecordArrival(move, landings);
         if (error is not null)
         {
             MessageBox.Show(this, error, Strings.ImportFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -18077,6 +18087,14 @@ public partial class MainWindow : Window
     {
         bool isMultiSelection = _multiSelection.Count > 1;
         bool isFolder = subject is { IsPlaceholder: false, IsDirectory: true };
+
+        // 복사 취소 · 이동 취소, whatever row the menu opened on: it is about
+        // the last paste or drop, not about the row.
+        if (FindTaggedMenuElement<MenuItem>(menu, "undoArrival") is { } undoArrivalItem)
+        {
+            undoArrivalItem.Visibility = _lastArrival is not null ? Visibility.Visible : Visibility.Collapsed;
+            undoArrivalItem.Header = _lastArrival is { WasMove: true } ? Strings.MenuUndoMove : Strings.MenuUndoCopy;
+        }
 
         // 편집 on a text row (TXT/MD, and the kinds that joined them 2026-10-27),
         // present wherever its 보기 is, and greyed by
@@ -22047,6 +22065,7 @@ public partial class MainWindow : Window
         {
             return; // Clipboard has nothing pasteable.
         }
+        RecordArrival(outcome.WasMove, outcome.Landings);
         if (error is not null)
         {
             MessageBox.Show(this, error, Strings.PasteFailedTitle, MessageBoxButton.OK, MessageBoxImage.Warning);
@@ -22084,6 +22103,81 @@ public partial class MainWindow : Window
                     RefreshFolderPreservingState(sourceFolder);
                 }
             }
+        }
+    }
+
+    // ----- 복사 취소 · 이동 취소 (2026-11-03) ----------------------------------
+    //
+    // The last paste or drop, taken back - Ctrl+Z in the tree, or the row
+    // under 붙여넣기 on the tree's and the thumbnail list's menus, named for
+    // what it undoes. The rules for what may be taken back are the service's
+    // (FileOperationService.ArrivalUndo). One level: the next paste or drop
+    // replaces it, and one that landed nothing leaves the last one standing.
+    private FileOperationService.ArrivalUndo? _lastArrival;
+
+    private void RecordArrival(bool wasMove, IReadOnlyList<FileOperationService.Landing> landings)
+    {
+        if (FileOperationService.ArrivalUndo.Record(wasMove, landings) is { } undo)
+        {
+            _lastArrival = undo;
+        }
+    }
+
+    private void UndoArrival_Click(object sender, RoutedEventArgs e) => UndoLastArrival();
+
+    // THE VIEW STAYS WHERE IT IS. The rows that go are merged out of their
+    // folders and the ones moved back are merged into theirs, but nothing is
+    // selected or scrolled to: the person is looking at where the paste
+    // landed, and an undo that carried the tree off to the source folders
+    // would be the app moving the view by itself.
+    private void UndoLastArrival()
+    {
+        if (_lastArrival is not { } undo)
+        {
+            return;
+        }
+
+        _lastArrival = null;
+        var result = undo.Undo(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+
+        // The arrivals were marked when they landed (SelectArrivedFiles), and
+        // those marks would now name files that are gone.
+        ClearMultiSelection();
+        if (!undo.WasMove)
+        {
+            // As the delete row does for what it removes.
+            foreach (string gone in result.Removed)
+            {
+                RemoveBookmarksUnder(gone);
+            }
+        }
+        if (result.Removed.Count > 0)
+        {
+            DropMovedSearchEntries(result.Removed);
+        }
+
+        foreach (string folder in result.Removed.Concat(result.Restored)
+                     .Select(path => Path.GetDirectoryName(path.TrimEnd(Path.DirectorySeparatorChar)) ?? string.Empty)
+                     .Where(folder => folder.Length > 0)
+                     .Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (FindLoadedItemForPath(folder) is { ChildrenLoaded: true } loaded)
+            {
+                RefreshFolderPreservingState(loaded);
+            }
+        }
+
+        string title = undo.WasMove ? Strings.MenuUndoMove : Strings.MenuUndoCopy;
+        if (result.Error is not null)
+        {
+            MessageBox.Show(this, result.Error, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        else if (result.Left > 0)
+        {
+            // Said, because what was left looks exactly like an undo that did
+            // not happen.
+            MessageBox.Show(this, string.Format(Strings.UndoArrivalLeftFormat, result.Left), title,
+                MessageBoxButton.OK, MessageBoxImage.Information);
         }
     }
 
