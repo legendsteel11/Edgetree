@@ -824,6 +824,8 @@ public static class HelpContent
                     R("Ctrl+클릭 · Shift+클릭", "여러 개 선택 · 범위 선택 (Ctrl+Shift는 범위 추가, Ctrl+A는 전체)",
                       "Ctrl+click · Shift+click",
                       "Pick several · pick a range (Ctrl+Shift adds a range, Ctrl+A takes all)"),
+                    R("칸에서 우클릭", "트리와 같은 파일 메뉴",
+                      "Right-click a cell", "The same file menu as the tree"),
                     R("선택한 칸에서 우클릭", "선택한 파일 전체를 복사 · 잘라내기 · 삭제",
                       "Right-click a picked cell", "Copy, cut or delete everything picked"),
                     R("칸을 밖으로 드래그", "다른 앱으로 드롭, 여러 개 선택했으면 함께 감",

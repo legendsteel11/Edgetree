@@ -17734,7 +17734,6 @@ public partial class MainWindow : Window
             var refreshItem = FindTaggedMenuElement<MenuItem>(menu, "refresh");
             var searchInFolderItem = FindTaggedMenuElement<MenuItem>(menu, "searchInFolder");
             var sortMenu = FindTaggedMenuElement<MenuItem>(menu, "sort");
-            var openItem = FindTaggedMenuElement<MenuItem>(menu, "open");
             var openWithItem = FindTaggedMenuElement<MenuItem>(menu, "openWith");
             var compressItem = FindTaggedMenuElement<MenuItem>(menu, "compress");
             var extractItem = FindTaggedMenuElement<MenuItem>(menu, "extract");
@@ -17795,45 +17794,9 @@ public partial class MainWindow : Window
                 }
             }
 
-            // 편집 on a text row (TXT/MD, and the kinds that joined them 2026-10-27),
-            // present wherever its 보기 is, and greyed by
-            // 보기's rule: already done. That is its text on screen and being
-            // edited - or on screen and not editable at all. It was first left
-            // live while editing, to move the keyboard into the text, and read
-            // as a row offering what was already the case (2026-10-13); the
-            // row's own mark still moves the keyboard there.
-            if (FindTaggedMenuElement<MenuItem>(menu, "editHere") is { } editHereItem)
-            {
-                var editRow = ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } row
-                              && IsViewerText(row.FullPath)
-                    ? row
-                    : null;
-                editHereItem.Visibility = editRow is not null ? Visibility.Visible : Visibility.Collapsed;
-                editHereItem.IsEnabled = editRow is null || _viewerTextEditor is null
-                                         || !ShownViewerTextHasNoEditToStart(editRow.FullPath);
-            }
-
-            if (FindTaggedMenuElement<MenuItem>(menu, "viewAsText") is { } viewAsTextItem)
-            {
-                viewAsTextItem.Visibility = _multiSelection.Count <= 1 &&
-                    ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false, IsPlaceholder: false, IsShowMore: false } askRow &&
-                    CanAskViewerText(askRow.FullPath)
-                        ? Visibility.Visible
-                        : Visibility.Collapsed;
-            }
-
-            // 인쇄 on one picture, text or PDF row (2026-10-13; PDF 10-27),
-            // absent otherwise: a picture only where Windows has a print for
-            // its type (the answer is remembered per extension -
-            // ShellFileService.CanPrint). A PDF always: the app prints it.
-            if (FindTaggedMenuElement<MenuItem>(menu, "print") is { } printItem)
-            {
-                bool printable = _multiSelection.Count <= 1 &&
-                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } printRow &&
-                    (IsViewerText(printRow.FullPath) || IsViewerPdf(printRow.FullPath) ||
-                     (ThumbnailExtensions.Contains(Path.GetExtension(printRow.FullPath)) && ShellFileService.CanPrint(printRow.FullPath)));
-                printItem.Visibility = printable ? Visibility.Visible : Visibility.Collapsed;
-            }
+            // 편집, 텍스트로 보기, 인쇄, 열기 and the file rows below them are set by
+            // ConfigureSharedRowMenuItems at the end of this block, which the
+            // thumbnail list's menu calls too.
 
             // 재생 on a FOLDER row. Absent unless the folder's children are
             // already read AND hold something playable - the user's call
@@ -17926,29 +17889,9 @@ public partial class MainWindow : Window
                 multiInfoText.Text = string.Format(Strings.MenuMultiSelectionInfo, _multiSelection.Count);
             }
 
-            // Single-target-by-design actions grey out on a multi-selection
-            // rather than silently acting on just one of the rows: 경로 복사
-            // (multi-path copy was deliberately left out of the multi
-            // operations) and 이름 바꾸기 (renaming several rows at once isn't a
-            // thing this menu offers). RenameItem_Click carries the same guard
-            // for the F2 path, which doesn't come through this menu.
-            if (copyPathItem is not null) { copyPathItem.IsEnabled = !isMultiSelection; }
-            if (renameItem is not null) { renameItem.IsEnabled = !isMultiSelection; }
-
             // The bookmark submenu configures itself when it opens (see
             // BookmarkRowSubmenu_Opened) - its label depends on the row and is
             // read at the moment it is shown.
-
-            // The shortcut lands beside the row for the same reason the zip
-            // below does, so it goes dead on the same one case: a drive root
-            // has no folder to put it in. Unlike 경로 복사 and 이름 바꾸기 it is
-            // NOT greyed on a multi-selection - Explorer gives five files five
-            // shortcuts, and so does this.
-            if (createShortcutItem is not null)
-            {
-                createShortcutItem.IsEnabled =
-                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, Parent: not null };
-            }
 
             // 전체 선택 takes the folder around the row (see TreeSelectAll_Click),
             // and a drive root has none - the one case 바로 가기 만들기 above and
@@ -17957,27 +17900,6 @@ public partial class MainWindow : Window
             {
                 selectAllItem.IsEnabled =
                     ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, Parent: not null };
-            }
-
-            // The zip lands next to the right-clicked row, so a drive root -
-            // the one kind of row with no parent folder - has nowhere to put
-            // it and is the only case this greys out.
-            if (compressItem is not null)
-            {
-                compressItem.IsEnabled =
-                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, Parent: not null };
-            }
-
-            // Shown only on an actual .zip row, and never on a multi-selection
-            // (unpacking several archives at once isn't offered).
-            if (extractItem is not null)
-            {
-                extractItem.Visibility =
-                _multiSelection.Count <= 1 &&
-                ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false, Parent: not null } zipRow &&
-                ArchiveService.IsZipPath(zipRow.FullPath)
-                    ? Visibility.Visible
-                    : Visibility.Collapsed;
             }
 
             bool isFolder = ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true };
@@ -18043,25 +17965,6 @@ public partial class MainWindow : Window
                 ApplyFolderSortMenuState(sortMenu, sortSubject);
             }
 
-            // The same row, said three ways. NOT disabled for a folder: it does
-            // something there, and so does Enter, which this row shows - greying
-            // it would put "unavailable" on a row whose own key works. What was
-            // wrong was the word, since a folder has no default program.
-            //
-            // And the word has to follow the STATE, not just the kind. 펼치기
-            // over an already-open folder was the same defect one step along:
-            // a row naming an action it would then decline to perform. The
-            // action toggles now (see OpenItem_Click), so both words are always
-            // true and the row is never dead.
-            if (openItem is not null)
-            {
-                openItem.Header = isFolder
-                    ? (ExplorerTree.SelectedItem is FileSystemItem { IsExpanded: true }
-                        ? Strings.MenuCollapseFolder
-                        : Strings.MenuExpandFolder)
-                    : Strings.MenuOpen;
-            }
-
             // 폴더로 이동 is ABSENT on a folder rather than greyed: a folder row
             // has no folder to go to that is not itself, and a dead row naming
             // an action is the defect the 열기 header above was rewritten for.
@@ -18073,23 +17976,139 @@ public partial class MainWindow : Window
                         : Visibility.Collapsed;
             }
 
-            // "Open with" only makes sense for files - folders don't have a
-            // file-association picker.
-            if (openWithItem is not null)
-            {
-                openWithItem.IsEnabled =
-                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false };
-            }
+            ConfigureSharedRowMenuItems(menu, ExplorerTree.SelectedItem as FileSystemItem);
+        }
+    }
 
-            // Files and folders both make sense here - Code.exe opens either
-            // one directly - so this only gates on whether Code is actually
-            // installed (see ShellFileService.IsCodeRegistered), not on
-            // isFolder.
-            if (openWithCodeItem is not null)
-            {
-                openWithCodeItem.IsEnabled =
-                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } && ShellFileService.IsCodeRegistered();
-            }
+    // THE ROWS BOTH ROW MENUS CARRY, set for the row they are about
+    // (2026-11-03, when the thumbnail list's menu took most of the tree's
+    // rows). Moved out of ExplorerItemContextMenu_Opened with nothing changed
+    // but the subject - the tree's selection there, the right-clicked cell in
+    // FilmstripContextMenu_Opened - so the same row follows one set of rules in
+    // both menus. A tag a menu does not carry is skipped.
+    private void ConfigureSharedRowMenuItems(ItemsControl menu, FileSystemItem? subject)
+    {
+        bool isMultiSelection = _multiSelection.Count > 1;
+        bool isFolder = subject is { IsPlaceholder: false, IsDirectory: true };
+
+        // 편집 on a text row (TXT/MD, and the kinds that joined them 2026-10-27),
+        // present wherever its 보기 is, and greyed by
+        // 보기's rule: already done. That is its text on screen and being
+        // edited - or on screen and not editable at all. It was first left
+        // live while editing, to move the keyboard into the text, and read
+        // as a row offering what was already the case (2026-10-13); the
+        // row's own mark still moves the keyboard there.
+        if (FindTaggedMenuElement<MenuItem>(menu, "editHere") is { } editHereItem)
+        {
+            var editRow = subject is { IsDirectory: false } row
+                          && IsViewerText(row.FullPath)
+                ? row
+                : null;
+            editHereItem.Visibility = editRow is not null ? Visibility.Visible : Visibility.Collapsed;
+            editHereItem.IsEnabled = editRow is null || _viewerTextEditor is null
+                                     || !ShownViewerTextHasNoEditToStart(editRow.FullPath);
+        }
+
+        if (FindTaggedMenuElement<MenuItem>(menu, "viewAsText") is { } viewAsTextItem)
+        {
+            viewAsTextItem.Visibility = _multiSelection.Count <= 1 &&
+                subject is { IsDirectory: false, IsPlaceholder: false, IsShowMore: false } askRow &&
+                CanAskViewerText(askRow.FullPath)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+
+        // 인쇄 on one picture, text or PDF row (2026-10-13; PDF 10-27),
+        // absent otherwise: a picture only where Windows has a print for
+        // its type (the answer is remembered per extension -
+        // ShellFileService.CanPrint). A PDF always: the app prints it.
+        if (FindTaggedMenuElement<MenuItem>(menu, "print") is { } printItem)
+        {
+            bool printable = _multiSelection.Count <= 1 &&
+                subject is { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } printRow &&
+                (IsViewerText(printRow.FullPath) || IsViewerPdf(printRow.FullPath) ||
+                 (ThumbnailExtensions.Contains(Path.GetExtension(printRow.FullPath)) && ShellFileService.CanPrint(printRow.FullPath)));
+            printItem.Visibility = printable ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        // Single-target-by-design actions grey out on a multi-selection
+        // rather than silently acting on just one of the rows: 경로 복사
+        // (multi-path copy was deliberately left out of the multi
+        // operations) and 이름 바꾸기 (renaming several rows at once isn't a
+        // thing this menu offers). RenameItem_Click carries the same guard
+        // for the F2 path, which doesn't come through this menu.
+        if (FindTaggedMenuElement<MenuItem>(menu, "copyPath") is { } copyPathItem)
+        {
+            copyPathItem.IsEnabled = !isMultiSelection;
+        }
+        if (FindTaggedMenuElement<MenuItem>(menu, "rename") is { } renameItem)
+        {
+            renameItem.IsEnabled = !isMultiSelection;
+        }
+
+        // The shortcut lands beside the row for the same reason the zip
+        // below does, so it goes dead on the same one case: a drive root
+        // has no folder to put it in. Unlike 경로 복사 and 이름 바꾸기 it is
+        // NOT greyed on a multi-selection - Explorer gives five files five
+        // shortcuts, and so does this.
+        if (FindTaggedMenuElement<MenuItem>(menu, "createShortcut") is { } createShortcutItem)
+        {
+            createShortcutItem.IsEnabled = subject is { IsPlaceholder: false, IsShowMore: false, Parent: not null };
+        }
+
+        // The zip lands next to the right-clicked row, so a drive root -
+        // the one kind of row with no parent folder - has nowhere to put
+        // it and is the only case this greys out.
+        if (FindTaggedMenuElement<MenuItem>(menu, "compress") is { } compressItem)
+        {
+            compressItem.IsEnabled = subject is { IsPlaceholder: false, IsShowMore: false, Parent: not null };
+        }
+
+        // Shown only on an actual .zip row, and never on a multi-selection
+        // (unpacking several archives at once isn't offered).
+        if (FindTaggedMenuElement<MenuItem>(menu, "extract") is { } extractItem)
+        {
+            extractItem.Visibility =
+                _multiSelection.Count <= 1 &&
+                subject is { IsPlaceholder: false, IsDirectory: false, Parent: not null } zipRow &&
+                ArchiveService.IsZipPath(zipRow.FullPath)
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+        }
+
+        // The same row, said three ways. NOT disabled for a folder: it does
+        // something there, and so does Enter, which this row shows - greying
+        // it would put "unavailable" on a row whose own key works. What was
+        // wrong was the word, since a folder has no default program.
+        //
+        // And the word has to follow the STATE, not just the kind. 펼치기
+        // over an already-open folder was the same defect one step along:
+        // a row naming an action it would then decline to perform. The
+        // action toggles now (see OpenItem_Click), so both words are always
+        // true and the row is never dead.
+        if (FindTaggedMenuElement<MenuItem>(menu, "open") is { } openItem)
+        {
+            openItem.Header = isFolder
+                ? (subject is { IsExpanded: true }
+                    ? Strings.MenuCollapseFolder
+                    : Strings.MenuExpandFolder)
+                : Strings.MenuOpen;
+        }
+
+        // "Open with" only makes sense for files - folders don't have a
+        // file-association picker.
+        if (FindTaggedMenuElement<MenuItem>(menu, "openWith") is { } openWithItem)
+        {
+            openWithItem.IsEnabled = subject is { IsPlaceholder: false, IsDirectory: false };
+        }
+
+        // Files and folders both make sense here - Code.exe opens either
+        // one directly - so this only gates on whether Code is actually
+        // installed (see ShellFileService.IsCodeRegistered), not on
+        // isFolder.
+        if (FindTaggedMenuElement<MenuItem>(menu, "openWithCode") is { } openWithCodeItem)
+        {
+            openWithCodeItem.IsEnabled = subject is { IsPlaceholder: false } && ShellFileService.IsCodeRegistered();
         }
     }
 
@@ -18315,6 +18334,23 @@ public partial class MainWindow : Window
     // collapse every other expanded folder's own descendants.
     private void RefreshFolder_Click(object sender, RoutedEventArgs e)
     {
+        // FROM THE THUMBNAIL LIST'S MENU (2026-11-03): the folder the list
+        // shows, which for a right-clicked cell is the folder it is in. MERGED
+        // rather than refilled, because the selection is usually a file inside
+        // it - RefreshChildren would replace that row's instance under the
+        // selection (see RefreshFolderPreservingState). The pictures are what
+        // a refresh asked from here is mostly for: a file changed in place
+        // fires no watcher event.
+        if (_filmstripMenuInPlay)
+        {
+            if ((FilmstripMenuItem?.Parent ?? FilmstripDropFolder()) is { IsPlaceholder: false, IsDirectory: true } shown)
+            {
+                RefreshFolderPreservingState(shown);
+                RefreshFilmstripPictures();
+            }
+            return;
+        }
+
         if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: true } item)
         {
             item.RefreshChildren();
@@ -21405,7 +21441,7 @@ public partial class MainWindow : Window
         }
 
         bool isMultiSelection = _multiSelection.Count > 1;
-        var selected = ExplorerTree.SelectedItem as FileSystemItem;
+        var selected = MenuRowSubject;
 
         toggle.IsEnabled = !isMultiSelection && selected is { IsPlaceholder: false, IsShowMore: false };
         toggle.Header = selected is { IsBookmarked: true }
@@ -21482,7 +21518,7 @@ public partial class MainWindow : Window
 
     private void BookmarkMenuItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false } item)
+        if (MenuRowSubject is { IsPlaceholder: false, IsShowMore: false } item)
         {
             ToggleBookmark(item);
         }
@@ -21610,7 +21646,7 @@ public partial class MainWindow : Window
 
     private void OpenItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
+        if (MenuRowSubject is not { IsPlaceholder: false } item)
         {
             return;
         }
@@ -21636,7 +21672,7 @@ public partial class MainWindow : Window
 
     private void OpenWithPicker_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsDirectory: false } item &&
+        if (MenuRowSubject is { IsPlaceholder: false, IsDirectory: false } item &&
             !IsUnreachableNetworkItem(item))
         {
             ShellFileService.OpenWithPicker(item.FullPath);
@@ -22039,8 +22075,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
+        if (MenuRowSubject is not { IsPlaceholder: false } item)
         {
+            return;
+        }
+
+        // FROM THE THUMBNAIL LIST'S MENU the box opens on the cell (2026-11-03),
+        // where the eye is - the box F2 opens after a press in the panel - when
+        // the cell has a name line to open it on. Otherwise the tree row's.
+        if (FilmstripMenuItem is not null && FilmstripRenameAllowed &&
+            _filmstripCells.FirstOrDefault(c =>
+                string.Equals(c.Path, item.FullPath, StringComparison.OrdinalIgnoreCase)) is { } cell)
+        {
+            ScrollFilmstripTo(cell);
+            BeginFilmstripRename(cell);
             return;
         }
 
@@ -23220,7 +23268,7 @@ public partial class MainWindow : Window
     {
         var items = GetEffectiveSelection();
         if (items.Count == 0 ||
-            ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsShowMore: false } anchor ||
+            MenuRowSubject is not { IsPlaceholder: false, IsShowMore: false } anchor ||
             anchor.Parent is not { } destination)
         {
             return;
@@ -23259,7 +23307,7 @@ public partial class MainWindow : Window
     // Only reachable from a .zip row (the menu item is Collapsed otherwise).
     private async void ExtractItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsDirectory: false } item ||
+        if (MenuRowSubject is not { IsPlaceholder: false, IsDirectory: false } item ||
             item.Parent is not { } destination ||
             !ArchiveService.IsZipPath(item.FullPath))
         {
@@ -23280,7 +23328,7 @@ public partial class MainWindow : Window
 
     private void CopyPath_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item)
+        if (MenuRowSubject is { IsPlaceholder: false } item)
         {
             ClearCutMarks();
             FileOperationService.CopyPathToClipboard(item.FullPath);
@@ -23289,7 +23337,7 @@ public partial class MainWindow : Window
 
     private void OpenTerminal_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
+        if (MenuRowSubject is not { IsPlaceholder: false } item)
         {
             return;
         }
@@ -23303,7 +23351,7 @@ public partial class MainWindow : Window
 
     private void OpenWithCode_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item)
+        if (MenuRowSubject is { IsPlaceholder: false } item)
         {
             ShellFileService.OpenWithCode(item.FullPath);
         }
@@ -27113,7 +27161,7 @@ public partial class MainWindow : Window
     // printer behind it and elsewhere is whatever reader is installed.
     private void PrintItem_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } item)
+        if (MenuRowSubject is not { IsDirectory: false } item)
         {
             return;
         }
@@ -27137,7 +27185,7 @@ public partial class MainWindow : Window
     // pressed, the keyboard in the text. The same 보기 rules for auto-hide.
     private void EditHere_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is FileSystemItem { IsDirectory: false } item && IsViewerText(item.FullPath))
+        if (MenuRowSubject is { IsDirectory: false } item && IsViewerText(item.FullPath))
         {
             ViewHere(item, beginEdit: true);
         }
@@ -34583,6 +34631,15 @@ public partial class MainWindow : Window
         // review). They act on one file - the right-clicked cell - and never
         // read the marks, so with marks kept and a right-click between cells
         // they stood enabled and did nothing.
+        //
+        // THE TREE'S ROWS (2026-11-03, on request): most of the tree's file
+        // rows, set by the same rules the tree's menu uses
+        // (ConfigureSharedRowMenuItems), about the right-clicked cell or -
+        // between cells - the tree's selection, as the rows above always were.
+        // Left out: 보기/재생 (a cell press already shows the file), the picture
+        // row (the cell is the picture), the folder-only rows, the tree's own
+        // display rows (파일 필터, 정렬 기준), 새로 만들기, 폴더에서 검색 and
+        // 폴더로 이동. Keys are shown only where the key works from the list.
         if (sender is ContextMenu menu)
         {
             ShowMultiSelectionInfo(menu);
@@ -34590,14 +34647,44 @@ public partial class MainWindow : Window
             bool searching = _isSearchViewActive;
             bool namesCell = _filmstripMenuTarget is not null;
             bool namesFiles = _multiSelection.Count > 0 || namesCell;
+            bool files = !searching || namesFiles;
+            // The single-file rows want the cell itself under the results, as
+            // 탐색기에서 위치 열기 and 속성 always did - the tree's selection is
+            // out of sight there. With no subject the shared rules hide the
+            // rows that come and go with the file (편집, 인쇄, 압축 풀기).
+            bool oneFile = !searching || namesCell;
+            ConfigureSharedRowMenuItems(menu, oneFile ? MenuRowSubject : null);
+
+            // Rows nothing else decides: set both ways every time.
             SetMenuItemEnabled(menu, "paste", !searching);
             foreach (string tag in new[] { "cut", "copy", "delete" })
             {
-                SetMenuItemEnabled(menu, tag, !searching || namesFiles);
+                SetMenuItemEnabled(menu, tag, files);
             }
-            foreach (string tag in new[] { "reveal", "properties" })
+            foreach (string tag in new[] { "reveal", "properties", "bookmark", "open", "openTerminal" })
             {
-                SetMenuItemEnabled(menu, tag, !searching || namesCell);
+                SetMenuItemEnabled(menu, tag, oneFile);
+            }
+            // 새로 고침 reads the folder the list shows (RefreshFolder_Click).
+            SetMenuItemEnabled(menu, "refresh",
+                oneFile && (FilmstripMenuItem?.Parent ?? FilmstripDropFolder()) is { IsDirectory: true });
+
+            // Rows the shared rules decided: only ever taken away here, never
+            // put back over that decision.
+            foreach (string tag in new[] { "createShortcut", "compress" })
+            {
+                if (!files)
+                {
+                    SetMenuItemEnabled(menu, tag, false);
+                }
+            }
+            foreach (string tag in new[] { "editHere", "viewAsText", "print", "extract",
+                         "openWith", "rename", "copyPath", "openWithCode" })
+            {
+                if (!oneFile)
+                {
+                    SetMenuItemEnabled(menu, tag, false);
+                }
             }
         }
     }
@@ -34681,6 +34768,15 @@ public partial class MainWindow : Window
                 : cellItem;
         }
     }
+
+    // The one row a single-row command is about: the right-clicked cell while
+    // the thumbnail list's menu is in play, else the tree's selection, which a
+    // right-click on a tree row has already moved. Since 2026-11-03 that menu
+    // carries most of the tree's rows, so their handlers ask this rather than
+    // the tree alone - for the reason FilmstripMenuItem gives. Outside the
+    // menu (a key, the tree's own menu) it is the tree's selection, as before.
+    private FileSystemItem? MenuRowSubject
+        => FilmstripMenuItem ?? ExplorerTree.SelectedItem as FileSystemItem;
 
     // Where a drop on the list lands: the folder the panel is showing, which is
     // the same folder 붙여넣기 uses (see PasteItem_Click) so the two gestures
@@ -37889,7 +37985,7 @@ public partial class MainWindow : Window
 
     private void ViewAsTextHere_Click(object sender, RoutedEventArgs e)
     {
-        if (ExplorerTree.SelectedItem is not FileSystemItem { IsDirectory: false } item ||
+        if (MenuRowSubject is not { IsDirectory: false } item ||
             !CanAskViewerText(item.FullPath))
         {
             return;

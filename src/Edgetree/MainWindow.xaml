@@ -9941,15 +9941,56 @@
                                         </MenuItem.Header>
                                     </MenuItem>
                                     <Separator Visibility="Collapsed" Tag="multiInfoSep"/>
+                                    <!-- THE TREE'S ROWS, in the tree's order
+                                         (2026-11-03, on request), with the same
+                                         handlers - which read MenuRowSubject, the
+                                         right-clicked cell while this menu is in
+                                         play. Set in FilmstripContextMenu_Opened;
+                                         what is left out is listed there. Every
+                                         row is tagged so that handler can stand
+                                         it down while the search results drive
+                                         the list (2026-10-06): 붙여넣기 always,
+                                         the rest when the menu names no file. -->
+                                    <MenuItem Header="{x:Static services:Strings.MenuBookmark}"
+                                            Tag="bookmark"
+                                            SubmenuOpened="BookmarkRowSubmenu_Opened">
+                                        <MenuItem Header="{x:Static services:Strings.MenuBookmarkAdd}"
+                                                Tag="bookmarkToggle"
+                                                InputGestureText="Ctrl+Alt+K"
+                                                Click="BookmarkMenuItem_Click"/>
+                                        <MenuItem Header="{x:Static services:Strings.BookmarkShortcutPrev}"
+                                                Tag="bookmarkPrev"
+                                                InputGestureText="Ctrl+Alt+J"
+                                                Click="BookmarkPrev_Click"/>
+                                        <MenuItem Header="{x:Static services:Strings.BookmarkShortcutNext}"
+                                                Tag="bookmarkNext"
+                                                InputGestureText="Ctrl+Alt+L"
+                                                Click="BookmarkNext_Click"/>
+                                    </MenuItem>
+                                    <Separator/>
+                                    <MenuItem Tag="editHere"
+                                            Visibility="Collapsed"
+                                            Header="{x:Static services:Strings.MenuEditHere}"
+                                            Click="EditHere_Click"/>
+                                    <MenuItem Tag="viewAsText"
+                                            Visibility="Collapsed"
+                                            Header="{x:Static services:Strings.MenuViewAsText}"
+                                            Click="ViewAsTextHere_Click"/>
+                                    <MenuItem Tag="open"
+                                            Header="{x:Static services:Strings.MenuOpen}"
+                                            Click="OpenItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuOpenWith}"
+                                            Tag="openWith"
+                                            Click="OpenWithPicker_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuPrint}"
+                                            Tag="print"
+                                            Visibility="Collapsed"
+                                            Click="PrintItem_Click"/>
+                                    <Separator/>
                                     <MenuItem Header="{x:Static services:Strings.MenuSelectAll}"
                                             InputGestureText="Ctrl+A"
                                             Click="FilmstripSelectAll_Click"/>
                                     <Separator/>
-                                    <!-- Tagged so FilmstripContextMenu_Opened can
-                                         stand them down while the search results
-                                         drive the list (2026-10-06): 붙여넣기
-                                         always, the rest when the menu names no
-                                         file. -->
                                     <MenuItem Header="{x:Static services:Strings.MenuCut}"
                                             InputGestureText="Ctrl+X"
                                             Tag="cut"
@@ -9962,6 +10003,20 @@
                                             InputGestureText="Ctrl+V"
                                             Tag="paste"
                                             Click="PasteItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuCreateShortcut}"
+                                            Tag="createShortcut"
+                                            Click="CreateShortcut_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuCompress}"
+                                            Tag="compress"
+                                            Click="CompressItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuExtract}"
+                                            Tag="extract"
+                                            Visibility="Collapsed"
+                                            Click="ExtractItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuRename}"
+                                            Tag="rename"
+                                            InputGestureText="F2"
+                                            Click="RenameItem_Click"/>
                                     <!-- 삭제 sits with the other file rows, as it
                                          does in the tree's, the results' and the
                                          panel's menus. This one alone set it
@@ -9971,10 +10026,23 @@
                                             InputGestureText="Del"
                                             Tag="delete"
                                             Click="DeleteItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuRefresh}"
+                                            Tag="refresh"
+                                            Click="RefreshFolder_Click"/>
                                     <Separator/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuCopyPath}"
+                                            Tag="copyPath"
+                                            Click="CopyPath_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuOpenTerminal}"
+                                            Tag="openTerminal"
+                                            Click="OpenTerminal_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuOpenWithCode}"
+                                            Tag="openWithCode"
+                                            Click="OpenWithCode_Click"/>
                                     <MenuItem Header="{x:Static services:Strings.MenuRevealInExplorer}"
                                             Tag="reveal"
                                             Click="RevealInExplorer_Click"/>
+                                    <Separator/>
                                     <!-- LAST, where the tree menu keeps it. Its own
                                          handler rather than the tree's: the tree does
                                          move to the right-clicked cell now, but its
