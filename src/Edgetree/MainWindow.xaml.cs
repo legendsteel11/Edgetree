@@ -19227,11 +19227,23 @@ public partial class MainWindow : Window
             foreach (var root in networkRoots)
             {
                 bool isOffline = offline.Contains(root.FullPath);
+                if (!isOffline)
+                {
+                    _networkRootsSeenOnline.Add(root.FullPath);
+                }
                 if (root.IsNetworkDriveOffline != isOffline)
                 {
                     // Only on a CHANGE, so the walk below costs nothing while
                     // a drive simply stays connected.
+                    if (isOffline)
+                    {
+                        CaptureNetworkBranch(root);
+                    }
                     ApplyNetworkOfflineState(root, isOffline);
+                    if (!isOffline)
+                    {
+                        RestoreNetworkBranch(root);
+                    }
                 }
             }
         }
@@ -19251,7 +19263,8 @@ public partial class MainWindow : Window
     // handed the shell a dead path. Folding it up leaves one grey, red-dotted
     // drive row that says exactly what is true: this is not reachable right
     // now. The rows are not discarded, only closed, so re-expanding after the
-    // drive returns costs nothing (2026-07-26).
+    // drive returns costs nothing (2026-07-26) - and since 2026-11-03 the
+    // re-expanding is done for the hand (RestoreNetworkBranch).
     private static void ApplyNetworkOfflineState(FileSystemItem item, bool isOffline)
     {
         item.IsNetworkDriveOffline = isOffline;
@@ -19280,6 +19293,110 @@ public partial class MainWindow : Window
                 }
             }
         }
+    }
+
+    // THE BRANCH COMES BACK WITH THE DRIVE (2026-11-03, on request). Going
+    // offline folds the drive's rows up (above), and WPF hands the selection to
+    // the folded row - so a server that blinked left the tree closed on its
+    // drive row, and every folder that had been open had to be opened again
+    // by hand. Now what was open is written down at the moment of folding,
+    // the folder that was selected with it, and both are put back when the
+    // drive answers again: through ExpandPathIfPossible and NavigateToPath,
+    // the startup restore's own two calls, so the accordion and the reveal
+    // walk see nothing they have not seen at every start.
+    //
+    // ONLY FOR THE DRIVE BEING LOOKED AT, AND ONLY IF THE HAND HAS NOT MOVED
+    // ON. Opening a branch inserts rows, and rows inserted above where someone
+    // is working push their view down - the tree moving by itself. So there is
+    // a restore only when the selection was inside that drive as it went, and
+    // it runs only while the selection is still on the way back to it: none,
+    // the drive's row, or a folder above what was selected - where a fold, or
+    // a startup walk that could not get through, leaves it. Select anything
+    // else meanwhile, and the branch stays folded as the hand found it.
+    //
+    // A drive that was ALREADY out when the app started never had a branch
+    // open this session, so its record is taken from the last session's
+    // (AppSettings.ExpandedFolderPaths and LastSelectedPath, which the startup
+    // restore could not reach on it).
+    private sealed record NetworkBranchSnapshot(List<string> ExpandedPaths, string SelectedPath);
+
+    private readonly Dictionary<string, NetworkBranchSnapshot> _networkBranchSnapshots =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _networkRootsSeenOnline = new(StringComparer.OrdinalIgnoreCase);
+
+    private static bool IsUnderRoot(string path, FileSystemItem root)
+    {
+        string rootPath = root.FullPath.TrimEnd('\\');
+        return path.StartsWith(rootPath, StringComparison.OrdinalIgnoreCase) &&
+               (path.Length == rootPath.Length || path[rootPath.Length] == '\\');
+    }
+
+    // Before the fold: the model's own expanded flags, every loaded level -
+    // the record CollectAllExpandedPaths makes for the exit save, for one drive.
+    private void CaptureNetworkBranch(FileSystemItem root)
+    {
+        var expanded = new List<string>();
+        if (root.IsExpanded)
+        {
+            expanded.Add(root.FullPath);
+        }
+        CollectExpandedPaths(root, expanded, new List<string>());
+
+        string? selected = ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } item &&
+                           IsUnderRoot(item.FullPath, root)
+            ? item.FullPath
+            : null;
+
+        if (!_networkRootsSeenOnline.Contains(root.FullPath))
+        {
+            expanded = _settings.ExpandedFolderPaths.Where(path => IsUnderRoot(path, root)).ToList();
+            selected = _settings.LastSelectedPath is { } last && IsUnderRoot(last, root) ? last : null;
+        }
+
+        if (selected is null)
+        {
+            // Not the drive being looked at: nothing comes back for it.
+            _networkBranchSnapshots.Remove(root.FullPath);
+            return;
+        }
+
+        _networkBranchSnapshots[root.FullPath] = new NetworkBranchSnapshot(expanded, selected);
+    }
+
+    private void RestoreNetworkBranch(FileSystemItem root)
+    {
+        if (!_networkBranchSnapshots.Remove(root.FullPath, out var snapshot))
+        {
+            return;
+        }
+
+        // Still on the way back to it? Nothing selected, or the drive's row or
+        // a folder on the path down to what was selected.
+        if (ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false } now)
+        {
+            string target = snapshot.SelectedPath.TrimEnd('\\');
+            string here = now.FullPath.TrimEnd('\\');
+            bool onTheWay = string.Equals(here, target, StringComparison.OrdinalIgnoreCase) ||
+                            (target.StartsWith(here, StringComparison.OrdinalIgnoreCase) &&
+                             target.Length > here.Length && target[here.Length] == '\\');
+            if (!onTheWay)
+            {
+                return;
+            }
+        }
+
+        // Shallowest first, as at startup: a parent has to be walked before a
+        // deeper path is reachable.
+        foreach (var path in snapshot.ExpandedPaths.OrderBy(path => path.Length))
+        {
+            ExpandPathIfPossible(path);
+        }
+
+        // Back onto the folder or file it was on, without pinning it to the
+        // top - the view was not the user's to move.
+        NavigateToPath(snapshot.SelectedPath, pinToTop: false, source: "reconnect");
+        UpdateCollapseAllButtonState();
     }
 
     // The 북마크 목록 submenu, picked out of the options menu on open - a
