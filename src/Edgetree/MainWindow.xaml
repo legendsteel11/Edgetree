@@ -8793,7 +8793,7 @@
                                 </ToggleButton>
                                 <Button x:Name="ViewerCropSaveButton"
                                         Style="{StaticResource ViewerTextBarButtonStyle}"
-                                        Margin="4,0,0,0"
+                                        Margin="2,0,0,0"
                                         IsEnabled="False"
                                         ToolTipService.ShowOnDisabled="True"
                                         ToolTip="{x:Static services:Strings.ViewerCropSave}">
@@ -9397,14 +9397,17 @@
                                         <Path Data="M200-200h57l391-391-57-57-391 391v57Zm-80 80v-170l528-527q12-11 26.5-17t30.5-6q16 0 31 6t26 18l55 56q12 11 17.5 26t5.5 30q0 16-5.5 30.5T817-647L290-120H120Zm640-584-56-56 56 56Zm-141 85-28-29 57 57-29-28Z M0-960H960M0 0H960"
                                                 Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                     </Button>
-                                    <!-- Groups 4 apart, buttons 2 apart inside a group - the
-                                         find row's spacing (2026-10-13, on request; they
-                                         were 8). 편집 취소 is as wide as the find row's
-                                         chevron under it, so with the same 4 after each,
-                                         저장 starts where the find field does.
-                                         Every group gap here is the 4 before a group's
-                                         first button: 저장, 실행 취소, 복사, and 인쇄
-                                         after the row. -->
+                                    <!-- EVERY BUTTON 2 APART, the path bar's chevrons'
+                                         spacing (2026-11-03, on request). They were
+                                         grouped - 4 before 저장, 실행 취소, 복사 and 인쇄,
+                                         2 inside a group (2026-10-13; 8 before that) -
+                                         and in use the groups were too slight to read
+                                         as groups and only made the row look uneven
+                                         beside the path bar's. What that gave up: 저장
+                                         no longer starts exactly over the find field
+                                         in the row below (편집 취소 is as wide as the
+                                         find row's chevron, and the find field keeps
+                                         its 4). -->
                                     <StackPanel x:Name="ViewerTextEditCommands"
                                             Orientation="Horizontal"
                                             Visibility="Collapsed">
@@ -9421,7 +9424,7 @@
                                         </Button>
                                         <Button x:Name="ViewerTextSaveButton"
                                                 Style="{StaticResource ViewerTextBarButtonStyle}"
-                                                Margin="4,0,0,0"
+                                                Margin="2,0,0,0"
                                                 Click="ViewerTextSave_Click"
                                                 ToolTip="{x:Static services:Strings.TextEditSave}">
                                             <Path Data="M840-680v480q0 33-23.5 56.5T760-120H200q-33 0-56.5-23.5T120-200v-560q0-33 23.5-56.5T200-840h480l160 160Zm-80 34L646-760H200v560h560v-446ZM565-275q35-35 35-85t-35-85q-35-35-85-35t-85 35q-35 35-35 85t35 85q35 35 85 35t85-35ZM240-560h360v-160H240v160Zm-40-86v446-560 114Z M0-960H960M0 0H960"
@@ -9437,7 +9440,7 @@
                                         </Button>
                                         <Button x:Name="ViewerTextUndoButton"
                                                 Style="{StaticResource ViewerTextBarButtonStyle}"
-                                                Margin="4,0,0,0"
+                                                Margin="2,0,0,0"
                                                 Click="ViewerTextUndo_Click"
                                                 ToolTip="{x:Static services:Strings.TextEditUndo}">
                                             <Path Data="M280-200v-80h284q63 0 109.5-40T720-420q0-60-46.5-100T564-560H312l104 104-56 56-200-200 200-200 56 56-104 104h252q97 0 166.5 63T800-420q0 94-69.5 157T564-200H280Z M0-960H960M0 0H960"
@@ -9452,7 +9455,7 @@
                                                     Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                         </Button>
                                         <Button Style="{StaticResource ViewerTextBarButtonStyle}"
-                                                Margin="4,0,0,0"
+                                                Margin="2,0,0,0"
                                                 Click="ViewerTextCopy_Click"
                                                 ToolTip="{x:Static services:Strings.TextEditCopy}">
                                             <Path Data="M360-240q-33 0-56.5-23.5T280-320v-480q0-33 23.5-56.5T360-880h360q33 0 56.5 23.5T800-800v480q0 33-23.5 56.5T720-240H360Zm0-80h360v-480H360v480ZM200-80q-33 0-56.5-23.5T120-160v-560h80v560h440v80H200Zm160-240v-480 480Z M0-960H960M0 0H960"
@@ -9466,10 +9469,10 @@
                                                     Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                         </Button>
                                     </StackPanel>
-                                    <!-- 인쇄, a group of its own (4 before it).
+                                    <!-- 인쇄, 2 after the row like the rest.
                                          Material Symbols print, boxed like the rest. -->
                                     <Button Style="{StaticResource ViewerTextBarButtonStyle}"
-                                            Margin="4,0,0,0"
+                                            Margin="2,0,0,0"
                                             Click="ViewerTextPrint_Click"
                                             ToolTip="{x:Static services:Strings.TextPrint}">
                                         <Path Data="M640-640v-120H320v120h-80v-200h480v200h-80Zm-480 80h640-640Zm560 100q17 0 28.5-11.5T760-500q0-17-11.5-28.5T720-540q-17 0-28.5 11.5T680-500q0 17 11.5 28.5T720-460Zm-80 260v-160H320v160h320Zm80 80H240v-160H80v-240q0-51 35-85.5t85-34.5h560q51 0 85.5 34.5T880-520v240H720v160Zm80-240v-160q0-17-11.5-28.5T760-560H200q-17 0-28.5 11.5T160-520v160h80v-80h480v80h80Z M0-960H960M0 0H960"
