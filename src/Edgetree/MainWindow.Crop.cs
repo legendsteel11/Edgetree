@@ -83,7 +83,27 @@ public partial class MainWindow
     // Zero while the picture on screen is the file's.
     private Point _viewerCropAppliedOrigin;
 
-    private bool _viewerCropSaving;
+    // A cut being taken for 잘라서 보기 or a save, from the moment it starts -
+    // which can be a second of decoding the whole file on a worker before
+    // anything shows (TakeViewerCropAsync). One at a time: until the 11-03
+    // review the guard went up only once the cut was in hand, so a second
+    // press inside that second ran beside the first - two saves taking the
+    // same -crop name, the second reporting a failure the first had not had,
+    // and two cuts adding the rectangle's offset to the origin twice. The
+    // buttons that start one are greyed meanwhile, which is also the only
+    // sign the press was taken.
+    private bool _viewerCropBusy;
+
+    // When the rectangle on screen was last put there by the hand - drawn,
+    // moved, sized, or brought back by 이전 영역 불러오기 - held against
+    // _marksChangedAt to tell which of the two came last (HandleViewerCropKey).
+    private long _viewerCropSelectionAt;
+
+    private void SetViewerCropBusy(bool busy)
+    {
+        _viewerCropBusy = busy;
+        UpdateViewerPictureBar();
+    }
 
     // ----- The bar -----------------------------------------------------------
 
@@ -139,8 +159,12 @@ public partial class MainWindow
         // 저장 and 자르기 취소 answer the temporary crop; a rectangle alone is
         // saved from the buttons beside it.
         bool applied = _viewerCropApplied is not null;
-        ViewerCropSaveButton.IsEnabled = applied && !_viewerCropSaving;
+        ViewerCropSaveButton.IsEnabled = applied && !_viewerCropBusy;
         ViewerCropRevertButton.IsEnabled = applied;
+        // The buttons only, not the plate: a press on a greyed button goes to
+        // its first enabled parent, and the plate's handler keeps it off the
+        // picture, where it would start a new rectangle.
+        ViewerCropActionButtons.IsEnabled = !_viewerCropBusy;
 
         // The two 이전 영역 불러오기 buttons; the image one names the place and
         // size it would put back.
@@ -709,6 +733,10 @@ public partial class MainWindow
         {
             _viewerCropSelection = null;
         }
+        else
+        {
+            _viewerCropSelectionAt = Environment.TickCount64;
+        }
 
         // The rectangle the hand has just finished drawing, moving or sizing
         // is the last area from now on (see RememberViewerCropArea).
@@ -885,9 +913,10 @@ public partial class MainWindow
     // Esc ends crop mode. Ctrl+C copies, Ctrl+S saves beside the original as
     // the 저장 buttons do (2026-11-03, on request), and Ctrl+Shift+S saves
     // under a name asked for - the text view's key for it - whatever there is
-    // to cut: the rectangle while there is one, else the temporary crop. With
-    // neither, the keys go on to mean what they always have: Ctrl+C copies
-    // the FILE, Ctrl+Shift+S saves the active preset. That second one is
+    // to cut: the rectangle while there is one, else the temporary crop
+    // (but see Ctrl+C with files marked, below). With neither, the keys go
+    // on to mean what they always have: Ctrl+C copies the FILE,
+    // Ctrl+Shift+S saves the active preset. That second one is
     // OVERRIDDEN while there is a cut to take - the price of the text view's
     // save-as key, which the crop was given on purpose. Ctrl+S takes nothing
     // from the text view: with a picture on screen there is no text being
@@ -922,8 +951,38 @@ public partial class MainWindow
             return false;
         }
 
+        // MARKED FILES TAKE Ctrl+C WHEN THEY CAME LAST (11-03 review). With a
+        // rectangle up or a temporary crop standing, Ctrl+A in the tree or the
+        // strip marks files, and the copy after that is of the files the
+        // screen shows as chosen - it used to put the cut on the clipboard,
+        // and a paste then did nothing. The rule is whichever the hand went to
+        // last: marks made after the rectangle are copied, a rectangle drawn
+        // (or put back) after the marks is cut. A temporary crop with no
+        // rectangle is never the newer one - it sits there for a second cut.
+        // The first version let any rectangle keep the key, and Ctrl+A,
+        // Ctrl+C in the tree under one copied nothing a paste could use.
+        //
+        // Copied from here rather than handed on: only the tree's and the
+        // results' own key handlers copy files, and the plate's buttons take
+        // the keyboard when pressed, so after 잘라서 보기 the key would
+        // reach neither and copy nothing.
         if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
         {
+            bool rectangleIsNewer = _viewerCropMode && _viewerCropSelection is not null &&
+                                    _viewerCropSelectionAt > _marksChangedAt;
+            if (_multiSelection.Count > 0 && !rectangleIsNewer)
+            {
+                if (_isSearchViewActive)
+                {
+                    SearchCopy_Click(this, e);
+                }
+                else
+                {
+                    CopyItem_Click(this, e);
+                }
+                return true;
+            }
+
             CopyViewerCropToClipboard();
             return true;
         }
@@ -954,13 +1013,13 @@ public partial class MainWindow
 
     private void ViewerCropSaveSelection_Click(object sender, RoutedEventArgs e) => SaveViewerCrop(askName: false);
 
+    // What is on screen, not a rectangle that may have been drawn over it
+    // since: the bar's 저장 belongs to the temporary crop. Said to the save
+    // rather than done by clearing the rectangle first, as it was until the
+    // 11-03 review - a save that failed left the dashed outline standing over
+    // a rectangle that no longer existed, and Ctrl+C then copied the whole cut.
     private void ViewerCropSaveApplied_Click(object sender, RoutedEventArgs e)
-    {
-        // What is on screen, not a rectangle that may have been drawn over it
-        // since: the bar's 저장 belongs to the temporary crop.
-        _viewerCropSelection = null;
-        SaveViewerCrop(askName: false);
-    }
+        => SaveViewerCrop(askName: false, wholeApplied: true);
 
     private void ViewerCropRevert_Click(object sender, RoutedEventArgs e) => RevertViewerCrop();
 
@@ -972,12 +1031,22 @@ public partial class MainWindow
     // do on a file. Crop mode stays on with no rectangle, for that second one.
     private async void ApplyViewerCrop()
     {
-        if (_viewerCropSelection is not { } selection || _pendingViewerPath is not { } path)
+        if (_viewerCropBusy || _viewerCropSelection is not { } selection || _pendingViewerPath is not { } path)
         {
             return;
         }
 
-        var cut = await TakeViewerCropAsync();
+        BitmapSource? cut;
+        SetViewerCropBusy(true);
+        try
+        {
+            cut = await TakeViewerCropAsync();
+        }
+        finally
+        {
+            SetViewerCropBusy(false);
+        }
+
         if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -1050,10 +1119,11 @@ public partial class MainWindow
 
     // What a copy or a save takes: the rectangle, cut from the temporary crop
     // if there is one and from the file's own pixels if not; or, with no
-    // rectangle, the temporary crop whole. Null when there is nothing.
-    private async Task<BitmapSource?> TakeViewerCropAsync()
+    // rectangle or when asked for it whole, the temporary crop. Null when
+    // there is nothing.
+    private async Task<BitmapSource?> TakeViewerCropAsync(bool wholeApplied = false)
     {
-        if (!(_viewerCropMode && _viewerCropSelection is { } selection))
+        if (wholeApplied || !(_viewerCropMode && _viewerCropSelection is { } selection))
         {
             return _viewerCropApplied;
         }
@@ -1225,6 +1295,7 @@ public partial class MainWindow
         }
 
         _viewerCropSelection = area;
+        _viewerCropSelectionAt = Environment.TickCount64;
         _viewerCropDrag = CropDrag.None;
         UpdateViewerCropOverlay();
     }
@@ -1245,58 +1316,74 @@ public partial class MainWindow
     // job is done - and the panel stays on the original. The new file is put
     // in the tree and the strip at once rather than when the watcher gets to
     // it, so the save reads as having happened.
-    private async void SaveViewerCrop(bool askName)
+    private async void SaveViewerCrop(bool askName, bool wholeApplied = false)
     {
-        if (_viewerCropSaving || _pendingViewerPath is not { } path ||
+        if (_viewerCropBusy || _pendingViewerPath is not { } path ||
             Path.GetDirectoryName(path) is not { Length: > 0 } folder)
         {
             return;
         }
 
-        var cut = await TakeViewerCropAsync();
-        if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+        bool saved;
+        string? error;
+        string target;
+        SetViewerCropBusy(true);
+        try
         {
-            return;
-        }
-
-        string extension = CropSaveExtension(Path.GetExtension(path));
-        string target = FileOperationService.GetUniqueDestination(
-            Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + "-crop" + extension));
-
-        if (askName)
-        {
-            var dialog = new SaveFileDialog
-            {
-                InitialDirectory = folder,
-                FileName = Path.GetFileName(target),
-                Filter = Strings.ViewerCropSaveFilter,
-                FilterIndex = CropFilterIndex(extension),
-                DefaultExt = extension,
-                AddExtension = true,
-            };
-            if (dialog.ShowDialog(this) != true)
+            var cut = await TakeViewerCropAsync(wholeApplied);
+            if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
             {
                 return;
             }
 
-            target = Path.GetFullPath(dialog.FileName);
-            // A name the encoders cannot write (a .webp typed in, no
-            // extension at all) is written as PNG, and says so in its name.
-            string chosen = Path.GetExtension(target).ToLowerInvariant();
-            if (CropSaveExtension(chosen) != chosen)
-            {
-                target += ".png";
-            }
-        }
+            string extension = CropSaveExtension(Path.GetExtension(path));
+            target = FileOperationService.GetUniqueDestination(
+                Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + "-crop" + extension));
+            bool replace = false;
 
-        _viewerCropSaving = true;
-        UpdateViewerPictureBar();
-        (bool saved, string? error) = await Task.Run(() => WriteViewerCrop(cut, target, replace: askName));
-        _viewerCropSaving = false;
+            if (askName)
+            {
+                var dialog = new SaveFileDialog
+                {
+                    InitialDirectory = folder,
+                    FileName = Path.GetFileName(target),
+                    Filter = Strings.ViewerCropSaveFilter,
+                    FilterIndex = CropFilterIndex(extension),
+                    DefaultExt = extension,
+                    AddExtension = true,
+                };
+                if (dialog.ShowDialog(this) != true)
+                {
+                    return;
+                }
+
+                // The dialog asked before writing over the name it was given.
+                target = Path.GetFullPath(dialog.FileName);
+                replace = true;
+
+                // A name the encoders cannot write (a .webp typed in, no
+                // extension at all) is written as PNG, and says so in its
+                // name. That name is not the one the dialog asked about, so
+                // it writes over nothing: numbered, as beside the original.
+                // It went out with replace on until the 11-03 review, and
+                // shot.webp.png, if there was one, was replaced unasked.
+                string chosen = Path.GetExtension(target).ToLowerInvariant();
+                if (CropSaveExtension(chosen) != chosen)
+                {
+                    target = FileOperationService.GetUniqueDestination(target + ".png");
+                    replace = false;
+                }
+            }
+
+            (saved, error) = await Task.Run(() => WriteViewerCrop(cut, target, replace));
+        }
+        finally
+        {
+            SetViewerCropBusy(false);
+        }
 
         if (!saved)
         {
-            UpdateViewerPictureBar();
             MessageBox.Show(this, error ?? string.Empty, Strings.ViewerCropSaveFailedTitle,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
@@ -1379,7 +1466,8 @@ public partial class MainWindow
             return (true, null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
-                                       or InvalidOperationException or ArgumentException)
+                                       or InvalidOperationException or ArgumentException
+                                       or OutOfMemoryException or System.Runtime.InteropServices.COMException)
         {
             try
             {
@@ -1394,7 +1482,12 @@ public partial class MainWindow
 
     // The same decode LoadViewerImage makes, at full size: one open, the EXIF
     // turn applied, frozen so it can cross threads. Null where the panel's own
-    // decode would have failed too.
+    // decode would have failed too - and where the full-resolution pass's
+    // would (OutOfMemoryException, COMException; see its safety device in
+    // MainWindow.xaml.cs), since this is the same uncapped decode. Those two
+    // were missing until the 11-03 review, and either one, coming back
+    // through an async void, ended the app. The same pair is caught
+    // wherever this path allocates a picture's worth: the cut, the encoders.
     private static BitmapSource? DecodeViewerOriginal(string path)
     {
         try
@@ -1416,7 +1509,8 @@ public partial class MainWindow
             return oriented;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
-                                       or FileFormatException or ArgumentException or InvalidOperationException)
+                                       or FileFormatException or ArgumentException or InvalidOperationException
+                                       or OutOfMemoryException or System.Runtime.InteropServices.COMException)
         {
             return null;
         }
@@ -1433,10 +1527,17 @@ public partial class MainWindow
             return null;
         }
 
-        var cropped = new CroppedBitmap(source, new Int32Rect(area.X, area.Y, width, height));
-        var copy = new WriteableBitmap(new FormatConvertedBitmap(cropped, PixelFormats.Bgra32, null, 0));
-        copy.Freeze();
-        return copy;
+        try
+        {
+            var cropped = new CroppedBitmap(source, new Int32Rect(area.X, area.Y, width, height));
+            var copy = new WriteableBitmap(new FormatConvertedBitmap(cropped, PixelFormats.Bgra32, null, 0));
+            copy.Freeze();
+            return copy;
+        }
+        catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
+        {
+            return null;
+        }
     }
 
     // TWO FORMATS: the ordinary bitmap every program reads, and PNG beside it
@@ -1452,9 +1553,16 @@ public partial class MainWindow
         var data = new DataObject();
         data.SetImage(image);
         var png = new MemoryStream();
-        var encoder = new PngBitmapEncoder();
-        encoder.Frames.Add(BitmapFrame.Create(image));
-        encoder.Save(png);
+        try
+        {
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(image));
+            encoder.Save(png);
+        }
+        catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
+        {
+            return;
+        }
         data.SetData("PNG", png, false);
 
         for (int attempt = 0; attempt < 4; attempt++)

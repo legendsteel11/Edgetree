@@ -15935,6 +15935,11 @@ public partial class MainWindow : Window
         _deferredMultiClearItem = null;
     }
 
+    // When a mark was last made or taken off - every one passes through the
+    // two methods below - so the crop's Ctrl+C can tell whether the hand went
+    // to the marks or to its rectangle last (HandleViewerCropKey).
+    private long _marksChangedAt;
+
     private void AddToMultiSelection(FileSystemItem item)
     {
         if (!item.IsMultiSelected)
@@ -15943,6 +15948,7 @@ public partial class MainWindow : Window
             _multiSelection.Add(item);
         }
 
+        _marksChangedAt = Environment.TickCount64;
         UpdateFilmstripMarkCount();
         ScheduleSearchMarksSync();
     }
@@ -15955,6 +15961,7 @@ public partial class MainWindow : Window
             _multiSelection.Remove(item);
         }
 
+        _marksChangedAt = Environment.TickCount64;
         UpdateFilmstripMarkCount();
         ScheduleSearchMarksSync();
     }

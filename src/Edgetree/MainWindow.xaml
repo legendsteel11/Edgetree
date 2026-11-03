@@ -8774,7 +8774,8 @@
                                 <SolidColorBrush x:Key="HoverBackground"
                                         Color="#33FFFFFF"/>
                             </Border.Resources>
-                            <StackPanel Orientation="Horizontal">
+                            <StackPanel x:Name="ViewerCropActionButtons"
+                                        Orientation="Horizontal">
                                 <Button Style="{StaticResource ToggleButtonStyle}"
                                         Width="{DynamicResource PathBarButtonSize}"
                                         Height="{DynamicResource PathBarButtonSize}"
