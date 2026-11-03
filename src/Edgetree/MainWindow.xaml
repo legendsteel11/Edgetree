@@ -8748,21 +8748,85 @@
                         </Image>
                         <local:ViewerCropOverlay x:Name="ViewerCropOverlay"
                                 Visibility="Collapsed"/>
+                        <!-- THE BUTTONS BY A FINISHED RECTANGLE (2026-11-03,
+                             the author's design): 잘라서 보기 and 저장, placed by
+                             PlaceViewerCropActions under the rectangle's
+                             bottom-right corner. A third, 영역 취소, was built and
+                             taken out the same day on the author's word: a
+                             click outside the rectangle already clears it.
+                             Fixed colours on a dark plate, the navigator's
+                             reasoning: what shows behind is the photo. The
+                             hover wash is redefined for this plate alone - the
+                             template asks for HoverBackground by name, and the
+                             nearest one wins. The same marks as the bar's. -->
+                        <Border x:Name="ViewerCropActions"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Top"
+                                Visibility="Collapsed"
+                                Background="#CC181818"
+                                BorderBrush="#59FFFFFF"
+                                BorderThickness="1"
+                                CornerRadius="4"
+                                Padding="2"
+                                Cursor="Arrow"
+                                MouseDown="ViewerCropActions_MouseDown">
+                            <Border.Resources>
+                                <SolidColorBrush x:Key="HoverBackground"
+                                        Color="#33FFFFFF"/>
+                            </Border.Resources>
+                            <StackPanel Orientation="Horizontal">
+                                <Button Style="{StaticResource ToggleButtonStyle}"
+                                        Width="{DynamicResource PathBarButtonSize}"
+                                        Height="{DynamicResource PathBarButtonSize}"
+                                        Click="ViewerCropApply_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerCropApply}">
+                                    <Path Data="M14.5,19V16h-9q-0.62,0-1.06-0.44T4,14.5v-9H1V4H4V1H5.5V14.5H19V16H16v3H14.5Zm0-6V5.5H7V4h7.5q0.62,0 1.06,0.44T16,5.5V13H14.5Z M0 0H20M0 20H20"
+                                            Fill="White"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarListGlyphSize}"
+                                            Height="{DynamicResource PathBarListGlyphSize}"/>
+                                </Button>
+                                <Button Style="{StaticResource ToggleButtonStyle}"
+                                        Width="{DynamicResource PathBarButtonSize}"
+                                        Height="{DynamicResource PathBarButtonSize}"
+                                        Margin="2,0,0,0"
+                                        Click="ViewerCropSaveSelection_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerCropSave}">
+                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M1.125 1H21.125M1.125 21H21.125"
+                                            Fill="White"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarListGlyphSize}"
+                                            Height="{DynamicResource PathBarListGlyphSize}"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
                         </Grid>
                     </Border>
                     <!-- THE PICTURE'S BAR (2026-11-03, the author's design):
                          the text and PDF bars' seat and build - the same
                          style and size resources, so Ctrl+/- moves all three
                          together - with 자르기 first, then the crop's 저장 and
-                         자르기 취소 (greyed until the crop's second stage), and
-                         the panel's close at the right end. Over the top of
+                         자르기 취소 (greyed until there is a temporary crop to
+                         save or take back), and the panel's close at the right
+                         end. Over the top of
                          the picture's cell; the host is pushed down by its
                          height (ApplyViewerPictureBarInset) so the picture
                          fits under it rather than behind it.
                          The three crop marks are the author's own Material
                          Symbols files (opsz 20, an 18 viewBox at 1,1), boxed to
                          their 20 grid (M0 0H20M0 20H20) the way the others are
-                         boxed to 960, so their own sizes survive Stretch. -->
+                         boxed to 960, so their own sizes survive Stretch.
+                         TWO BOXES ARE MOVED, measured on a 4x capture of the
+                         bar (2026-11-03): file_save's ink sits a unit right
+                         and down in its square (x 4-18.25, y 2-20, centre
+                         11.1,11), which read as a pixel off at 15px, so its
+                         box is centred on the ink (M1.125 1...); and undo is
+                         drawn 12 by 11 of the 20 where crop is 18, so it read
+                         small beside them - its box is a 16, a quarter
+                         larger, set a unit right and a unit and a half down
+                         from the ink's centre (M3 4H19...) so the mark sits
+                         about a pixel left and up of centre, where it looked
+                         centred on the second capture. -->
                     <Border x:Name="ViewerPictureBar"
                             Grid.Row="0"
                             VerticalAlignment="Top"
@@ -8796,8 +8860,9 @@
                                         Margin="2,0,0,0"
                                         IsEnabled="False"
                                         ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerCropSaveApplied_Click"
                                         ToolTip="{x:Static services:Strings.ViewerCropSave}">
-                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M0 0H20M0 20H20"
+                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M1.125 1H21.125M1.125 21H21.125"
                                             Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                 </Button>
                                 <Button x:Name="ViewerCropRevertButton"
@@ -8805,8 +8870,14 @@
                                         Margin="2,0,0,0"
                                         IsEnabled="False"
                                         ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerCropRevert_Click"
                                         ToolTip="{x:Static services:Strings.ViewerCropRevert}">
-                                    <Path Data="M7.29,13.77L10,11.06l2.71,2.71l1.05-1.05L11.06,10l2.71-2.71L12.71,6.23L10,8.94L7.28,6.23L6.23,7.28L8.94,10L6.23,12.71l1.06,1.06ZM4.5,17q-0.62,0-1.06-0.44T3,15.5V4.5Q3,3.88 3.44,3.44T4.5,3h11q0.62,0 1.06,0.44T17,4.5v11q0,0.62-0.44,1.06T15.5,17H4.5Zm0-1.5h11V4.5H4.5v11Zm0-11v11V4.5Z M0 0H20M0 20H20"
+                                    <!-- Material Symbols "undo" (the author's file, in a
+                                         box of its own - see the bar's note) in place
+                                         of "disabled_by_default" (2026-11-03, on
+                                         request): it takes the crop back, and Ctrl+Z does
+                                         the same. -->
+                                    <Path Data="M6,16V14.5h6q1.04,0 1.77-0.73T14.5,12t-0.73-1.77T12,9.5H6.88l1.94,1.94L7.75,12.5L4,8.75L7.75,5L8.81,6.06L6.88,8H12q1.67,0 2.83,1.17T16,12t-1.17,2.83T12,16H6Z M3 4H19M3 20H19"
                                             Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                 </Button>
                             </StackPanel>

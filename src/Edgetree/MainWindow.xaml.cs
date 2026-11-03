@@ -24678,7 +24678,7 @@ public partial class MainWindow : Window
         UpdateResizeThumbVisibility();
         _pendingViewerPath = null;
         _viewerTreeShare = null;
-        ExitViewerCropMode();
+        DiscardViewerCrop();
         // Nothing is being shown, so nothing is driving what is shown. Reopening
         // starts from the tree again, which is where the eye button lives.
         _viewerListOverride = null;
@@ -25062,7 +25062,7 @@ public partial class MainWindow : Window
         if (item is null || item.IsPlaceholder || item.IsShowMore)
         {
             _pendingViewerPath = null;
-            ExitViewerCropMode();
+            DiscardViewerCrop();
             StopViewerGif();
             // AND NOT THE SOUND - the same skip the file branch below already
             // makes (2026-08-11). This is the path an empty panel takes, and
@@ -25107,8 +25107,9 @@ public partial class MainWindow : Window
             return;
         }
         _pendingViewerPath = path;
-        // A rectangle drawn on one picture means nothing on the next.
-        ExitViewerCropMode();
+        // A rectangle drawn on one picture means nothing on the next, and a
+        // temporary crop goes without a question (see DiscardViewerCrop).
+        DiscardViewerCrop();
         // A new file always ends the old animation - and the old playback,
         // which is also where the previous video's file handle is released.
         // The same-path early return above is what lets a playing GIF (or
@@ -26056,7 +26057,9 @@ public partial class MainWindow : Window
                 _viewerFullResPending = false;
                 // A failed second pass leaves the first one alone: the picture
                 // on screen is still correct, just softer than it could be.
-                if (bitmap is null)
+                // Nor over a temporary crop (2026-11-03): a pass asked for just
+                // before the crop would put the whole FILE back on screen.
+                if (bitmap is null || _viewerCropApplied is not null)
                 {
                     return;
                 }
@@ -37195,7 +37198,9 @@ public partial class MainWindow : Window
     // new-file path here it would be closed and opened again, back at page 1.
     private void ReloadViewerAtSettledWidth()
     {
-        if (_viewerGifDecoder is not null || _viewerVideoPath is not null)
+        // A temporary crop is whole already and is not the file: reloading
+        // would replace it with the file (2026-11-03).
+        if (_viewerGifDecoder is not null || _viewerVideoPath is not null || _viewerCropApplied is not null)
         {
             return;
         }

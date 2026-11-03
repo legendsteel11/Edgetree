@@ -583,6 +583,23 @@ public static class HelpContent
                     // one being set.
                     R("우클릭 → 배경 설정", "앱이 위치한 모니터의 배경화면으로 지정",
                       "Right-click → Set as wallpaper", "Sets it on the monitor the app is on"),
+                    // Cropping (2026-11-03). Last in the group: a tool picked up
+                    // from the bar, where the rows above are the picture's own
+                    // gestures. The keys are on one row because they only mean
+                    // this while cropping, and the tooltips name them as well.
+                    R("상단 자르기 버튼", "드래그로 영역 지정, 손잡이로 크기 조절, 안쪽 드래그로 이동",
+                      "The crop button at the top", "Drag out an area, size it by its handles, move it from inside"),
+                    R("자르기 중 Shift · Ctrl 드래그", "정사각형 · 16px 격자에 맞춤",
+                      "Shift · Ctrl drag while cropping", "Square · snap to a 16px grid"),
+                    R("자르기 중 휠 클릭 드래그", "확대 상태에서 화면 이동",
+                      "Wheel-button drag while cropping", "Move around, when zoomed in"),
+                    R("영역 옆 잘라서 보기 · 저장", "자른 결과 미리 보기 · 원본 옆에 이름-crop으로 저장 (WebP · HEIC 등은 PNG)",
+                      "Crop and view · Save, beside the area",
+                      "Preview the cut · save it beside the original as name-crop (WebP, HEIC and the like as PNG)"),
+                    R("자르기 중 Ctrl+C", "영역을 원본 해상도로 클립보드에 복사",
+                      "Ctrl+C while cropping", "Copies the area to the clipboard at full resolution"),
+                    R("자르기 중 Ctrl+Shift+S · Ctrl+Z · Esc", "다른 이름으로 저장 · 자르기 취소 · 자르기 종료",
+                      "Ctrl+Shift+S · Ctrl+Z · Esc while cropping", "Save as · undo the crop · stop cropping"),
                 }),
 
                 new Group(T("영상", "Film"), new[]

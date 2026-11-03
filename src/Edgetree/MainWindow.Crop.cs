@@ -12,18 +12,21 @@ using Cursor = System.Windows.Input.Cursor;
 using Cursors = System.Windows.Input.Cursors;
 using DataObject = System.Windows.DataObject;
 using KeyEventArgs = System.Windows.Input.KeyEventArgs;
+using MessageBox = System.Windows.MessageBox;
 using MouseEventArgs = System.Windows.Input.MouseEventArgs;
 using Point = System.Windows.Point;
+using SaveFileDialog = Microsoft.Win32.SaveFileDialog;
+using Size = System.Windows.Size;
 
 namespace SidebarExplorer.App;
 
 // ===== Cropping the panel's picture (2026-11-03, the author's design) =====
 //
-// The first of two stages: the bar over a picture, crop mode, a rectangle
-// drawn and adjusted over the picture, and Ctrl+C copying what it covers. The
-// second adds the temporary crop and the two saves; their buttons stand in the
-// bar greyed until then. The whole design, with what was settled and why, is
-// in the project notes on the crop round.
+// The bar over a picture, crop mode, a rectangle drawn and adjusted over the
+// picture, and Ctrl+C copying what it covers (the first stage); then the
+// buttons that stand by a finished rectangle, the temporary crop, and
+// the two saves (the second). The whole design, with what was settled and
+// why, is in the project notes on the crop round.
 //
 // THE RECTANGLE LIVES IN THE PICTURE'S OWN PIXELS - the original's, as shown,
 // EXIF orientation applied - never in screen coordinates. The panel draws a
@@ -57,6 +60,24 @@ public partial class MainWindow
     // A middle press in crop mode, waiting to learn whether it is a pan or the
     // click that toggles full screen (see ViewerImageHost_MouseUp).
     private Point? _viewerCropMiddleOrigin;
+
+    // THE TEMPORARY CROP: the cut, shown in the panel in place of the picture
+    // and not yet written anywhere. Full resolution - it is what a save
+    // writes and what a second crop cuts from - and the panel treats it as the
+    // picture on screen in every other way (fit, zoom, navigator, caption).
+    // Null while the picture on screen is the file's.
+    private BitmapSource? _viewerCropApplied;
+
+    // What the panel showed before the first temporary crop, so 자르기 취소
+    // puts it back without reading the file again (a NAS costs seconds). An
+    // animated GIF is the exception: its frames were let go when the crop
+    // replaced it, and it is read again.
+    private sealed record ViewerCropOriginal(
+        ImageSource Source, int PixelWidth, int PixelHeight, int DecodedWidth, string Caption, bool WasAnimated);
+
+    private ViewerCropOriginal? _viewerCropOriginal;
+
+    private bool _viewerCropSaving;
 
     // ----- The bar -----------------------------------------------------------
 
@@ -108,6 +129,12 @@ public partial class MainWindow
         {
             ExitViewerCropMode();
         }
+
+        // 저장 and 자르기 취소 answer the temporary crop; a rectangle alone is
+        // saved from the buttons beside it.
+        bool applied = _viewerCropApplied is not null;
+        ViewerCropSaveButton.IsEnabled = applied && !_viewerCropSaving;
+        ViewerCropRevertButton.IsEnabled = applied;
 
         if (!wanted)
         {
@@ -193,7 +220,21 @@ public partial class MainWindow
         }
         ViewerCropOverlay.Show(null, null);
         ViewerCropOverlay.Visibility = Visibility.Collapsed;
+        ViewerCropActions.Visibility = Visibility.Collapsed;
         ViewerImageHost.Cursor = ViewerHostRestCursor;
+    }
+
+    // Crop mode AND the temporary crop, for the moments the picture itself
+    // goes: another file, the panel closing. Nothing is put back on screen -
+    // what comes next replaces it - and nothing is asked: the cut is a few
+    // seconds' work, and the picture it came from is untouched on disk.
+    private void DiscardViewerCrop()
+    {
+        ExitViewerCropMode();
+        _viewerCropApplied = null;
+        _viewerCropOriginal = null;
+        ViewerCropSaveButton.IsEnabled = false;
+        ViewerCropRevertButton.IsEnabled = false;
     }
 
     // The host's cursor between drags: the cross in crop mode, else the pan
@@ -224,11 +265,38 @@ public partial class MainWindow
             : default;
     }
 
-    // Inside the picture and on a whole pixel: the rectangle never reaches
-    // past the picture's edge and never cuts a pixel in two.
-    private Point ClampToPicture(Point pixel)
-        => new(Math.Round(Math.Clamp(pixel.X, 0, _viewerPixelWidth)),
-               Math.Round(Math.Clamp(pixel.Y, 0, _viewerPixelHeight)));
+    // THE PART OF THE PICTURE ON SCREEN, in its pixels - what a drawn or
+    // pulled edge can reach (2026-11-03, on request). Zoomed in, a drag used
+    // to run on past the panel's edge, and an edge out there can neither be
+    // seen nor taken hold of: the cut would be decided where nobody can look.
+    // So the hand's point stops at the panel's edge; more than the panel
+    // shows is a wheel turn out, and a handle at each zoom is how one corner
+    // is set close up and the other from further away. The panel is NOT
+    // scrolled for the hand - motion the app drives itself is what this app
+    // does not do. A MOVE keeps the whole picture as its room: the rectangle
+    // is carried, not drawn.
+    private Rect ViewerCropReach
+    {
+        get
+        {
+            var topLeft = HostToPicturePixel(new Point(0, 0));
+            var bottomRight = HostToPicturePixel(new Point(ViewerImageHost.ActualWidth, ViewerImageHost.ActualHeight));
+            double left = Math.Ceiling(Math.Clamp(topLeft.X, 0, _viewerPixelWidth));
+            double top = Math.Ceiling(Math.Clamp(topLeft.Y, 0, _viewerPixelHeight));
+            double right = Math.Floor(Math.Clamp(bottomRight.X, 0, _viewerPixelWidth));
+            double bottom = Math.Floor(Math.Clamp(bottomRight.Y, 0, _viewerPixelHeight));
+            return new Rect(new Point(left, top), new Point(Math.Max(left, right), Math.Max(top, bottom)));
+        }
+    }
+
+    // Inside that reach and on a whole pixel: the rectangle never passes what
+    // is on screen or the picture's edge, and never cuts a pixel in two.
+    private Point ClampToReach(Point pixel)
+    {
+        var reach = ViewerCropReach;
+        return new(Math.Round(Math.Clamp(pixel.X, reach.Left, reach.Right)),
+                   Math.Round(Math.Clamp(pixel.Y, reach.Top, reach.Bottom)));
+    }
 
     // Redrawn on every zoom, pan frame, resize and drag move - see
     // ViewerCropOverlay for what a frame costs.
@@ -242,6 +310,7 @@ public partial class MainWindow
         if (_viewerCropSelection is not { } selection)
         {
             ViewerCropOverlay.Show(null, null);
+            ViewerCropActions.Visibility = Visibility.Collapsed;
             return;
         }
 
@@ -253,7 +322,51 @@ public partial class MainWindow
             selection.Width * display,
             selection.Height * display);
         ViewerCropOverlay.Show(onScreen, $"{selection.Width:0} × {selection.Height:0}");
+        PlaceViewerCropActions(onScreen);
     }
+
+    // THE BUTTONS BY A FINISHED RECTANGLE: under its bottom-right
+    // corner, right-aligned to it, or just inside that corner when there is no
+    // room below - always within the panel. Not while the rectangle is being
+    // drawn or pulled: they would jump about under the hand.
+    private void PlaceViewerCropActions(Rect onScreen)
+    {
+        if (_viewerCropDrag != CropDrag.None)
+        {
+            ViewerCropActions.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        ViewerCropActions.Visibility = Visibility.Visible;
+        // MEASURED WITH NO MARGIN. A DesiredSize includes the element's own
+        // Margin, and the Margin is where this method put the plate last time
+        // - so from the second rectangle on, the plate measured as large as
+        // its previous position, the clamp below took it for something that
+        // could not fit, and it landed in the panel's top-left corner
+        // (2026-11-03, the first test).
+        ViewerCropActions.Margin = default;
+        ViewerCropActions.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        var size = ViewerCropActions.DesiredSize;
+        const double gap = 6;
+        double hostWidth = ViewerImageHost.ActualWidth;
+        double hostHeight = ViewerImageHost.ActualHeight;
+
+        double x = onScreen.Right - size.Width;
+        double y = onScreen.Bottom + gap;
+        if (y + size.Height > hostHeight)
+        {
+            y = onScreen.Bottom - size.Height - gap;
+        }
+
+        x = Math.Clamp(x, 0, Math.Max(0, hostWidth - size.Width));
+        y = Math.Clamp(y, 0, Math.Max(0, hostHeight - size.Height));
+        ViewerCropActions.Margin = new Thickness(Math.Round(x), Math.Round(y), 0, 0);
+    }
+
+    // A press on the plate between its buttons is the plate's: without this
+    // it would reach the picture and start a new rectangle under them.
+    private void ViewerCropActions_MouseDown(object sender, MouseButtonEventArgs e)
+        => e.Handled = true;
 
     // ----- The drag ----------------------------------------------------------
 
@@ -288,7 +401,7 @@ public partial class MainWindow
         else
         {
             _viewerCropDrag = CropDrag.Draw;
-            _viewerCropAnchor = SnapCropPoint(ClampToPicture(pixel));
+            _viewerCropAnchor = SnapCropPointInReach(ClampToReach(pixel));
             _viewerCropSelection = null;
             UpdateViewerCropOverlay();
         }
@@ -323,7 +436,7 @@ public partial class MainWindow
             case CropDrag.Draw:
                 // Nothing until the hand has actually moved a pixel: a click is
                 // how a rectangle is cleared, not how a 0 × 0 one is made.
-                var corner = ClampToPicture(pixel);
+                var corner = ClampToReach(pixel);
                 if (_viewerCropSelection is null && corner == _viewerCropAnchor)
                 {
                     break;
@@ -332,7 +445,7 @@ public partial class MainWindow
                 break;
 
             case CropDrag.Resize when _viewerCropSelection is { } current:
-                _viewerCropSelection = ResizeCrop(current, ClampToPicture(pixel), square);
+                _viewerCropSelection = ResizeCrop(current, ClampToReach(pixel), square);
                 break;
 
             case CropDrag.Move when _viewerCropSelection is { } moving:
@@ -391,16 +504,20 @@ public partial class MainWindow
     // at the press), so both sides come out whole grid steps.
     private Rect SpanCrop(Point anchor, Point corner, bool square)
     {
-        corner = SnapCropPoint(corner);
+        corner = SnapCropPointInReach(corner);
         if (square)
         {
             double dx = corner.X - anchor.X;
             double dy = corner.Y - anchor.Y;
             double signX = dx < 0 ? -1 : 1;
             double signY = dy < 0 ? -1 : 1;
-            double room = Math.Min(
-                signX > 0 ? _viewerPixelWidth - anchor.X : anchor.X,
-                signY > 0 ? _viewerPixelHeight - anchor.Y : anchor.Y);
+            // What is on screen on that side of the anchor (ViewerCropReach) -
+            // nothing, rather than a negative, for an anchor a pulled corner
+            // left off screen.
+            var reach = ViewerCropReach;
+            double room = Math.Max(0, Math.Min(
+                signX > 0 ? reach.Right - anchor.X : anchor.X - reach.Left,
+                signY > 0 ? reach.Bottom - anchor.Y : anchor.Y - reach.Top));
             double side = Math.Min(Math.Max(Math.Abs(dx), Math.Abs(dy)), room);
             if (CropSnapHeld)
             {
@@ -424,11 +541,11 @@ public partial class MainWindow
                 return SpanCrop(_viewerCropAnchor, pixel, square);
 
             case CropPart.Left or CropPart.Right:
-                double x = SnapCropPoint(pixel).X;
+                double x = SnapCropPointInReach(pixel).X;
                 return new Rect(new Point(_viewerCropAnchor.X, current.Top), new Point(x, current.Bottom));
 
             case CropPart.Top or CropPart.Bottom:
-                double y = SnapCropPoint(pixel).Y;
+                double y = SnapCropPointInReach(pixel).Y;
                 return new Rect(new Point(current.Left, _viewerCropAnchor.Y), new Point(current.Right, y));
         }
 
@@ -456,6 +573,25 @@ public partial class MainWindow
         double x = pixel.X >= _viewerPixelWidth ? _viewerPixelWidth : Math.Round(pixel.X / CropGrid) * CropGrid;
         double y = pixel.Y >= _viewerPixelHeight ? _viewerPixelHeight : Math.Round(pixel.Y / CropGrid) * CropGrid;
         return new Point(Math.Min(x, _viewerPixelWidth), Math.Min(y, _viewerPixelHeight));
+    }
+
+    // The same grid for a point the hand draws or pulls, held inside what is
+    // on screen (ViewerCropReach): the reach's own edges stay reachable the
+    // way the picture's do, and a step that would round past one stops on it.
+    private Point SnapCropPointInReach(Point pixel)
+    {
+        if (!CropSnapHeld)
+        {
+            return pixel;
+        }
+
+        var reach = ViewerCropReach;
+        double Snap(double value, double low, double high) =>
+            value >= high ? high
+            : value <= low ? low
+            : Math.Clamp(Math.Round(value / CropGrid) * CropGrid, low, high);
+
+        return new Point(Snap(pixel.X, reach.Left, reach.Right), Snap(pixel.Y, reach.Top, reach.Bottom));
     }
 
     private static Cursor CropCursorFor(CropPart part) => part switch
@@ -524,30 +660,193 @@ public partial class MainWindow
 
     // ----- Keys --------------------------------------------------------------
 
-    // Esc ends crop mode; Ctrl+C copies the rectangle's pixels while there is
-    // one, and otherwise goes on to copy the FILE as it always has. Asked
-    // ahead of every other window key, since both keys mean something else
-    // further down.
+    // Esc ends crop mode. Ctrl+C copies, and Ctrl+Shift+S saves under a name
+    // asked for - the text view's key for it - whatever there is to cut: the
+    // rectangle while there is one, else the temporary crop. With neither,
+    // both keys go on to mean what they always have (Ctrl+C copies the FILE).
+    // Asked ahead of every other window key, since all three mean something
+    // else further down.
     private bool HandleViewerCropKey(KeyEventArgs e)
     {
-        if (!_viewerCropMode || KeyboardInTextField)
+        if (KeyboardInTextField)
         {
             return false;
         }
 
-        if (e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
+        if (_viewerCropMode && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
         {
             ExitViewerCropMode();
             return true;
         }
 
-        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control && _viewerCropSelection is not null)
+        // 자르기 취소 (2026-11-03, on request). The whole way back to the
+        // picture as the file has it, as the button does - not one cut at a
+        // time. Nothing else in the window answers Ctrl+Z (the text view's is
+        // its own, inside the editor), so with no temporary crop it is left
+        // alone.
+        if (_viewerCropApplied is not null && e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            RevertViewerCrop();
+            return true;
+        }
+
+        if (!HasViewerCropToTake)
+        {
+            return false;
+        }
+
+        if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
         {
             CopyViewerCropToClipboard();
             return true;
         }
 
+        if (e.Key == Key.S && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+        {
+            SaveViewerCrop(askName: true);
+            return true;
+        }
+
         return false;
+    }
+
+    private bool HasViewerCropToTake
+        => (_viewerCropMode && _viewerCropSelection is not null) || _viewerCropApplied is not null;
+
+    // ----- The buttons -------------------------------------------------------
+
+    // By the rectangle: 잘라서 보기 and 저장 (a click outside it clears it). In
+    // the bar: 저장 and 자르기 취소, for the temporary crop.
+    private void ViewerCropApply_Click(object sender, RoutedEventArgs e) => ApplyViewerCrop();
+
+    private void ViewerCropSaveSelection_Click(object sender, RoutedEventArgs e) => SaveViewerCrop(askName: false);
+
+    private void ViewerCropSaveApplied_Click(object sender, RoutedEventArgs e)
+    {
+        // What is on screen, not a rectangle that may have been drawn over it
+        // since: the bar's 저장 belongs to the temporary crop.
+        _viewerCropSelection = null;
+        SaveViewerCrop(askName: false);
+    }
+
+    private void ViewerCropRevert_Click(object sender, RoutedEventArgs e) => RevertViewerCrop();
+
+    // ----- The temporary crop ------------------------------------------------
+
+    // THE CUT TAKES THE PICTURE'S PLACE: the same Image, sized as a picture of
+    // its own (its pixels, at the rest state the panel keeps), so the wheel,
+    // the navigator, the zoom strip and a second crop all work on it as they
+    // do on a file. Crop mode stays on with no rectangle, for that second one.
+    private async void ApplyViewerCrop()
+    {
+        if (_viewerCropSelection is null || _pendingViewerPath is not { } path)
+        {
+            return;
+        }
+
+        var cut = await TakeViewerCropAsync();
+        if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _viewerCropOriginal ??= new ViewerCropOriginal(
+            ViewerImage.Source, _viewerPixelWidth, _viewerPixelHeight, _viewerDecodedWidth,
+            _viewerCaptionFacts, _viewerGifDecoder is not null);
+        // An animation would go on drawing its next frame into the Image.
+        StopViewerGif();
+
+        _viewerCropApplied = cut;
+        ViewerImage.Source = cut;
+        _viewerPixelWidth = cut.PixelWidth;
+        _viewerPixelHeight = cut.PixelHeight;
+        // Whole already, so the full-resolution pass has nothing to fetch -
+        // and must not, since what it fetches is the FILE.
+        _viewerDecodedWidth = cut.PixelWidth;
+        SetViewerCaption(string.Format(Strings.ViewerCropCaptionFormat, cut.PixelWidth, cut.PixelHeight));
+
+        _viewerCropSelection = null;
+        ShowViewerAtRest();
+        UpdateViewerPictureBar();
+    }
+
+    // 자르기 취소: the picture as it was before the first temporary crop, at
+    // rest, crop mode off.
+    private void RevertViewerCrop()
+    {
+        if (_viewerCropOriginal is not { } original)
+        {
+            return;
+        }
+
+        ExitViewerCropMode();
+        _viewerCropApplied = null;
+        _viewerCropOriginal = null;
+
+        if (original.WasAnimated)
+        {
+            // Read again - the frames were let go (see ViewerCropOriginal).
+            _pendingViewerPath = null;
+            UpdateViewerPreview();
+            return;
+        }
+
+        ViewerImage.Source = original.Source;
+        _viewerPixelWidth = original.PixelWidth;
+        _viewerPixelHeight = original.PixelHeight;
+        _viewerDecodedWidth = original.DecodedWidth;
+        SetViewerCaption(original.Caption);
+        ShowViewerAtRest();
+        UpdateViewerPictureBar();
+    }
+
+    // Where a picture arriving lands: the remembered rest state, centred.
+    private void ShowViewerAtRest()
+    {
+        _viewerZoom = ViewerRestZoom;
+        _viewerFill = ViewerRestIsFill;
+        ViewerZoomPan.X = 0;
+        ViewerZoomPan.Y = 0;
+        ApplyViewerZoom();
+    }
+
+    // What a copy or a save takes: the rectangle, cut from the temporary crop
+    // if there is one and from the file's own pixels if not; or, with no
+    // rectangle, the temporary crop whole. Null when there is nothing.
+    private async Task<BitmapSource?> TakeViewerCropAsync()
+    {
+        if (!(_viewerCropMode && _viewerCropSelection is { } selection))
+        {
+            return _viewerCropApplied;
+        }
+
+        var area = new Int32Rect((int)selection.X, (int)selection.Y, (int)selection.Width, (int)selection.Height);
+        if (area.Width <= 0 || area.Height <= 0)
+        {
+            return null;
+        }
+
+        if (_viewerCropApplied is { } applied)
+        {
+            return CutViewerBitmap(applied, area);
+        }
+
+        if (ViewerImage.Source is BitmapSource shown &&
+            shown.PixelWidth == _viewerPixelWidth && shown.PixelHeight == _viewerPixelHeight)
+        {
+            // The GIF's canvas is live and unfrozen - a copy of this frame is
+            // what gets cut, and the animation carries on.
+            return CutViewerBitmap(shown.IsFrozen ? shown : shown.Clone(), area);
+        }
+
+        if (_pendingViewerPath is not { } path)
+        {
+            return null;
+        }
+
+        return await Task.Run(() => DecodeViewerOriginal(path) is { } original
+            ? CutViewerBitmap(original, area)
+            : null);
     }
 
     // ----- Copy --------------------------------------------------------------
@@ -559,35 +858,172 @@ public partial class MainWindow
     // decode is 200MB outside the GC heap, so nothing holds on to it.
     private async void CopyViewerCropToClipboard()
     {
-        if (_viewerCropSelection is not { } selection || _pendingViewerPath is not { } path)
-        {
-            return;
-        }
-
-        var area = new Int32Rect((int)selection.X, (int)selection.Y, (int)selection.Width, (int)selection.Height);
-        if (area.Width <= 0 || area.Height <= 0)
-        {
-            return;
-        }
-
-        BitmapSource? cut;
-        if (ViewerImage.Source is BitmapSource shown &&
-            shown.PixelWidth == _viewerPixelWidth && shown.PixelHeight == _viewerPixelHeight)
-        {
-            // The GIF's canvas is live and unfrozen - a copy of this frame is
-            // what gets cut, and the animation carries on.
-            cut = CutViewerBitmap(shown.IsFrozen ? shown : shown.Clone(), area);
-        }
-        else
-        {
-            cut = await Task.Run(() => DecodeViewerOriginal(path) is { } original
-                ? CutViewerBitmap(original, area)
-                : null);
-        }
-
-        if (cut is not null)
+        if (await TakeViewerCropAsync() is { } cut)
         {
             await PutImageOnClipboard(cut);
+        }
+    }
+
+    // ----- Save --------------------------------------------------------------
+
+    // BESIDE THE ORIGINAL, under its name with -crop, numbered " (2)" on as
+    // paste numbers a copy - never over anything. Or, with askName, wherever
+    // the save dialog says, which may write over a file it asked about.
+    //
+    // In the original's format where WPF can write it (JPEG at quality 95,
+    // PNG, BMP, TIFF, GIF), PNG otherwise - WebP, HEIC, AVIF and an icon have
+    // no encoder here. No metadata goes with it: the cut is a new picture,
+    // the camera's record of the old one is not its own, and the EXIF turn is
+    // already in its pixels (a separate EXIF view and editor is planned).
+    //
+    // After it: back to the picture as the file has it, crop mode off - the
+    // job is done - and the panel stays on the original. The new file is put
+    // in the tree and the strip at once rather than when the watcher gets to
+    // it, so the save reads as having happened.
+    private async void SaveViewerCrop(bool askName)
+    {
+        if (_viewerCropSaving || _pendingViewerPath is not { } path ||
+            Path.GetDirectoryName(path) is not { Length: > 0 } folder)
+        {
+            return;
+        }
+
+        var cut = await TakeViewerCropAsync();
+        if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        string extension = CropSaveExtension(Path.GetExtension(path));
+        string target = FileOperationService.GetUniqueDestination(
+            Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + "-crop" + extension));
+
+        if (askName)
+        {
+            var dialog = new SaveFileDialog
+            {
+                InitialDirectory = folder,
+                FileName = Path.GetFileName(target),
+                Filter = Strings.ViewerCropSaveFilter,
+                FilterIndex = CropFilterIndex(extension),
+                DefaultExt = extension,
+                AddExtension = true,
+            };
+            if (dialog.ShowDialog(this) != true)
+            {
+                return;
+            }
+
+            target = Path.GetFullPath(dialog.FileName);
+            // A name the encoders cannot write (a .webp typed in, no
+            // extension at all) is written as PNG, and says so in its name.
+            string chosen = Path.GetExtension(target).ToLowerInvariant();
+            if (CropSaveExtension(chosen) != chosen)
+            {
+                target += ".png";
+            }
+        }
+
+        _viewerCropSaving = true;
+        UpdateViewerPictureBar();
+        (bool saved, string? error) = await Task.Run(() => WriteViewerCrop(cut, target, replace: askName));
+        _viewerCropSaving = false;
+
+        if (!saved)
+        {
+            UpdateViewerPictureBar();
+            MessageBox.Show(this, error ?? string.Empty, Strings.ViewerCropSaveFailedTitle,
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            if (_viewerCropApplied is not null)
+            {
+                RevertViewerCrop();
+            }
+            else
+            {
+                ExitViewerCropMode();
+            }
+        }
+
+        string? savedFolder = Path.GetDirectoryName(target);
+        if (ViewerItem?.Parent is { IsDirectory: true } parent &&
+            string.Equals(parent.FullPath, savedFolder, StringComparison.OrdinalIgnoreCase))
+        {
+            RefreshFolderPreservingState(parent);
+        }
+        UpdateViewerPictureBar();
+    }
+
+    // The dialog's type row for an extension, in Strings.ViewerCropSaveFilter's
+    // order (1-based, as the dialog counts).
+    private static int CropFilterIndex(string extension) => extension switch
+    {
+        ".jpg" or ".jpeg" or ".jfif" => 2,
+        ".bmp" => 3,
+        ".tif" or ".tiff" => 4,
+        ".gif" => 5,
+        _ => 1,
+    };
+
+    // The extension a save keeps: the original's, lower-cased, where there is
+    // an encoder for it; .png where there is not.
+    private static string CropSaveExtension(string originalExtension) => originalExtension.ToLowerInvariant() switch
+    {
+        ".jpg" or ".jpeg" or ".jfif" or ".png" or ".bmp" or ".tif" or ".tiff" or ".gif" => originalExtension.ToLowerInvariant(),
+        _ => ".png",
+    };
+
+    private static BitmapEncoder CropEncoderFor(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".jpg" or ".jpeg" or ".jfif" => new JpegBitmapEncoder { QualityLevel = 95 },
+        ".bmp" => new BmpBitmapEncoder(),
+        ".tif" or ".tiff" => new TiffBitmapEncoder(),
+        ".gif" => new GifBitmapEncoder(),
+        _ => new PngBitmapEncoder(),
+    };
+
+    // A worker. Written to a hidden temporary file beside the target and then
+    // moved into place, as the zip is (ArchiveService.CreateZip): a save that
+    // fails half way leaves no half-written picture under the real name.
+    private static (bool Saved, string? Error) WriteViewerCrop(BitmapSource image, string target, bool replace)
+    {
+        string folder = Path.GetDirectoryName(target) ?? string.Empty;
+        string temp = FileOperationService.GetUniqueDestination(
+            Path.Combine(folder, "~" + Path.GetFileName(target) + ".tmp"));
+        try
+        {
+            using (var stream = new FileStream(temp, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                File.SetAttributes(temp, FileAttributes.Hidden | FileAttributes.Temporary);
+                var encoder = CropEncoderFor(Path.GetExtension(target));
+                // JPEG has no alpha; given one, the encoder's own conversion
+                // is not something to leave to chance.
+                BitmapSource frame = encoder is JpegBitmapEncoder
+                    ? new FormatConvertedBitmap(image, PixelFormats.Bgr24, null, 0)
+                    : image;
+                encoder.Frames.Add(BitmapFrame.Create(frame));
+                encoder.Save(stream);
+            }
+
+            File.SetAttributes(temp, FileAttributes.Normal);
+            File.Move(temp, target, overwrite: replace);
+            return (true, null);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
+                                       or InvalidOperationException or ArgumentException)
+        {
+            try
+            {
+                File.Delete(temp);
+            }
+            catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
+            {
+            }
+            return (false, ex.Message);
         }
     }
 

@@ -497,12 +497,18 @@ public static class Strings
     public static string ViewerZoomFill = "채우기";
     public static string ViewerNavigator = "내비게이터";
     public static string ViewerClose = "멀티미디어 패널 닫기 (Ctrl+W)";
-    // The picture bar's crop buttons (2026-11-03). 저장 and 자르기 취소 stay
-    // greyed until the crop's second stage gives them something to do.
+    // The picture bar's crop buttons and the two by a finished rectangle
+    // (2026-11-03). The bar's 저장 and 자르기 취소 are greyed until there is a
+    // temporary crop; 저장 says where it writes, since it asks nothing.
     public static string ViewerCrop = "자르기 (Ctrl+C로 영역 복사)";
     public static string ViewerCropUnavailable = "이 형식은 자를 수 없습니다";
-    public static string ViewerCropSave = "저장";
-    public static string ViewerCropRevert = "자르기 취소";
+    public static string ViewerCropSave = "저장 (이름-crop) · 다른 이름으로 저장 Ctrl+Shift+S";
+    public static string ViewerCropRevert = "자르기 취소 (Ctrl+Z)";
+    public static string ViewerCropApply = "잘라서 보기";
+    public static string ViewerCropCaptionFormat = "{0} × {1}  ·  자른 이미지 (저장 전)";
+    public static string ViewerCropSaveFilter =
+        "PNG 이미지 (*.png)|*.png|JPEG 이미지 (*.jpg)|*.jpg;*.jpeg;*.jfif|BMP 이미지 (*.bmp)|*.bmp|TIFF 이미지 (*.tif)|*.tif;*.tiff|GIF 이미지 (*.gif)|*.gif";
+    public static string ViewerCropSaveFailedTitle = "자른 이미지를 저장하지 못했습니다";
     // The footer's now-playing row, which only exists while the viewer is shut
     // and 배경 재생 is holding a track.
     public static string FooterNowPlayingOpen = "멀티미디어 패널에서 열기";
@@ -1377,8 +1383,13 @@ public static class Strings
         ViewerClose = "Close the multimedia panel (Ctrl+W)";
         ViewerCrop = "Crop (Ctrl+C copies the area)";
         ViewerCropUnavailable = "This format can't be cropped";
-        ViewerCropSave = "Save";
-        ViewerCropRevert = "Undo crop";
+        ViewerCropSave = "Save (name-crop) · Save as Ctrl+Shift+S";
+        ViewerCropRevert = "Undo crop (Ctrl+Z)";
+        ViewerCropApply = "Crop and view";
+        ViewerCropCaptionFormat = "{0} × {1}  ·  Cropped (not saved)";
+        ViewerCropSaveFilter =
+            "PNG image (*.png)|*.png|JPEG image (*.jpg)|*.jpg;*.jpeg;*.jfif|BMP image (*.bmp)|*.bmp|TIFF image (*.tif)|*.tif;*.tiff|GIF image (*.gif)|*.gif";
+        ViewerCropSaveFailedTitle = "The cropped image could not be saved";
         FooterNowPlayingOpen = "Open in the multimedia panel";
         FooterHeldFilmResume = "Resume";
         ViewerNowPlayingLabel = "Now playing";
