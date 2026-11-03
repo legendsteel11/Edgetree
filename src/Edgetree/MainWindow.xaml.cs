@@ -836,9 +836,37 @@ public partial class MainWindow : Window
         // ViewerOpen saying true about a panel that is not there - the width
         // clamp, a preset captured in this session and the next exit would all
         // believe it. Opening the panel again sets it back, as it always has.
-        if (App.StartedAtSignIn && !_settings.IsFloating && _settings.ViewerOpen)
+        //
+        // THE APP'S OWN RESTART TOO (2026-11-03, on request): 다시 시작 and the
+        // other relaunches (RelaunchSelf) are a fresh start, not a return to
+        // the picture that was up, and they could not be told apart from a
+        // person starting the app until they carried an argument.
+        if ((App.StartedAtSignIn || App.StartedByRestart) && !_settings.IsFloating && _settings.ViewerOpen)
         {
             _settings.ViewerOpen = false;
+            ExitLog.Record("multimedia panel left shut at this start (it was open at the last exit)");
+        }
+
+        // AND IT STAYS SHUT UNTIL A HAND ARRIVES (2026-11-03). The line above
+        // was not enough: the start puts the last selection back, and with
+        // 자동 펼치기 on, that selection change opened the panel a second
+        // later - measured, by the instrument in OpenViewer, from
+        // ApplyViewerAutoToggle's timer one second into a restart. 자동 펼치기
+        // is about a selection a person makes, and this one is the app's. So
+        // after such a start it waits for the first press or key in the
+        // window, whatever the restore does and however late it lands -
+        // which also covers a panel that was shut at the last exit, where the
+        // line above has nothing to do. Every other way of opening the panel
+        // is a hand already, and is left alone.
+        if ((App.StartedAtSignIn || App.StartedByRestart) && !_settings.IsFloating)
+        {
+            _viewerAutoOpenHeld = true;
+            AddHandler(PreviewMouseDownEvent,
+                new MouseButtonEventHandler((_, _) => _viewerAutoOpenHeld = false),
+                handledEventsToo: true);
+            AddHandler(PreviewKeyDownEvent,
+                new System.Windows.Input.KeyEventHandler((_, _) => _viewerAutoOpenHeld = false),
+                handledEventsToo: true);
         }
 
         Width = _settings.IsAutoHidden ? CollapsedWidth
@@ -11265,7 +11293,7 @@ public partial class MainWindow : Window
             ExitLog.Record("restart requested by the user (language/settings change)");
             // Unsaved text edits on disk before the next instance reads them.
             FlushUnsavedText();
-            System.Diagnostics.Process.Start(Environment.ProcessPath!);
+            RelaunchSelf();
             Application.Current.Shutdown();
         }
     }
@@ -11285,9 +11313,15 @@ public partial class MainWindow : Window
         ExitLog.Record("restart requested by the user (restart menu)");
         // Unsaved text edits on disk before the next instance reads them.
         FlushUnsavedText();
-        System.Diagnostics.Process.Start(Environment.ProcessPath!);
+        RelaunchSelf();
         Application.Current.Shutdown();
     }
+
+    // The next instance of a restart, told it is one (App.StartedByRestart) so
+    // it starts the way a sign-in does - the multimedia panel shut. Every
+    // relaunch goes through here: the four used to start the bare exe each.
+    private static void RelaunchSelf()
+        => System.Diagnostics.Process.Start(Environment.ProcessPath!, App.RestartArgument);
 
     private void IconStyleMenuItem_Click(object sender, RoutedEventArgs e)
     {
@@ -11449,7 +11483,7 @@ public partial class MainWindow : Window
             ExitLog.Record("restart requested by the user (language/settings change)");
             // Unsaved text edits on disk before the next instance reads them.
             FlushUnsavedText();
-            System.Diagnostics.Process.Start(Environment.ProcessPath!);
+            RelaunchSelf();
             Application.Current.Shutdown();
         }
     }
@@ -11500,7 +11534,7 @@ public partial class MainWindow : Window
         ExitLog.Record("restart after settings reset");
         // Unsaved text edits on disk before the next instance reads them.
         FlushUnsavedText();
-        System.Diagnostics.Process.Start(Environment.ProcessPath!);
+        RelaunchSelf();
         Application.Current.Shutdown();
     }
 
@@ -24580,6 +24614,22 @@ public partial class MainWindow : Window
             _settingsService.Save(_settings);
         }
 
+#if DEBUG
+        // INSTRUMENT (2026-11-03): the panel was reported open after a Windows
+        // start, which leaves it shut at startup (see the constructor), and
+        // nothing on record could say whether that start was Windows' or what
+        // opened the panel afterwards. Within two minutes of such a start this
+        // names the methods that asked, beside the start line in exit.log.
+        if ((App.StartedAtSignIn || App.StartedByRestart) &&
+            DateTime.Now - System.Diagnostics.Process.GetCurrentProcess().StartTime is { TotalSeconds: < 120 } sinceStart)
+        {
+            var callers = new System.Diagnostics.StackTrace(1, false).GetFrames()
+                .Take(4)
+                .Select(frame => frame.GetMethod()?.Name ?? "?");
+            ExitLog.Record($"multimedia panel opened {sinceStart.TotalSeconds:0}s after the start, from {string.Join(" < ", callers)}");
+        }
+#endif
+
         // Before the preview reads ViewerItem, or it shows the tree's file
         // under a list of results first.
         if (_isSearchViewActive)
@@ -24843,9 +24893,15 @@ public partial class MainWindow : Window
     // was cut - see ApplyViewerAutoToggle.
     private System.Windows.Threading.DispatcherTimer? _viewerAutoTimer;
 
+    // Set by a sign-in or restart start until the first press or key in the
+    // window - see the constructor. Asked at both ends: a restore landing
+    // before the hand is never scheduled, and one scheduled just before it is
+    // not acted on.
+    private bool _viewerAutoOpenHeld;
+
     private void ScheduleViewerAutoToggle()
     {
-        if (!_settings.ViewerFollowsSelection)
+        if (!_settings.ViewerFollowsSelection || _viewerAutoOpenHeld)
         {
             return;
         }
@@ -24878,7 +24934,7 @@ public partial class MainWindow : Window
 
     private void ApplyViewerAutoToggle()
     {
-        if (!_settings.ViewerFollowsSelection)
+        if (!_settings.ViewerFollowsSelection || _viewerAutoOpenHeld)
         {
             return;
         }

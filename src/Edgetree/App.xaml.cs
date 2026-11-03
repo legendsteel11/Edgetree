@@ -191,9 +191,20 @@ public partial class App : Application
     // base.OnStartup, which is what constructs MainWindow through StartupUri.
     public static bool StartedAtSignIn { get; private set; }
 
+    // True when the app restarted itself - 다시 시작, a language change, a
+    // settings import or reset (2026-11-03). Those relaunch with this argument
+    // (MainWindow.RelaunchSelf), and the new instance treats the start the way
+    // it treats a sign-in: the multimedia panel stays shut. Until then the
+    // relaunch carried no argument and could not be told from a person
+    // starting the app, so a panel open at the restart unfolded again.
+    public static bool StartedByRestart { get; private set; }
+
+    internal const string RestartArgument = "--restart";
+
     protected override void OnStartup(StartupEventArgs e)
     {
         StartedAtSignIn = e.Args.Any(arg => string.Equals(arg, "--autostart", StringComparison.OrdinalIgnoreCase));
+        StartedByRestart = e.Args.Any(arg => string.Equals(arg, RestartArgument, StringComparison.OrdinalIgnoreCase));
 
         // Named (not per-version) so an old build and a freshly built one
         // still see each other as the same app - the whole point is blocking
@@ -240,7 +251,11 @@ public partial class App : Application
         // BeginSession first: it stamps the post-mortem of the previous
         // session, which reads better above this session's own start line.
         ExitLog.BeginSession();
-        ExitLog.Record($"--- started (pid {Environment.ProcessId})");
+        // How it was started, on the same line (2026-11-03): whether a start
+        // was Windows' own is what decides the panel's state at startup, and
+        // nothing recorded it.
+        ExitLog.Record($"--- started (pid {Environment.ProcessId})" +
+            (StartedAtSignIn ? " at sign-in" : StartedByRestart ? " by restart" : string.Empty));
 
         // Before anything touches a drive - see the method's own note.
         NativeMethods.SuppressDeviceErrorDialogs();
