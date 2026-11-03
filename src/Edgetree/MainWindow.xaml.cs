@@ -13519,6 +13519,11 @@ public partial class MainWindow : Window
     // happens once. Not saved from here, since the reveal hit-test runs
     // through it: the next settings save writes it, and a restart before then
     // converts the same percent again.
+    //
+    // Held to the options row's own range. The percent ran to 100, so a long
+    // handle on a tall band came out past 990 - the row then showed 990 over a
+    // longer handle, and its first − press cut the handle by the difference
+    // at once (11-03 review). Such a handle is 990 from the update on.
     private void AdoptLegacyHandleLength(double bandHeight)
     {
         if (_settings.AutoHideHandleLengthPercent is not { } percent || bandHeight <= 0)
@@ -13526,7 +13531,9 @@ public partial class MainWindow : Window
             return;
         }
 
-        _settings.AutoHideHandleLength = Math.Round(bandHeight * Math.Clamp(percent, 0, 100) / 100);
+        _settings.AutoHideHandleLength = Math.Clamp(
+            Math.Round(bandHeight * Math.Clamp(percent, 0, 100) / 100),
+            MinChosenHandleHeight, MaxChosenHandleHeight);
         _settings.AutoHideHandleLengthPercent = null;
     }
 
