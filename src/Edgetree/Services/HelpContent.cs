@@ -575,6 +575,8 @@ public static class HelpContent
                     // size and widening the window looks like it lost the setting.
                     R("⋯ → 멀티미디어 패널 → 시계 크기", "50% ~ 150% (패널 크기에 대한 비율)",
                       "⋯ → Multimedia panel → Clock size", "50% to 150%, as a share of the panel"),
+                    R("⋯ → 멀티미디어 패널 → 이미지 테두리 표시", "이미지 가장자리 바깥에 1px 선 표시",
+                      "⋯ → Multimedia panel → Border around images", "Draws a 1px line just outside the image's edge"),
                     // The wallpaper item had NO row at all until now - it has
                     // been in the picture's menu for weeks. Worth a line on its
                     // own account, and more so since 2.1.0: which monitor it

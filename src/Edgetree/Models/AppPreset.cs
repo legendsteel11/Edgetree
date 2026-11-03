@@ -143,6 +143,9 @@ public class AppPreset
         // The text view's line numbers (2026-10-11): a display switch on the
         // panel like the name line and the clock, and as free to apply.
         nameof(AppSettings.ViewerTextLineNumbers),
+
+        // 이미지 테두리 표시 (2026-11-03), on the same terms.
+        nameof(AppSettings.ViewerPictureOutline),
     };
 
     internal static readonly string[] LookFields =

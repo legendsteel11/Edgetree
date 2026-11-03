@@ -477,6 +477,11 @@ public class AppSettings
     // OFF by default: it covers part of the picture, and someone opening a
     // picture opened it to see the picture.
     public bool ViewerClock { get; set; } = false;
+    // 이미지 테두리 표시 (2026-11-03, on request): one device pixel round the
+    // outside of a picture, so its edge shows on a ground of the same colour -
+    // where a crop has to stop. OFF by default: nobody had missed it until the
+    // crop arrived.
+    public bool ViewerPictureOutline { get; set; } = false;
 
     // 시계 크기, as a multiple of the size the panel would choose on its own
     // (asked 2026-08-16, by someone who saw it).

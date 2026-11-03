@@ -620,6 +620,7 @@ public static class Strings
     // 패널 위의 시계. "슬라이드 쇼 시계"가 아님 - 쇼와 무관하게 켜고 끄는
     // 것이라, 이름에 쇼가 들어가면 쇼를 켜야 나오는 것으로 읽힘.
     public static string MenuViewerClock = "시계와 날짜";
+    public static string MenuViewerPictureOutline = "이미지 테두리 표시";
     // 크기 하나로 충분하다 - 시·분, 오전/오후, 날짜가 한 배수를 함께 따라간다.
     // 셋을 따로 주면 서로 어긋난 시계를 만들 수 있게 되고, 그건 아무도 원해서
     // 만드는 것이 아니다.
@@ -1423,6 +1424,7 @@ public static class Strings
         MenuSlideshow = "Slideshow";
         MenuSlideshowSeconds = "Seconds per picture";
         MenuViewerClock = "Clock and date";
+        MenuViewerPictureOutline = "Border around images";
         MenuViewerClockSize = "Clock size";
         // 12-hour with no meridiem, which is what the lock screen itself
         // shows - the date underneath already says which day it is.

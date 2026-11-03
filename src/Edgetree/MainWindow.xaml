@@ -225,6 +225,11 @@
              for why that used to be the case). -->
         <SolidColorBrush x:Key="PanelDividerBrush"
                 Color="#FF323438"/>
+        <!-- 이미지 테두리 표시's line round a picture (2026-11-03). Recoloured
+             per theme by ApplyColorSettings: white or black at a quarter
+             strength, so it shows on whatever ground colour was picked. -->
+        <SolidColorBrush x:Key="ViewerPictureOutlineBrush"
+                Color="#40FFFFFF"/>
         <!-- The scroll thumb's three states. Declared here as well as in
              App.xaml so ApplyColorSettings can RECOLOUR them in place rather
              than replace the entry - see SetBrushColor for why that difference
@@ -2445,6 +2450,12 @@
                         </Grid>
                     </MenuItem.Header>
                 </MenuItem>
+                <!-- Another display switch on the panel, after the clock and
+                     its size so the two stay together (2026-11-03). -->
+                <MenuItem Header="{x:Static services:Strings.MenuViewerPictureOutline}"
+                        IsCheckable="True"
+                        AutomationProperties.AutomationId="viewerPictureOutline"
+                        Click="ViewerPictureOutlineMenuItem_Click"/>
                 <Separator/>
                 <!-- WHAT SHAPE THE STRIP TAKES, at the head of the thumbnail
                      group because everything under it (preloading, the cache,
@@ -8734,7 +8745,8 @@
                                 Stretch="Uniform"
                                 RenderOptions.BitmapScalingMode="HighQuality"
                                 RenderTransformOrigin="0.5,0.5"
-                                Margin="10">
+                                Margin="10"
+                                SizeChanged="ViewerImage_SizeChanged">
                             <Image.RenderTransform>
                                 <TransformGroup>
                                     <ScaleTransform x:Name="ViewerZoomScale"
@@ -8746,6 +8758,10 @@
                                 </TransformGroup>
                             </Image.RenderTransform>
                         </Image>
+                        <!-- Under the crop overlay, which dims everything
+                             outside its rectangle - this line included. -->
+                        <local:ViewerPictureOutline x:Name="ViewerPictureOutline"
+                                Stroke="{DynamicResource ViewerPictureOutlineBrush}"/>
                         <local:ViewerCropOverlay x:Name="ViewerCropOverlay"
                                 Visibility="Collapsed"/>
                         <!-- THE BUTTONS BY A FINISHED RECTANGLE (2026-11-03,

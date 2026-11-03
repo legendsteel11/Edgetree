@@ -1494,6 +1494,7 @@ public partial class MainWindow : Window
         // state and the one thing this must not be confused with.
         SetBrushColor("FooterChipHoverForeground", light ? "#FF16181C" : "#FFF2F4F8");
         SetBrushColor("ViewerBackground", light ? _settings.LightViewerBackgroundColorHex : _settings.ViewerBackgroundColorHex);
+        SetBrushColor("ViewerPictureOutlineBrush", light ? "#40000000" : "#40FFFFFF");
         SetBrushColor("HeaderBackground", light ? _settings.LightHeaderBackgroundColorHex : _settings.HeaderBackgroundColorHex);
         SetBrushColor("AutoHideHandleBackground", light ? _settings.LightAutoHideHandleColorHex : _settings.AutoHideHandleColorHex);
         UpdateDerivedEdgeInks(light);
@@ -9441,6 +9442,11 @@ public partial class MainWindow : Window
                 viewerClock.IsEnabled = _viewerOpen;
             }
 
+            if (FindMenuItem(imageViewer, "viewerPictureOutline") is { } viewerPictureOutline)
+            {
+                viewerPictureOutline.IsChecked = _settings.ViewerPictureOutline;
+            }
+
 
             if (FindMenuItem(imageViewer, "precacheThumbnails") is { } precacheThumbnails &&
                 FindMenuItem(imageViewer, "clearThumbnailCache") is { } clearThumbnailCache)
@@ -13256,6 +13262,7 @@ public partial class MainWindow : Window
             // needed on this branch: the other one OPENS the panel, and opening
             // asks for the clock on its own way up.
             UpdateViewerClock();
+            UpdateViewerPictureOutline();
             _filmstripBuiltFor = default;
             UpdateViewerCarousel();
             ApplyFilmstripLayout();
@@ -30367,8 +30374,10 @@ public partial class MainWindow : Window
         ClampViewerPan();
         SnapViewerToDevicePixels(display);
         // The crop rectangle follows the picture through every zoom and
-        // resize; nothing when crop mode is off.
+        // resize; nothing when crop mode is off. So does the picture's
+        // outline, nothing when that is off.
         UpdateViewerCropOverlay();
+        UpdateViewerPictureOutline();
     }
 
     // 1:1 HAS TO MEAN PIXEL FOR PIXEL, AND IT DID NOT (2026-09-06, measured).
@@ -30542,8 +30551,10 @@ public partial class MainWindow : Window
         // file instead of two.
         UpdateViewerParkedTransport();
         // The bar over a picture answers the same question this method is
-        // asked for - what is on screen now (2026-11-03).
+        // asked for - what is on screen now (2026-11-03) - and so does the
+        // outline round it.
         UpdateViewerPictureBar();
+        UpdateViewerPictureOutline();
 
         // A PDF uses the same row with three of its controls (2026-10-27): 맞춤
         // is the fit to the panel's width, the buttons step, and the number
@@ -36077,6 +36088,65 @@ public partial class MainWindow : Window
         SetViewerClock(menuItem.IsChecked);
     }
 
+    private void ViewerPictureOutlineMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem)
+        {
+            return;
+        }
+
+        _settings.ViewerPictureOutline = menuItem.IsChecked;
+        _settingsService.Save(_settings);
+        UpdateViewerPictureOutline();
+    }
+
+    // 이미지 테두리 표시: round a PICTURE only - not a film, whose frame is the
+    // transport's, nor a track's cover, nor an icon, a text or a PDF, none of
+    // which is drawn in ViewerImage as a picture of the file. Asked on every
+    // zoom, pan frame and change of what is on screen, beside the crop
+    // overlay; with the switch off it is one comparison and nothing drawn.
+    // Edges past the panel are clipped with the picture, so a zoom past the
+    // panel leaves only the sides still in view, and in full screen it goes
+    // on round the picture there.
+    //
+    // MEASURED, for the reason SnapViewerToDevicePixels gives: the first
+    // version took ViewerPictureRectInHost's arithmetic, and layout rounding
+    // had the picture up to a pixel away from it. The element's own box IS
+    // the picture - Image draws its source into exactly its render size -
+    // taken through the zoom's transform into the outline's coordinates. A
+    // transform shows at once; a new size shows only after layout, which is
+    // why ViewerImage's SizeChanged asks again.
+    //
+    // And the picture's edges ALIASED while this is on (see
+    // ViewerPictureOutline), set back to the default when it is off, so the
+    // switch changes nothing about a picture for anyone who leaves it off.
+    private void UpdateViewerPictureOutline()
+    {
+        RenderOptions.SetEdgeMode(ViewerImage,
+            _settings.ViewerPictureOutline ? EdgeMode.Aliased : EdgeMode.Unspecified);
+
+        Rect? drawn = null;
+        if (_settings.ViewerPictureOutline &&
+            _viewerOpen &&
+            !ViewerMediaIsSelection &&
+            ViewerImage.IsVisible &&
+            ViewerImage.Source is not null &&
+            ViewerImage.RenderSize is { Width: > 0, Height: > 0 } size)
+        {
+            try
+            {
+                drawn = ViewerImage.TransformToVisual(ViewerPictureOutline).TransformBounds(new Rect(size));
+            }
+            catch (InvalidOperationException)
+            {
+                // Not in one tree yet; the size change after layout asks again.
+            }
+        }
+        ViewerPictureOutline.Show(drawn);
+    }
+
+    private void ViewerImage_SizeChanged(object sender, SizeChangedEventArgs e) => UpdateViewerPictureOutline();
+
     private void SetViewerClock(bool on)
     {
         _settings.ViewerClock = on;
@@ -36792,9 +36862,10 @@ public partial class MainWindow : Window
         // job - and it is two transform values when it is on, nothing when it
         // is off. The rest of the settle work has no business here.
         UpdateViewerNavigator();
-        // And the crop rectangle, which rides on the picture (nothing when
-        // crop mode is off).
+        // And the crop rectangle and the outline, which ride on the picture
+        // (nothing when they are off).
         UpdateViewerCropOverlay();
+        UpdateViewerPictureOutline();
     }
 
     // A CLICK ON THE PICTURE BRINGS ITS THUMBNAIL BACK INTO VIEW (2026-10-07,
