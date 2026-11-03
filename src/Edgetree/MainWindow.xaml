@@ -627,6 +627,22 @@
                                         Property="Opacity"
                                         Value="1"/>
                             </Trigger>
+                            <!-- Greyed the way the plain bar buttons are (see
+                                 ToggleButtonStyle) - 2026-11-03, when the
+                                 picture bar's 자르기 became the first of these
+                                 switches that can be unavailable. Last, so it
+                                 wins over hover. -->
+                            <Trigger Property="IsEnabled"
+                                    Value="False">
+                                <Setter TargetName="Bd"
+                                        Property="Background"
+                                        Value="Transparent"/>
+                                <Setter TargetName="Content"
+                                        Property="Opacity"
+                                        Value="0.45"/>
+                                <Setter Property="Cursor"
+                                        Value="Arrow"/>
+                            </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
@@ -7906,6 +7922,7 @@
                             MouseLeftButtonDown="ViewerImageHost_MouseLeftButtonDown"
                             MouseMove="ViewerImageHost_MouseMove"
                             MouseLeftButtonUp="ViewerImageHost_MouseLeftButtonUp"
+                            MouseUp="ViewerImageHost_MouseUp"
                             LostMouseCapture="ViewerImageHost_LostMouseCapture"
                             ContextMenuOpening="ViewerImageHost_ContextMenuOpening">
                         <!-- The picture's own right-click menu. Every file
@@ -8705,6 +8722,11 @@
                                         Click="ExitAppMenuItem_Click"/>
                             </ContextMenu>
                         </Border.ContextMenu>
+                        <!-- The picture and, over it, the crop rectangle
+                             (2026-11-03). In one Grid so the rectangle shares
+                             the host's coordinates and its clip; it takes no
+                             hit test, so every press still reaches the host. -->
+                        <Grid>
                         <!-- Uniform with no StretchDirection cap: the user
                              asked for no size ceiling, so a small image may
                              scale up - HighQuality keeps that acceptable. -->
@@ -8724,6 +8746,83 @@
                                 </TransformGroup>
                             </Image.RenderTransform>
                         </Image>
+                        <local:ViewerCropOverlay x:Name="ViewerCropOverlay"
+                                Visibility="Collapsed"/>
+                        </Grid>
+                    </Border>
+                    <!-- THE PICTURE'S BAR (2026-11-03, the author's design):
+                         the text and PDF bars' seat and build - the same
+                         style and size resources, so Ctrl+/- moves all three
+                         together - with 자르기 first, then the crop's 저장 and
+                         자르기 취소 (greyed until the crop's second stage), and
+                         the panel's close at the right end. Over the top of
+                         the picture's cell; the host is pushed down by its
+                         height (ApplyViewerPictureBarInset) so the picture
+                         fits under it rather than behind it.
+                         The three crop marks are the author's own Material
+                         Symbols files (opsz 20, an 18 viewBox at 1,1), boxed to
+                         their 20 grid (M0 0H20M0 20H20) the way the others are
+                         boxed to 960, so their own sizes survive Stretch. -->
+                    <Border x:Name="ViewerPictureBar"
+                            Grid.Row="0"
+                            VerticalAlignment="Top"
+                            Visibility="Collapsed"
+                            Background="{DynamicResource ViewerBackground}"
+                            BorderThickness="0,0,0,1"
+                            BorderBrush="{DynamicResource PanelDividerBrush}"
+                            Padding="{DynamicResource ViewerTextBarsPadding}"
+                            SizeChanged="ViewerPictureBar_SizeChanged">
+                        <Grid Margin="{DynamicResource ViewerTextBarMargin}"
+                                Height="{DynamicResource PathBarRowHeight}">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Left">
+                                <ToggleButton x:Name="ViewerCropToggle"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerCropToggle_Click">
+                                    <Path Data="M14.5,19V16h-9q-0.62,0-1.06-0.44T4,14.5v-9H1V4H4V1H5.5V14.5H19V16H16v3H14.5Zm0-6V5.5H7V4h7.5q0.62,0 1.06,0.44T16,5.5V13H14.5Z M0 0H20M0 20H20"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarListGlyphSize}"
+                                            Height="{DynamicResource PathBarListGlyphSize}"
+                                            Fill="{Binding Foreground,
+                                                RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                </ToggleButton>
+                                <Button x:Name="ViewerCropSaveButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="4,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="{x:Static services:Strings.ViewerCropSave}">
+                                    <Path Data="M15.25,17.5l3-3l-1.06-1.06L16,14.63V11.5H14.5v3.13l-1.19-1.19L12.25,14.5l3,3Zm-3,2.5V18.5h6V20h-6ZM5.5,17q-0.6,0-1.05-0.45T4,15.5V3.5Q4,2.9 4.45,2.45T5.5,2H12l4,4v4H14.5V7H11V3.5H5.5v12H11V17H5.5Zm0-1.5V9.42V7.46V3.5v12Z M0 0H20M0 20H20"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
+                                <Button x:Name="ViewerCropRevertButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        ToolTip="{x:Static services:Strings.ViewerCropRevert}">
+                                    <Path Data="M7.29,13.77L10,11.06l2.71,2.71l1.05-1.05L11.06,10l2.71-2.71L12.71,6.23L10,8.94L7.28,6.23L6.23,7.28L8.94,10L6.23,12.71l1.06,1.06ZM4.5,17q-0.62,0-1.06-0.44T3,15.5V4.5Q3,3.88 3.44,3.44T4.5,3h11q0.62,0 1.06,0.44T17,4.5v11q0,0.62-0.44,1.06T15.5,17H4.5Zm0-1.5h11V4.5H4.5v11Zm0-11v11V4.5Z M0 0H20M0 20H20"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
+                            </StackPanel>
+                            <!-- The panel's close, as the text and PDF bars'. -->
+                            <Button Grid.Column="1"
+                                    Style="{StaticResource ViewerTextBarButtonStyle}"
+                                    Margin="4,0,0,0"
+                                    Click="ViewerTextClosePanel_Click"
+                                    ToolTip="{x:Static services:Strings.ViewerClose}">
+                                <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+                                        Fill="{DynamicResource ForegroundText}"
+                                        Stretch="Uniform"
+                                        Width="{DynamicResource PathBarGlyphSize}"
+                                        Height="{DynamicResource PathBarGlyphSize}"/>
+                            </Button>
+                        </Grid>
                     </Border>
                     <!-- Zoom navigator: the whole picture small, with a box
                          showing which part of it the panel is currently

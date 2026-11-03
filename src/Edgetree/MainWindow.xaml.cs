@@ -1969,6 +1969,14 @@ public partial class MainWindow : Window
             return;
         }
 
+        // Crop mode's Esc and Ctrl+C, ahead of the full screen's Esc and the
+        // tree's Ctrl+C below (MainWindow.Crop.cs).
+        if (HandleViewerCropKey(e))
+        {
+            e.Handled = true;
+            return;
+        }
+
         // Esc leaves the viewer's full cover. Middle-clicking again does too,
         // but a mode that fills the screen has no visible way out of its own,
         // and Esc is what a hand reaches for. Narrow enough not to disturb the
@@ -24670,6 +24678,7 @@ public partial class MainWindow : Window
         UpdateResizeThumbVisibility();
         _pendingViewerPath = null;
         _viewerTreeShare = null;
+        ExitViewerCropMode();
         // Nothing is being shown, so nothing is driving what is shown. Reopening
         // starts from the tree again, which is where the eye button lives.
         _viewerListOverride = null;
@@ -25053,6 +25062,7 @@ public partial class MainWindow : Window
         if (item is null || item.IsPlaceholder || item.IsShowMore)
         {
             _pendingViewerPath = null;
+            ExitViewerCropMode();
             StopViewerGif();
             // AND NOT THE SOUND - the same skip the file branch below already
             // makes (2026-08-11). This is the path an empty panel takes, and
@@ -25097,6 +25107,8 @@ public partial class MainWindow : Window
             return;
         }
         _pendingViewerPath = path;
+        // A rectangle drawn on one picture means nothing on the next.
+        ExitViewerCropMode();
         // A new file always ends the old animation - and the old playback,
         // which is also where the previous video's file handle is released.
         // The same-path early return above is what lets a playing GIF (or
@@ -25155,6 +25167,11 @@ public partial class MainWindow : Window
         {
             ShowViewerIcon(path);
         }
+
+        // Asked here as well as from the zoom bar: a text's offer or a PDF
+        // takes the panel without necessarily passing through it, and the
+        // picture bar must not stand over either.
+        UpdateViewerPictureBar();
 
         // The transport survived the selection moving, so the panel has to say
         // what it is still holding - and the media row has to stay up, which it
@@ -30173,6 +30190,9 @@ public partial class MainWindow : Window
 
         ClampViewerPan();
         SnapViewerToDevicePixels(display);
+        // The crop rectangle follows the picture through every zoom and
+        // resize; nothing when crop mode is off.
+        UpdateViewerCropOverlay();
     }
 
     // 1:1 HAS TO MEAN PIXEL FOR PIXEL, AND IT DID NOT (2026-09-06, measured).
@@ -30280,9 +30300,13 @@ public partial class MainWindow : Window
         LogViewerPixelFidelity();
         UpdateViewerNavigator();
         UpdateViewerZoomBar();
-        ViewerImageHost.Cursor = ViewerCanPan
-            ? (_viewerPanning ? System.Windows.Input.Cursors.ScrollAll : System.Windows.Input.Cursors.SizeAll)
-            : null;
+        // Crop mode keeps its own cursor, set by the hover (MainWindow.Crop.cs).
+        if (!_viewerCropMode)
+        {
+            ViewerImageHost.Cursor = ViewerCanPan
+                ? (_viewerPanning ? System.Windows.Input.Cursors.ScrollAll : System.Windows.Input.Cursors.SizeAll)
+                : null;
+        }
     }
 
     // Keeps the picture from being dragged off its own panel: an axis smaller
@@ -30341,6 +30365,9 @@ public partial class MainWindow : Window
         // is being sized while a track sounds. This is that same pair with one
         // file instead of two.
         UpdateViewerParkedTransport();
+        // The bar over a picture answers the same question this method is
+        // asked for - what is on screen now (2026-11-03).
+        UpdateViewerPictureBar();
 
         // A PDF uses the same row with three of its controls (2026-10-27): 맞춤
         // is the fit to the panel's width, the buttons step, and the number
@@ -31242,6 +31269,13 @@ public partial class MainWindow : Window
         }
 
         if (e.ChangedButton != MouseButton.Middle)
+        {
+            return;
+        }
+
+        // In crop mode the middle button pans, and full screen waits for a
+        // release that did not move (ViewerImageHost_MouseUp).
+        if (HandleViewerCropMiddlePress(e))
         {
             return;
         }
@@ -36093,6 +36127,12 @@ public partial class MainWindow : Window
 
     private void ViewerImageHost_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        // Crop mode takes the left button whole - see MainWindow.Crop.cs.
+        if (HandleViewerCropPress(e))
+        {
+            return;
+        }
+
         // Before every branch below: zoom, pan, flick or play, all of them are
         // the hand arriving on the picture.
         StopSlideshowOnUserAction("picture click");
@@ -36542,6 +36582,11 @@ public partial class MainWindow : Window
 
     private void ViewerImageHost_MouseMove(object sender, System.Windows.Input.MouseEventArgs e)
     {
+        if (HandleViewerCropMove(e))
+        {
+            return;
+        }
+
         if (_viewerFlicking)
         {
             UpdateViewerFlick(e);
@@ -36564,6 +36609,9 @@ public partial class MainWindow : Window
         // job - and it is two transform values when it is on, nothing when it
         // is off. The rest of the settle work has no business here.
         UpdateViewerNavigator();
+        // And the crop rectangle, which rides on the picture (nothing when
+        // crop mode is off).
+        UpdateViewerCropOverlay();
     }
 
     // A CLICK ON THE PICTURE BRINGS ITS THUMBNAIL BACK INTO VIEW (2026-10-07,
@@ -36582,6 +36630,12 @@ public partial class MainWindow : Window
 
     private void ViewerImageHost_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        if (HandleViewerCropRelease())
+        {
+            _viewerClickOrigin = null;
+            return;
+        }
+
         var release = e.GetPosition(ViewerImageHost);
         bool wasClick = _viewerClickOrigin is { } press &&
             Math.Abs(release.X - press.X) < SystemParameters.MinimumHorizontalDragDistance &&
@@ -36593,7 +36647,7 @@ public partial class MainWindow : Window
         {
             _viewerPanning = false;
             ViewerImageHost.ReleaseMouseCapture();
-            ViewerImageHost.Cursor = ViewerCanPan ? System.Windows.Input.Cursors.SizeAll : null;
+            ViewerImageHost.Cursor = ViewerHostRestCursor;
         }
 
         if (wasClick && ViewerFilmstripHost.Visibility == Visibility.Visible &&
@@ -36626,13 +36680,18 @@ public partial class MainWindow : Window
         // pair with a later release that never had a press of its own here.
         _viewerClickOrigin = null;
 
+        // The crop drag and crop mode's middle press share the hazard and the
+        // answer (2026-11-03).
+        EndViewerCropDrag();
+        _viewerCropMiddleOrigin = null;
+
         if (!_viewerPanning)
         {
             return;
         }
 
         _viewerPanning = false;
-        ViewerImageHost.Cursor = ViewerCanPan ? System.Windows.Input.Cursors.SizeAll : null;
+        ViewerImageHost.Cursor = ViewerHostRestCursor;
     }
 
     // Nothing zoomable on screen: back to rest, and the strip goes away rather
