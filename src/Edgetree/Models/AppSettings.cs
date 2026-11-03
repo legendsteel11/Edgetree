@@ -355,23 +355,34 @@ public class AppSettings
     // has been the only mode in use here since it shipped.
     public bool AutoHideUseHandle { get; set; } = false;
 
-    // The handle's length and place on the edge (2026-10-13, on request), both
-    // in percent of the docked band, so they mean the same on any monitor and
-    // after the band is dragged shorter - see MainWindow.AutoHideHandleSpan.
+    // The handle's length and place on the edge (2026-10-13, on request) - see
+    // MainWindow.AutoHideHandleSpan.
+    //
+    // THE LENGTH IS A FIXED SIZE since 2026-11-03, in the same device-
+    // independent pixels as the thickness. It was a percent of the docked band
+    // until then, so that it would mean the same on any monitor; what that did
+    // in use was resize the handle whenever the band changed - dragged
+    // shorter, another preset's band, another monitor - with nothing chosen
+    // having moved. Now the row's number is what the edge shows, cut only
+    // where the band itself is shorter.
     //
     // NULL LENGTH IS THE AUTOMATIC ONE, kept for everyone who never touches
     // the row: 18% of the band held between 60 and 280px, which is what the
-    // handle has always been. A plain 18 in its place would have lengthened
-    // the handle on every large screen at the update - the 280px ceiling is
-    // what decides there - and a chosen length cannot keep that ceiling, or
-    // the row would stop doing anything past it. The same pattern as
-    // AutoHideHandleColorHex: unset follows, set is the value.
+    // handle has always been. The same pattern as AutoHideHandleColorHex:
+    // unset follows, set is the value.
     //
-    // The position needs no such care: 50 is the middle, where the handle has
-    // always sat. A share of the band's LEFTOVER space, like DockedTopRatio, so
-    // 0 and 100 put it flush with the band's top and bottom, never past them.
-    public double? AutoHideHandleLengthPercent { get; set; }
+    // The position stays a share of the band's LEFTOVER space, like
+    // DockedTopRatio, so 0 and 100 put it flush with the band's top and
+    // bottom, never past them; 50 is the middle, where it has always sat.
+    public double? AutoHideHandleLength { get; set; }
     public double AutoHideHandlePositionPercent { get; set; } = 50;
+
+    // THE LENGTH AS IT WAS STORED from 2026-10-13 to 2026-11-03, a percent of
+    // the band. Nothing writes it now; it is kept so a settings file or a
+    // preset from that time still arrives at the length it showed -
+    // MainWindow.AdoptLegacyHandleLength turns it into pixels on the band it
+    // is first asked about, and clears it.
+    public double? AutoHideHandleLengthPercent { get; set; }
 
     // Whether the peek slides in and out or simply appears.
     //
@@ -1197,9 +1208,13 @@ public class AppSettings
         ViewerSubtitleBottom = Sane(ViewerSubtitleBottom, 18, min: 0);
         AutoHideSliverWidth = Sane(AutoHideSliverWidth, 3, min: 1);
         AutoHideHandleWidth = Sane(AutoHideHandleWidth, 8, min: 1);
-        if (AutoHideHandleLengthPercent is { } handleLength)
+        if (AutoHideHandleLength is { } handleLength)
         {
-            AutoHideHandleLengthPercent = Sane(handleLength, 18, min: 0, max: 100);
+            AutoHideHandleLength = Sane(handleLength, 160, min: 1);
+        }
+        if (AutoHideHandleLengthPercent is { } handleLengthPercent)
+        {
+            AutoHideHandleLengthPercent = Sane(handleLengthPercent, 18, min: 0, max: 100);
         }
         AutoHideHandlePositionPercent = Sane(AutoHideHandlePositionPercent, 50, min: 0, max: 100);
         SlideshowSeconds = (int)Sane(SlideshowSeconds, 5, min: 3);

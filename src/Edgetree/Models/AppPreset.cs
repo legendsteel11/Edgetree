@@ -75,7 +75,10 @@ public class AppPreset
         nameof(AppSettings.AutoHideSliverWidth),
         nameof(AppSettings.AutoHideHandleWidth),
         nameof(AppSettings.AutoHideUseHandle),
-        nameof(AppSettings.AutoHideHandleLengthPercent),
+        // The length in pixels since 2026-11-03. A preset taken before then
+        // carries AutoHideHandleLengthPercent instead, which ApplyTo still
+        // sets by name and MainWindow.AdoptLegacyHandleLength converts.
+        nameof(AppSettings.AutoHideHandleLength),
         nameof(AppSettings.AutoHideHandlePositionPercent),
         nameof(AppSettings.AutoHideSlide),
         nameof(AppSettings.AutoHideCloseOnMouseLeave),

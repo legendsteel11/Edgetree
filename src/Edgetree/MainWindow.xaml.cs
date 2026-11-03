@@ -3607,9 +3607,15 @@ public partial class MainWindow : Window
     private static double AutomaticHandleHeight(double bandHeight)
         => Math.Min(bandHeight, Math.Clamp(bandHeight * 0.18, 60, 280));
 
-    // A chosen length still never goes under this: a handle has to be found
-    // and aimed at, and five percent of a short band is a speck.
+    // A chosen length never goes under this: a handle has to be found and
+    // aimed at. Nor past the band, which can be dragged shorter than the
+    // length that was chosen.
     private const double MinChosenHandleHeight = 24;
+
+    // The options row's ceiling: three digits are what its value box holds,
+    // and a handle that long is the whole edge on most screens - which
+    // 숨김 시 손잡이만 switched off already gives.
+    private const double MaxChosenHandleHeight = 990;
 
     // WHERE THE HANDLE IS, in one place (2026-10-13, when its length and place
     // became options): the window is put there when it collapses, and the
@@ -3619,8 +3625,9 @@ public partial class MainWindow : Window
     // two chances for the reveal target to sit somewhere the handle is not.
     private (double Top, double Height) AutoHideHandleSpan(double bandTop, double bandHeight)
     {
-        double height = _settings.AutoHideHandleLengthPercent is { } percent
-            ? Math.Min(bandHeight, Math.Max(MinChosenHandleHeight, bandHeight * Math.Clamp(percent, 0, 100) / 100))
+        AdoptLegacyHandleLength(bandHeight);
+        double height = _settings.AutoHideHandleLength is { } length
+            ? Math.Min(bandHeight, Math.Max(MinChosenHandleHeight, length))
             : AutomaticHandleHeight(bandHeight);
         double place = Math.Clamp(_settings.AutoHideHandlePositionPercent, 0, 100) / 100;
         return (bandTop + ((bandHeight - height) * place), height);
@@ -9527,7 +9534,7 @@ public partial class MainWindow : Window
             if (FindMenuItem(menu, "autoHideHandleLengthRow") is { } handleLengthRow &&
                 FindMenuItem(menu, "autoHideHandlePositionRow") is { } handlePositionRow)
             {
-                UpdateStepperRow(handleLengthRow, HandleLengthPercentShown(), MinHandleLengthPercent, 100);
+                UpdateStepperRow(handleLengthRow, HandleLengthShown(), MinChosenHandleHeight, MaxChosenHandleHeight);
                 UpdateStepperRow(handlePositionRow, _settings.AutoHideHandlePositionPercent, 0, 100);
                 handleLengthRow.IsEnabled = _settings.AutoHideUseHandle;
                 handlePositionRow.IsEnabled = _settings.AutoHideUseHandle;
@@ -13444,28 +13451,41 @@ public partial class MainWindow : Window
 
     // ----- The handle's length and place (2026-10-13, on request) ------------
     //
-    // Percent of the docked band, both (see AppSettings
-    // .AutoHideHandleLengthPercent). Like the thickness above, only seen the
-    // next time the window collapses: the menu is open over the revealed
-    // sidebar. Greyed while auto-hide collapses to the full-edge bar instead,
-    // whose length and place are the band's own.
-    private const double HandleLengthStep = 5;
-    private const double MinHandleLengthPercent = 5;
+    // The length in pixels since 2026-11-03, the place in percent of the
+    // docked band (see AppSettings.AutoHideHandleLength). Like the thickness
+    // above, only seen the next time the window collapses: the menu is open
+    // over the revealed sidebar. Greyed while auto-hide collapses to the
+    // full-edge bar instead, whose length and place are the band's own.
+    private const double HandleLengthStep = 10;
     private const double HandlePositionStep = 10;
 
-    // What the length row shows: the chosen percent, or - never chosen - the
-    // share of the band the automatic handle takes on this monitor now, so
-    // the first press steps from what is on screen rather than from a number
-    // the user never saw.
-    private double HandleLengthPercentShown()
+    // What the length row shows: the chosen length, or - never chosen - the
+    // length the automatic handle has on this monitor now, so the first press
+    // steps from what is on screen rather than from a number the user never
+    // saw.
+    private double HandleLengthShown()
     {
-        if (_settings.AutoHideHandleLengthPercent is { } chosen)
+        var (_, bandHeight) = DockedBand(GetCurrentMonitorWorkArea());
+        AdoptLegacyHandleLength(bandHeight);
+        double length = _settings.AutoHideHandleLength ?? Math.Round(AutomaticHandleHeight(bandHeight));
+        return Math.Clamp(length, MinChosenHandleHeight, MaxChosenHandleHeight);
+    }
+
+    // A LENGTH STORED AS A PERCENT - by this settings file or by a preset taken
+    // between 2026-10-13 and 2026-11-03 - becomes the pixels it stood for on
+    // the band it is first asked about, and the percent is cleared so this
+    // happens once. Not saved from here, since the reveal hit-test runs
+    // through it: the next settings save writes it, and a restart before then
+    // converts the same percent again.
+    private void AdoptLegacyHandleLength(double bandHeight)
+    {
+        if (_settings.AutoHideHandleLengthPercent is not { } percent || bandHeight <= 0)
         {
-            return Math.Clamp(chosen, MinHandleLengthPercent, 100);
+            return;
         }
 
-        var (_, bandHeight) = DockedBand(GetCurrentMonitorWorkArea());
-        return bandHeight > 0 ? Math.Round(AutomaticHandleHeight(bandHeight) / bandHeight * 100) : 18;
+        _settings.AutoHideHandleLength = Math.Round(bandHeight * Math.Clamp(percent, 0, 100) / 100);
+        _settings.AutoHideHandleLengthPercent = null;
     }
 
     private void AutoHideHandleLengthDecrement_Click(object sender, RoutedEventArgs e)
@@ -13474,17 +13494,17 @@ public partial class MainWindow : Window
     private void AutoHideHandleLengthIncrement_Click(object sender, RoutedEventArgs e)
         => StepAutoHideHandleLength(sender, +1);
 
-    // To the next whole step in the direction pressed, so an automatic 13%
-    // goes to 15 or 10 rather than to 18 or 8.
+    // To the next whole step in the direction pressed, so an automatic 194
+    // goes to 200 or 190 rather than to 204 or 184.
     private void StepAutoHideHandleLength(object sender, int delta)
     {
-        double current = Math.Round(HandleLengthPercentShown(), 2);
+        double current = Math.Round(HandleLengthShown(), 2);
         double next = delta > 0
             ? (Math.Floor(current / HandleLengthStep) + 1) * HandleLengthStep
             : (Math.Ceiling(current / HandleLengthStep) - 1) * HandleLengthStep;
-        double value = Math.Clamp(next, MinHandleLengthPercent, 100);
-        _settings.AutoHideHandleLengthPercent = value;
-        UpdateStepperRow(sender, value, MinHandleLengthPercent, 100);
+        double value = Math.Clamp(next, MinChosenHandleHeight, MaxChosenHandleHeight);
+        _settings.AutoHideHandleLength = value;
+        UpdateStepperRow(sender, value, MinChosenHandleHeight, MaxChosenHandleHeight);
     }
 
     private void AutoHideHandlePositionDecrement_Click(object sender, RoutedEventArgs e)

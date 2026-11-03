@@ -861,8 +861,8 @@ public static class HelpContent
                     R("색상 설정 → 그림자", "트리와 북마크 패널의 위아래 끝을 옅게 덮음",
                       "Color settings → Shading", "Veils the top and bottom ends of the tree and the bookmark panel"),
                     R("옵션 → 기본 설정", "자동 시작 · 트레이 · 아이콘 · 자동 숨김", "Options → General", "Autostart · tray · icons · auto-hide"),
-                    R("옵션 → 숨김 시 손잡이 길이 · 위치", "창 높이 대비 %로 조정",
-                      "Options → Auto-hide handle length · position", "As a share of the window's height"),
+                    R("옵션 → 숨김 시 손잡이 길이 · 위치", "길이는 px로 고정, 위치는 창 높이 대비 %",
+                      "Options → Auto-hide handle length · position", "Length in pixels, position as a share of the window's height"),
                     // "아이콘" in the row above reads as ONE switch, and it is
                     // three. The drive one arrived last (2026-08-16) and the
                     // release notes say it is separate from the folder's, so the
