@@ -452,8 +452,13 @@ public static class ShellThumbnailService
 
             int pixelWidth = 0, pixelHeight = 0;
             // WIC has nothing to say about a PDF's header, and on a share the
-            // attempt is one more open of the file.
-            if (readDimensions && !isPdf)
+            // attempt is one more open of the file. Nor about a PSD's, which
+            // is read by hand instead (TryReadPsdSize).
+            if (readDimensions && IsPsd(path))
+            {
+                TryReadPsdSize(path, out pixelWidth, out pixelHeight);
+            }
+            else if (readDimensions && !isPdf)
             {
                 try
                 {
@@ -494,6 +499,58 @@ public static class ShellThumbnailService
 
     private static bool IsPdf(string path)
         => path.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPsd(string path)
+        => path.EndsWith(".psd", StringComparison.OrdinalIgnoreCase);
+
+    // A PSD'S OWN SIZE, from its first 26 bytes (2026-11-03): "8BPS", version
+    // 1 (PSD) or 2 (PSB), then height and width, big-endian, at 14 and 18.
+    // Windows has no WIC codec for it, so until this the dimensions came back
+    // 0 and the panel knew only the size of the picture the shell handed it -
+    // and treated that as the file's, which made its 1:1 the panel's width.
+    public static bool TryReadPsdSize(string path, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+        try
+        {
+            using var stream = File.OpenRead(path);
+            Span<byte> header = stackalloc byte[26];
+            if (stream.ReadAtLeast(header, header.Length, throwOnEndOfStream: false) < header.Length ||
+                header[0] != (byte)'8' || header[1] != (byte)'B' || header[2] != (byte)'P' || header[3] != (byte)'S' ||
+                (header[4] << 8 | header[5]) is not (1 or 2))
+            {
+                return false;
+            }
+
+            height = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[14..]);
+            width = System.Buffers.Binary.BinaryPrimitives.ReadInt32BigEndian(header[18..]);
+            if (width <= 0 || height <= 0)
+            {
+                width = 0;
+                height = 0;
+                return false;
+            }
+            return true;
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    // THE WHOLE PICTURE, for the panel's full-resolution pass on a picture
+    // only the shell can draw (2026-11-03). The PSD handler installed on the
+    // machine this was built on (Icaros) answers at the file's own size when
+    // asked for it - 3840x2160 for a 3840x2160 file, 2560x1440 for a
+    // 2560x1440 one, about 130ms locally, measured - where the panel's usual
+    // ask, at its own width, got 1280x720. Straight to the shell: not our
+    // cache, which would keep a picture this size on disk for every PSD zoomed
+    // into, and not the file's embedded thumbnail, which is postage-stamp
+    // sized. On the caller's worker thread; another handler may answer
+    // smaller, and the caller has to take what comes.
+    public static BitmapSource? ExtractWhole(string path, int pixelSize)
+        => Extract(path, pixelSize, thumbnailOnly: true) as BitmapSource;
 
     // Every pixel the same value, transparency included. An icon on a
     // transparent ground is never this - its shape differs from its ground -

@@ -30953,6 +30953,13 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A PSD's whole picture is the shell's to give, not WIC's.
+        if (ViewerShowsSizedShellPicture)
+        {
+            _ = FetchViewerShellWhole(path);
+            return;
+        }
+
         _viewerFullResPending = true;
         // SAFETY DEVICE: the flag is normally cleared inside LoadViewerImage's
         // own dispatcher callback - but that callback never runs at all if the
@@ -37358,7 +37365,10 @@ public partial class MainWindow : Window
     // cost of the gesture - to produce the identical bitmap. Deliberately
     // restricted to WIC's own decodes: a SHELL preview's "decoded width" is
     // its thumbnail's, and that is exactly the number a wider panel asks the
-    // shell to grow, so a PSD or a video's still frame must keep asking.
+    // shell to grow, so a video's still frame must keep asking. A PSD whose
+    // header gave its size is the exception since 2026-11-03: its numbers
+    // mean what a WIC decode's do, and once it is whole a reload would only
+    // swap the whole picture back for a panel-sized one.
     //
     // A TEXT FILE has nothing at any width to read again (2026-10-11): its
     // icon is icon-sized and its wrapping follows the panel live. And the
@@ -37383,7 +37393,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (_viewerShowingDecodedImage &&
+        if ((_viewerShowingDecodedImage || ViewerShowsSizedShellPicture) &&
             _viewerPixelWidth > 0 &&
             _viewerDecodedWidth >= _viewerPixelWidth)
         {
@@ -37409,9 +37419,12 @@ public partial class MainWindow : Window
     //    thumbnail and never will, and a blown-up icon is worse than a small
     //    one.
     //
-    // What comes back is a raster, capped by the shell around 1024px, so this
-    // is not the vector answer for SVG - it is the cheap one. A real SVG
-    // renderer stays a separate question (a new dependency, see TODO).
+    // What comes back is a raster, as big as the installed handler will make
+    // it - the "capped around 1024px" written here first was one handler's
+    // answer, not the shell's: the PSD handler on the build machine gave a
+    // 3840x2160 file back whole (2026-11-03). So this is not the vector
+    // answer for SVG - it is the cheap one. A real SVG renderer stays a
+    // separate question (a new dependency, see TODO).
     private void ShowViewerIcon(string path)
     {
         // A folder skips the thumbnail ask outright: the shell answers
@@ -37464,8 +37477,24 @@ public partial class MainWindow : Window
                 // the zoom measures against - and marking them as the decoded
                 // width too stops RequestViewerFullResolution from trying to
                 // re-read a file WIC cannot open in the first place.
-                _viewerPixelWidth = frame.PixelWidth;
-                _viewerPixelHeight = frame.PixelHeight;
+                //
+                // EXCEPT A PSD WHOSE HEADER GAVE ITS SIZE (2026-11-03). Its
+                // picture was asked for at the panel's width, so treating its
+                // pixels as the file's made 1:1 the panel's width and every
+                // zoom past it a blow-up of the panel-sized picture; full
+                // screen looked sharper only because it asked for more. Now
+                // the file's size is what the zoom measures against and this
+                // picture is a first pass at panel width, as a JPEG's first
+                // decode is - RequestViewerFullResolution asks the shell for
+                // the whole one when the zoom or a crop needs it. Only when
+                // the two have the same shape: one that does not is not this
+                // header's picture.
+                bool sized = IsViewerPsd(path) && pixelWidth > 0 && pixelHeight > 0 &&
+                             Math.Abs((double)frame.PixelWidth / frame.PixelHeight /
+                                      ((double)pixelWidth / pixelHeight) - 1) < 0.02;
+                _viewerShellSizedPath = sized ? path : null;
+                _viewerPixelWidth = sized ? pixelWidth : frame.PixelWidth;
+                _viewerPixelHeight = sized ? pixelHeight : frame.PixelHeight;
                 _viewerDecodedWidth = frame.PixelWidth;
                 if (!string.Equals(_viewerZoomPath, path, StringComparison.OrdinalIgnoreCase))
                 {
@@ -37599,6 +37628,82 @@ public partial class MainWindow : Window
     // NOT YET: search and links, left to be decided after more use.
     private static bool IsViewerPdf(string path)
         => string.Equals(Path.GetExtension(path), ".pdf", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsViewerPsd(string path)
+        => string.Equals(Path.GetExtension(path), ".psd", StringComparison.OrdinalIgnoreCase);
+
+    // THE PSD ON SCREEN WHOSE SIZE IS ITS OWN (see ShowViewerIcon): the shell's
+    // picture of it is a stand-in, and the whole one can be asked for. Keyed by
+    // path, so another file arriving retires it without being told to.
+    private string? _viewerShellSizedPath;
+
+    private bool ViewerShowsSizedShellPicture =>
+        _viewerShellSizedPath is { } sized &&
+        !_viewerShowingDecodedImage &&
+        ViewerImage.Source is BitmapSource &&
+        string.Equals(sized, _pendingViewerPath, StringComparison.OrdinalIgnoreCase);
+
+    // The one fetch in flight, so a crop asking while the zoom's is still out
+    // waits for that one instead of starting a second. Let go when it lands:
+    // what it brought is on screen by then, and a field holding it would keep
+    // a full-size picture alive after the file has gone.
+    private Task<BitmapSource?>? _viewerShellWholeFetch;
+    private string? _viewerShellWholeFetchPath;
+
+    // Larger than this is not asked for: the handler builds the whole bitmap
+    // on its side at once, 1GB at this size, and a PSD may be 30,000 a side.
+    // What comes back smaller is taken as it is (TakeViewerCropAsync scales).
+    private const int ViewerShellWholeCap = 16384;
+
+    // THE WHOLE PICTURE OF A SIZED PSD, from the shell (2026-11-03), and onto
+    // the screen when it is still the picture there and nothing has been cut
+    // over it. Whatever the answer, the picture is marked whole afterwards:
+    // it is all the shell will give, and RequestViewerFullResolution would
+    // otherwise go on to WIC's full-resolution pass, which cannot open it.
+    private Task<BitmapSource?> FetchViewerShellWhole(string path)
+    {
+        if (_viewerShellWholeFetch is { } running &&
+            string.Equals(_viewerShellWholeFetchPath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return running;
+        }
+
+        int size = Math.Min(ViewerShellWholeCap, Math.Max(_viewerPixelWidth, _viewerPixelHeight));
+        _viewerFullResPending = true;
+        _viewerShellWholeFetchPath = path;
+        return _viewerShellWholeFetch = FetchAsync();
+
+        async Task<BitmapSource?> FetchAsync()
+        {
+            BitmapSource? whole = null;
+            try
+            {
+                whole = await Task.Run(() => ShellThumbnailService.ExtractWhole(path, size));
+            }
+            catch (Exception ex) when (ex is OutOfMemoryException or System.Runtime.InteropServices.COMException)
+            {
+            }
+            finally
+            {
+                _viewerFullResPending = false;
+                _viewerShellWholeFetch = null;
+                _viewerShellWholeFetchPath = null;
+            }
+
+            if (_viewerOpen && ViewerShowsSizedShellPicture &&
+                string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                if (whole is not null && _viewerCropApplied is null &&
+                    whole.PixelWidth > _viewerDecodedWidth)
+                {
+                    ViewerImage.Source = whole;
+                }
+                _viewerDecodedWidth = _viewerPixelWidth;
+                LogViewerPixelFidelity();
+            }
+            return whole;
+        }
+    }
 
     // The file the panel is showing as a PDF - set from the moment it is asked
     // for, through a failed open (whose reason the caption carries), until the

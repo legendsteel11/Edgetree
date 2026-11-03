@@ -128,17 +128,25 @@ public partial class MainWindow
         }
     }
 
-    // Only where the panel holds the picture's REAL pixels. A PSD or a camera
-    // raw is shown through its embedded preview or the shell, and an SVG
-    // through the shell - cutting those would cut a stand-in, smaller than the
-    // file and not the file.
+    // Only where the panel holds the picture's REAL pixels. A camera raw is
+    // shown through its embedded preview or the shell, and an SVG through the
+    // shell - cutting those would cut a stand-in, smaller than the file and
+    // not the file.
+    //
+    // A PSD CAN BE CUT SINCE 2026-11-03 (on request: cut what the panel
+    // shows), when its header gave its size (ViewerShowsSizedShellPicture).
+    // What the panel shows is the shell's picture, and asked for whole it
+    // comes at the file's own size where the installed handler will; the cut
+    // is taken from that (TakeViewerCropAsync). Its layers are the handler's
+    // business - this cuts the flattened picture it draws.
     private bool CanCropViewerPicture
         => ViewerPictureBarWanted &&
-           _viewerShowingDecodedImage &&
            ViewerImage.Source is BitmapSource &&
            _pendingViewerPath is { } path &&
-           !SlowThumbnailExtensions.Contains(Path.GetExtension(path)) &&
-           !string.Equals(Path.GetExtension(path), ".svg", StringComparison.OrdinalIgnoreCase);
+           (ViewerShowsSizedShellPicture ||
+            (_viewerShowingDecodedImage &&
+             !SlowThumbnailExtensions.Contains(Path.GetExtension(path)) &&
+             !string.Equals(Path.GetExtension(path), ".svg", StringComparison.OrdinalIgnoreCase)));
 
     // Asked from UpdateViewerZoomBar, which already runs at every moment the
     // thing on screen changes - a picture arriving, an icon instead, a film
@@ -223,6 +231,16 @@ public partial class MainWindow
 
         // The hand arriving, as on the picture itself.
         StopSlideshowOnUserAction("crop");
+
+        // A PSD's whole picture is asked for now, not at the cut: the area is
+        // then drawn on the sharp one, and on a NAS the seconds the shell
+        // takes are spent while the hand is still drawing.
+        if (ViewerShowsSizedShellPicture && _viewerDecodedWidth < _viewerPixelWidth &&
+            _pendingViewerPath is { } psd)
+        {
+            _ = FetchViewerShellWhole(psd);
+        }
+
         _viewerCropMode = true;
         _viewerCropSelection = null;
         _viewerCropDrag = CropDrag.None;
@@ -1170,6 +1188,24 @@ public partial class MainWindow
         if (_pendingViewerPath is not { } path)
         {
             return null;
+        }
+
+        // A PSD: the whole picture is the shell's (FetchViewerShellWhole -
+        // the one already on its way if crop mode asked for it). A handler
+        // that answers smaller than the file gives the area at its own scale,
+        // the most there is to have.
+        if (ViewerShowsSizedShellPicture)
+        {
+            if (await FetchViewerShellWhole(path) is not { } whole)
+            {
+                return null;
+            }
+
+            double scale = (double)whole.PixelWidth / _viewerPixelWidth;
+            return CutViewerBitmap(whole, scale >= 0.999
+                ? area
+                : new Int32Rect((int)(area.X * scale), (int)(area.Y * scale),
+                    Math.Max(1, (int)(area.Width * scale)), Math.Max(1, (int)(area.Height * scale))));
         }
 
         return await Task.Run(() => DecodeViewerOriginal(path) is { } original
