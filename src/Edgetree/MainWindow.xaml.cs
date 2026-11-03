@@ -854,10 +854,18 @@ public partial class MainWindow : Window
         // ApplyViewerAutoToggle's timer one second into a restart. 자동 펼치기
         // is about a selection a person makes, and this one is the app's. So
         // after such a start it waits for the first press or key in the
-        // window, whatever the restore does and however late it lands -
-        // which also covers a panel that was shut at the last exit, where the
-        // line above has nothing to do. Every other way of opening the panel
-        // is a hand already, and is left alone.
+        // window - which also covers a panel that was shut at the last exit,
+        // where the line above has nothing to do. Every other way of opening
+        // the panel is a hand already, and is left alone.
+        //
+        // A SECOND LAYER since the 11-03 review. This hold ends at the first
+        // press, and a restore landing after it (a slow NAS) still opened the
+        // panel; the restore's landing is now told apart by its walk instead
+        // (_selectionPlacedByApp), however late it comes. The hold stays for
+        // what that does not name: anything else that moves the selection
+        // before a hand arrives. What it hides: another selection the app
+        // makes by itself and 자동 펼치기 reads as a hand's would show only
+        // after the first press, never right at the start.
         if ((App.StartedAtSignIn || App.StartedByRestart) && !_settings.IsFloating)
         {
             _viewerAutoOpenHeld = true;
@@ -6495,6 +6503,10 @@ public partial class MainWindow : Window
         // still waiting on a container from the first supersedes it right
         // away, instead of the two walks potentially interleaving.
         int myToken = ++_navigationToken;
+        // The app putting a selection back by itself, for FinishReveal to say
+        // so when it lands (see _appPlacedWalkToken). Any other jump replaces
+        // it, as its token replaces this one.
+        _appPlacedWalkToken = source is "restore" or "reconnect" ? myToken : null;
 
         targetPath = targetPath.TrimEnd('\\');
 
@@ -6934,12 +6946,15 @@ public partial class MainWindow : Window
         {
             selected.RequestBringIntoView += SuppressBringIntoView;
         }
+        // Read by the synchronous SelectedItemChanged this assignment raises.
+        _selectionPlacedByApp = token == _appPlacedWalkToken;
         try
         {
             selected.IsSelected = true;
         }
         finally
         {
+            _selectionPlacedByApp = false;
             if (pinToTop)
             {
                 selected.RequestBringIntoView -= SuppressBringIntoView;
@@ -17725,8 +17740,17 @@ public partial class MainWindow : Window
         ScheduleViewerPreview();
         // And, if asked, OPENS with it (the shutting half was cut on
         // 2026-08-15). The results list asks the same since 2026-10-06 - see
-        // SearchResultsList_SelectionChanged.
-        ScheduleViewerAutoToggle();
+        // SearchResultsList_SelectionChanged. Not for a selection the app put
+        // back by itself, and that landing also calls off an opening another
+        // change had just scheduled, since the tick would read this one.
+        if (_selectionPlacedByApp)
+        {
+            _viewerAutoTimer?.Stop();
+        }
+        else
+        {
+            ScheduleViewerAutoToggle();
+        }
         // Debounced for a different reason than the preview's: not to spare
         // work, but so a selection the APP moved is overwritten before it can
         // be recorded. See the 트리 히스토리 region.
@@ -19408,7 +19432,8 @@ public partial class MainWindow : Window
         }
 
         // Back onto the folder or file it was on, without pinning it to the
-        // top - the view was not the user's to move.
+        // top - the view was not the user's to move. Nor is the selection a
+        // hand's: a panel shut by hand stays shut (_appPlacedWalkToken).
         NavigateToPath(snapshot.SelectedPath, pinToTop: false, source: "reconnect");
         UpdateCollapseAllButtonState();
     }
@@ -25038,6 +25063,23 @@ public partial class MainWindow : Window
     // before the hand is never scheduled, and one scheduled just before it is
     // not acted on.
     private bool _viewerAutoOpenHeld;
+
+    // A SELECTION THE APP PUTS BACK BY ITSELF IS NOT A HAND'S (11-03 review).
+    // 자동 펼치기 answers a selection a person makes; the start's restore
+    // (RestoreTreeState) and a drive's branch coming back with it
+    // (RestoreNetworkBranch) are the app's, and either one landing on a
+    // picture opened a panel that had been shut - the restore whenever it
+    // landed after the first press had lifted the hold above, a reconnect at
+    // any time of day. Their walks carry the token in _appPlacedWalkToken,
+    // and FinishReveal raises _selectionPlacedByApp around the one
+    // assignment that lands them. Told by the walk rather than by the path,
+    // so a walk that never lands (the file gone) leaves nothing behind for a
+    // later click on the same path to trip over.
+    //
+    // This covers every start, not only the sign-in and restart ones: a
+    // panel shut at the last exit stays shut through a hand-made start too.
+    private int? _appPlacedWalkToken;
+    private bool _selectionPlacedByApp;
 
     private void ScheduleViewerAutoToggle()
     {
