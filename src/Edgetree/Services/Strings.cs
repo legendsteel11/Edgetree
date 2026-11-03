@@ -500,7 +500,7 @@ public static class Strings
     // The picture bar's crop buttons and the two by a finished rectangle
     // (2026-11-03). The bar's 저장 and 자르기 취소 are greyed until there is a
     // temporary crop; 저장 says where it writes, since it asks nothing.
-    public static string ViewerCrop = "자르기 (Ctrl+C로 영역 복사)";
+    public static string ViewerCrop = "자르기 (F4) · Ctrl+C로 영역 복사";
     public static string ViewerCropUnavailable = "이 형식은 자를 수 없습니다";
     public static string ViewerCropSave = "저장 Ctrl+S (이름-crop) · 다른 이름으로 저장 Ctrl+Shift+S";
     public static string ViewerCropRevert = "자르기 취소 (Ctrl+Z)";
@@ -1386,7 +1386,7 @@ public static class Strings
         ViewerZoomFill = "Fill";
         ViewerNavigator = "Navigator";
         ViewerClose = "Close the multimedia panel (Ctrl+W)";
-        ViewerCrop = "Crop (Ctrl+C copies the area)";
+        ViewerCrop = "Crop (F4) · Ctrl+C copies the area";
         ViewerCropUnavailable = "This format can't be cropped";
         ViewerCropSave = "Save Ctrl+S (name-crop) · Save as Ctrl+Shift+S";
         ViewerCropRevert = "Undo crop (Ctrl+Z)";

@@ -929,6 +929,26 @@ public partial class MainWindow
             return false;
         }
 
+        // F4 IS THE BAR'S 자르기 (2026-11-03, on request): on and off, and
+        // nothing else - a temporary crop stays, as it does for the button.
+        // An F key for the reason F8 is one: with a picture on screen every
+        // letter already means something to the tree's type-ahead. F4 was
+        // free; F10 is Windows' menu key and F11 is left for full screen.
+        // Only while the picture can be cut, so it is dead rather than
+        // mysterious anywhere else.
+        if (e.Key == Key.F4 && Keyboard.Modifiers == ModifierKeys.None && CanCropViewerPicture)
+        {
+            if (_viewerCropMode)
+            {
+                ExitViewerCropMode();
+            }
+            else
+            {
+                EnterViewerCropMode();
+            }
+            return true;
+        }
+
         if (_viewerCropMode && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
         {
             ExitViewerCropMode();

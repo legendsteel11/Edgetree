@@ -587,8 +587,8 @@ public static class HelpContent
                     // from the bar, where the rows above are the picture's own
                     // gestures. The keys are on one row because they only mean
                     // this while cropping, and the tooltips name them as well.
-                    R("상단 자르기 버튼", "드래그로 영역 지정, 손잡이로 크기 조절, 안쪽 드래그로 이동",
-                      "The crop button at the top", "Drag out an area, size it by its handles, move it from inside"),
+                    R("상단 자르기 버튼 · F4", "드래그로 영역 지정, 손잡이로 크기 조절, 안쪽 드래그로 이동",
+                      "The crop button at the top · F4", "Drag out an area, size it by its handles, move it from inside"),
                     R("이전 영역 불러오기 (이미지 기준)", "마지막으로 그린 영역을 이미지의 같은 위치 · 크기로 다시 지정",
                       "Reuse the last area (on the image)", "Puts the last area drawn back at the same place and size on the image"),
                     R("이전 영역 불러오기 (패널 기준)", "마지막으로 그린 영역을 패널의 같은 자리에 다시 지정",
