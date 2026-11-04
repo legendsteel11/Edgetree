@@ -57,9 +57,11 @@ public partial class MainWindow
     // Where in the rectangle a move took hold of it.
     private Vector _viewerCropGrabOffset;
 
-    // A middle press in crop mode, waiting to learn whether it is a pan or the
-    // click that toggles full screen (see ViewerImageHost_MouseUp).
-    private Point? _viewerCropMiddleOrigin;
+    // Space held in crop mode: the next left press pans instead of drawing
+    // (see the Space section below), and whether the pan it started is the
+    // one under way, so letting go of Space can end it.
+    private bool _viewerCropSpaceHeld;
+    private bool _viewerCropSpacePanning;
 
     // THE TEMPORARY CROP: the cut, shown in the panel in place of the picture
     // and not yet written anywhere. Full resolution - it is what a save
@@ -267,14 +269,10 @@ public partial class MainWindow
 
         _viewerCropMode = false;
         _viewerCropSelection = null;
-        // A middle-button pan still under way ends here too: its release would
-        // find no press to answer and leave the pan following a bare mouse.
-        if (_viewerCropMiddleOrigin is not null)
-        {
-            _viewerCropMiddleOrigin = null;
-            _viewerPanning = false;
-            ViewerImageHost.ReleaseMouseCapture();
-        }
+        // A Space pan still under way ends here too: its release would find
+        // nothing to answer and leave the pan following a bare mouse.
+        EndViewerCropSpacePan();
+        _viewerCropSpaceHeld = false;
         if (_viewerCropDrag != CropDrag.None)
         {
             _viewerCropDrag = CropDrag.None;
@@ -301,10 +299,14 @@ public partial class MainWindow
         ViewerCropRevertButton.IsEnabled = false;
     }
 
-    // The host's cursor between drags: the cross in crop mode, else the pan
-    // hand where there is anything to pan.
+    // The host's cursor between drags: the cross in crop mode - the pan hand
+    // while Space is held there and there is anything to pan, the plain arrow
+    // while it is held and there is not - else the pan hand where there is
+    // anything to pan.
     private Cursor? ViewerHostRestCursor =>
-        _viewerCropMode ? Cursors.Cross : ViewerCanPan ? Cursors.SizeAll : null;
+        _viewerCropMode
+            ? _viewerCropSpaceHeld ? (ViewerCanPan ? Cursors.SizeAll : null) : Cursors.Cross
+            : ViewerCanPan ? Cursors.SizeAll : null;
 
     // ----- Pixels and the screen ---------------------------------------------
 
@@ -438,14 +440,22 @@ public partial class MainWindow
 
     // ----- The drag ----------------------------------------------------------
 
-    // A press while crop mode is on draws, moves or resizes - never pans or
-    // flicks, and a double click does not zoom: the next press is simply the
-    // next rectangle. Returns whether it took the press.
+    // A press while crop mode is on draws, moves or resizes - never flicks,
+    // and a double click does not zoom: the next press is simply the next
+    // rectangle. With Space held it pans instead, wherever it lands (see the
+    // Space section). Returns whether it took the press.
     private bool HandleViewerCropPress(MouseButtonEventArgs e)
     {
         if (!_viewerCropMode)
         {
             return false;
+        }
+
+        if (_viewerCropSpaceHeld)
+        {
+            StartViewerCropSpacePan(e);
+            e.Handled = true;
+            return true;
         }
 
         var host = e.GetPosition(ViewerImageHost);
@@ -494,7 +504,9 @@ public partial class MainWindow
         {
             if (!_viewerPanning)
             {
-                ViewerImageHost.Cursor = CropCursorFor(ViewerCropOverlay.HitPart(e.GetPosition(ViewerCropOverlay)));
+                ViewerImageHost.Cursor = _viewerCropSpaceHeld
+                    ? ViewerHostRestCursor
+                    : CropCursorFor(ViewerCropOverlay.HitPart(e.GetPosition(ViewerCropOverlay)));
             }
             return false;
         }
@@ -877,57 +889,98 @@ public partial class MainWindow
         _ => Cursors.Cross,
     };
 
-    // ----- The middle button in crop mode -------------------------------------
+    // ----- Space: the pan in crop mode -----------------------------------------
     //
-    // A left drag draws in crop mode, so the pan a zoomed picture needs moves
-    // to the middle button - which outside crop mode toggles full screen on the
-    // PRESS. Here it waits for the release: moved, it was a pan; not moved, it
-    // was that click, and full screen comes on as before (and ends crop mode,
-    // which is the panel's alone for now).
-    private bool HandleViewerCropMiddlePress(MouseButtonEventArgs e)
+    // A left drag draws in crop mode, so a zoomed picture needs its pan from
+    // somewhere else. It was the MIDDLE button for the first day - a drag
+    // panned, an unmoved click still toggled full screen on its release -
+    // and that gave the one button two meanings that changed with the mode
+    // (2026-11-04, on report). Now, as in Photoshop, Space held turns the
+    // cursor into the pan hand and a left drag pans, wherever on the picture
+    // it starts, the rectangle included; the middle button means full screen
+    // in crop mode as everywhere else.
+    //
+    // THE PRICE: while crop mode is on, Space is not "next picture" (↓ still
+    // is) - held, it would page the folder under a hand that meant to pan.
+    // Its repeats are swallowed with it.
+    private bool HandleViewerCropSpace(KeyEventArgs e)
     {
-        if (!_viewerCropMode || e.ChangedButton != MouseButton.Middle)
+        if (!_viewerCropMode || e.Key != Key.Space || Keyboard.Modifiers != ModifierKeys.None)
         {
             return false;
         }
 
-        var point = e.GetPosition(ViewerImageHost);
-        _viewerCropMiddleOrigin = point;
-        if (ViewerCanPan)
+        if (!_viewerCropSpaceHeld)
         {
-            _viewerPanning = true;
-            _viewerPanOrigin = point;
-            _viewerPanOriginX = ViewerZoomPan.X;
-            _viewerPanOriginY = ViewerZoomPan.Y;
-            ViewerImageHost.Cursor = Cursors.ScrollAll;
+            _viewerCropSpaceHeld = true;
+            if (_viewerCropDrag == CropDrag.None && !_viewerPanning)
+            {
+                ViewerImageHost.Cursor = ViewerHostRestCursor;
+            }
         }
-        ViewerImageHost.CaptureMouse();
-        e.Handled = true;
         return true;
     }
 
-    private void ViewerImageHost_MouseUp(object sender, MouseButtonEventArgs e)
+    private void MainWindow_PreviewKeyUp(object sender, KeyEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Middle || _viewerCropMiddleOrigin is not { } origin)
+        if (e.Key == Key.Space && _viewerCropSpaceHeld)
+        {
+            ReleaseViewerCropSpace();
+            e.Handled = true;
+        }
+    }
+
+    // Space let go, or lost with the window's activation (OnDeactivated: the
+    // key's release goes to whatever window has the keyboard by then, and a
+    // Space left "held" would make every later press a pan).
+    private void ReleaseViewerCropSpace()
+    {
+        if (!_viewerCropSpaceHeld)
         {
             return;
         }
 
-        _viewerCropMiddleOrigin = null;
-        var release = e.GetPosition(ViewerImageHost);
-        bool moved = Math.Abs(release.X - origin.X) >= SystemParameters.MinimumHorizontalDragDistance ||
-                     Math.Abs(release.Y - origin.Y) >= SystemParameters.MinimumVerticalDragDistance;
+        _viewerCropSpaceHeld = false;
+        EndViewerCropSpacePan();
+        if (_viewerCropMode && _viewerCropDrag == CropDrag.None)
+        {
+            ViewerImageHost.Cursor = CropCursorFor(ViewerCropOverlay.HitPart(Mouse.GetPosition(ViewerCropOverlay)));
+        }
+    }
+
+    // The ordinary pan's own state, so the host's move handler carries it and
+    // its release ends it, as for a pan outside crop mode. A picture that fits
+    // has nothing to pan: the press is taken and nothing moves, rather than
+    // drawing under a hand that is holding the pan key.
+    private void StartViewerCropSpacePan(MouseButtonEventArgs e)
+    {
+        if (!ViewerCanPan)
+        {
+            return;
+        }
+
+        var point = e.GetPosition(ViewerImageHost);
+        _viewerPanning = true;
+        _viewerCropSpacePanning = true;
+        _viewerPanOrigin = point;
+        _viewerPanOriginX = ViewerZoomPan.X;
+        _viewerPanOriginY = ViewerZoomPan.Y;
+        ViewerImageHost.Cursor = Cursors.ScrollAll;
+        ViewerImageHost.CaptureMouse();
+    }
+
+    private void EndViewerCropSpacePan()
+    {
+        if (!_viewerCropSpacePanning)
+        {
+            return;
+        }
+
+        _viewerCropSpacePanning = false;
         _viewerPanning = false;
         if (ViewerImageHost.IsMouseCaptured)
         {
             ViewerImageHost.ReleaseMouseCapture();
-        }
-        ViewerImageHost.Cursor = ViewerHostRestCursor;
-        e.Handled = true;
-
-        if (!moved)
-        {
-            SetViewerFullscreen(!_viewerFullscreen);
         }
     }
 
@@ -972,9 +1025,26 @@ public partial class MainWindow
             return true;
         }
 
+        if (HandleViewerCropSpace(e))
+        {
+            return true;
+        }
+
         if (_viewerCropMode && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None)
         {
             ExitViewerCropMode();
+            return true;
+        }
+
+        // Ctrl+D lets the rectangle go, Photoshop's 선택 해제 (2026-11-04, on
+        // request) - the same as a click outside it, which still does. Only
+        // while there is one; Ctrl+D means nothing else here.
+        if (_viewerCropMode && _viewerCropSelection is not null &&
+            e.Key == Key.D && Keyboard.Modifiers == ModifierKeys.Control)
+        {
+            EndViewerCropDrag();
+            _viewerCropSelection = null;
+            UpdateViewerCropOverlay();
             return true;
         }
 

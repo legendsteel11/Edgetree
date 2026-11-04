@@ -7940,7 +7940,6 @@
                             MouseLeftButtonDown="ViewerImageHost_MouseLeftButtonDown"
                             MouseMove="ViewerImageHost_MouseMove"
                             MouseLeftButtonUp="ViewerImageHost_MouseLeftButtonUp"
-                            MouseUp="ViewerImageHost_MouseUp"
                             LostMouseCapture="ViewerImageHost_LostMouseCapture"
                             ContextMenuOpening="ViewerImageHost_ContextMenuOpening">
                         <!-- The picture's own right-click menu. Every file

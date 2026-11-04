@@ -285,6 +285,8 @@ public partial class MainWindow : Window
         Loaded += MainWindow_Loaded;
         Closing += MainWindow_Closing;
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        // Only crop mode's Space pan listens for a key's release (MainWindow.Crop.cs).
+        PreviewKeyUp += MainWindow_PreviewKeyUp;
         SizeChanged += MainWindow_SizeChanged;
         SystemParameters.StaticPropertyChanged += SystemParameters_StaticPropertyChanged;
         SystemEvents.PowerModeChanged += SystemEvents_PowerModeChanged;
@@ -22509,6 +22511,10 @@ public partial class MainWindow : Window
         }
         _filmstripRenameCell = null;
 
+        // Crop mode's Space: its release goes to whichever window has the
+        // keyboard now (ReleaseViewerCropSpace).
+        ReleaseViewerCropSpace();
+
         // One hop late on purpose - see UpdateSelectionBrushForActivation.
         Dispatcher.BeginInvoke(() => UpdateSelectionBrushForActivation(),
             System.Windows.Threading.DispatcherPriority.Input);
@@ -31563,13 +31569,8 @@ public partial class MainWindow : Window
             return;
         }
 
-        // In crop mode the middle button pans, and full screen waits for a
-        // release that did not move (ViewerImageHost_MouseUp).
-        if (HandleViewerCropMiddlePress(e))
-        {
-            return;
-        }
-
+        // In crop mode too, since 2026-11-04 - the pan it used to lend crop
+        // mode is Space's now (MainWindow.Crop.cs). Full screen ends crop mode.
         SetViewerFullscreen(!_viewerFullscreen);
         e.Handled = true;
     }
@@ -36998,6 +36999,9 @@ public partial class MainWindow : Window
         if (_viewerPanning)
         {
             _viewerPanning = false;
+            // A crop mode Space pan ends here as any pan does; Space may still
+            // be held, and the rest cursor then says so.
+            _viewerCropSpacePanning = false;
             ViewerImageHost.ReleaseMouseCapture();
             ViewerImageHost.Cursor = ViewerHostRestCursor;
         }
@@ -37032,10 +37036,8 @@ public partial class MainWindow : Window
         // pair with a later release that never had a press of its own here.
         _viewerClickOrigin = null;
 
-        // The crop drag and crop mode's middle press share the hazard and the
-        // answer (2026-11-03).
+        // The crop drag shares the hazard and the answer (2026-11-03).
         EndViewerCropDrag();
-        _viewerCropMiddleOrigin = null;
 
         if (!_viewerPanning)
         {
@@ -37043,6 +37045,7 @@ public partial class MainWindow : Window
         }
 
         _viewerPanning = false;
+        _viewerCropSpacePanning = false;
         ViewerImageHost.Cursor = ViewerHostRestCursor;
     }
 
