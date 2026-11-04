@@ -517,6 +517,10 @@ public static class Strings
     public static string ViewerCropReuse = "이전 영역 불러오기 (이미지 기준)";
     public static string ViewerCropReuseFormat = "이전 영역 불러오기 (이미지 기준 · x {0}, y {1} · {2} × {3})";
     public static string ViewerCropReusePanel = "이전 영역 불러오기 (패널 기준)";
+    public static string ViewerCropReuseOutsideFormat =
+        "이전 영역 불러오기 (이미지 기준)\n저장된 영역이 이 이미지를 벗어납니다 (영역 x {0}, y {1} · {2} × {3} / 이미지 {4} × {5})";
+    public static string ViewerCropReusePanelOutside =
+        "이전 영역 불러오기 (패널 기준)\n저장된 영역이 지금 화면의 이미지를 벗어납니다";
     // The footer's now-playing row, which only exists while the viewer is shut
     // and 배경 재생 is holding a track.
     public static string FooterNowPlayingOpen = "멀티미디어 패널에서 열기";
@@ -1405,6 +1409,10 @@ public static class Strings
         ViewerCropReuse = "Reuse the last area (on the image)";
         ViewerCropReuseFormat = "Reuse the last area (on the image · x {0}, y {1} · {2} × {3})";
         ViewerCropReusePanel = "Reuse the last area (on the panel)";
+        ViewerCropReuseOutsideFormat =
+            "Reuse the last area (on the image)\nThe saved area falls outside this image (area x {0}, y {1} · {2} × {3} / image {4} × {5})";
+        ViewerCropReusePanelOutside =
+            "Reuse the last area (on the panel)\nThe saved area falls outside the image as it is shown now";
         FooterNowPlayingOpen = "Open in the multimedia panel";
         FooterHeldFilmResume = "Resume";
         ViewerNowPlayingLabel = "Now playing";

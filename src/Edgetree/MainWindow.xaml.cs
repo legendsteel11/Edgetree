@@ -30469,9 +30469,11 @@ public partial class MainWindow : Window
         SnapViewerToDevicePixels(display);
         // The crop rectangle follows the picture through every zoom and
         // resize; nothing when crop mode is off. So does the picture's
-        // outline, nothing when that is off.
+        // outline, nothing when that is off, and whether the panel's last
+        // crop area still lands on the picture.
         UpdateViewerCropOverlay();
         UpdateViewerPictureOutline();
+        UpdateViewerCropReusePanelButton();
     }
 
     // 1:1 HAS TO MEAN PIXEL FOR PIXEL, AND IT DID NOT (2026-09-06, measured).
@@ -36957,9 +36959,11 @@ public partial class MainWindow : Window
         // is off. The rest of the settle work has no business here.
         UpdateViewerNavigator();
         // And the crop rectangle and the outline, which ride on the picture
-        // (nothing when they are off).
+        // (nothing when they are off), and the panel's last crop area, whose
+        // place on the picture moves with the pan.
         UpdateViewerCropOverlay();
         UpdateViewerPictureOutline();
+        UpdateViewerCropReusePanelButton();
     }
 
     // A CLICK ON THE PICTURE BRINGS ITS THUMBNAIL BACK INTO VIEW (2026-10-07,

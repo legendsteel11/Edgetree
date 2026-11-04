@@ -175,13 +175,18 @@ public partial class MainWindow
         ViewerCropActionButtons.IsEnabled = !_viewerCropBusy;
 
         // The two 이전 영역 불러오기 buttons; the image one names the place and
-        // size it would put back.
+        // size it would put back - and, greyed because it would not fit, the
+        // size of the picture it does not fit (see FitViewerCropArea).
         var lastArea = LastViewerCropArea;
-        ViewerCropReuseButton.IsEnabled = canCrop && lastArea is not null;
-        ViewerCropReuseButton.ToolTip = lastArea is { } area
-            ? string.Format(Strings.ViewerCropReuseFormat, area.X, area.Y, area.Width, area.Height)
-            : Strings.ViewerCropReuse;
-        ViewerCropReusePanelButton.IsEnabled = canCrop && LastViewerCropPanelArea is not null;
+        bool imageFits = canCrop && ViewerCropReuseTarget is not null;
+        ViewerCropReuseButton.IsEnabled = imageFits;
+        ViewerCropReuseButton.ToolTip = lastArea is not { } area
+            ? Strings.ViewerCropReuse
+            : imageFits || !canCrop
+                ? string.Format(Strings.ViewerCropReuseFormat, area.X, area.Y, area.Width, area.Height)
+                : string.Format(Strings.ViewerCropReuseOutsideFormat, area.X, area.Y, area.Width, area.Height,
+                    _viewerPixelWidth, _viewerPixelHeight);
+        UpdateViewerCropReusePanelButton();
 
         if (!wanted)
         {
@@ -1246,10 +1251,11 @@ public partial class MainWindow
     // back, and the button brought the older one instead. Now a new rectangle
     // simply IS the last area, and nothing is asked of the hand to keep it.
     // A rectangle the buttons PUT back changes nothing until the hand moves
-    // it - cut down to a smaller picture, it must not overwrite the whole one.
+    // it.
     //
-    // On a picture of another size the area is cut down to what falls on it
-    // and NOT moved: the place is the point.
+    // On a picture the area does not fit, the button is greyed and says why;
+    // it is never moved or cut down to fit (see FitViewerCropArea, which
+    // replaced the cutting down on 2026-11-03).
     //
     // THE PANEL'S VERSION (2026-11-03, on request): the same moment also
     // records where the rectangle stood on the panel, in the host's own
@@ -1303,37 +1309,101 @@ public partial class MainWindow
 
     private void ViewerCropReuse_Click(object sender, RoutedEventArgs e)
     {
-        if (LastViewerCropArea is not { } area)
+        if (ViewerCropReuseTarget is { } target)
         {
-            return;
+            PlaceViewerCropSelection(target);
         }
-
-        // Into the pixels of the picture on screen - the file's, less where a
-        // temporary crop starts.
-        PlaceViewerCropSelection(new Rect(area.X - _viewerCropAppliedOrigin.X, area.Y - _viewerCropAppliedOrigin.Y,
-            area.Width, area.Height));
     }
 
     private void ViewerCropReusePanel_Click(object sender, RoutedEventArgs e)
     {
-        if (LastViewerCropPanelArea is not { } onPanel)
+        if (ViewerCropReusePanelTarget is { } target)
         {
-            return;
+            PlaceViewerCropSelection(target);
         }
-
-        // The pixels that place on the panel covers now, to the NEAREST whole
-        // ones - outward rounding would grow the same area by a pixel on the
-        // same picture, out of nothing but float noise.
-        var topLeft = HostToPicturePixel(onPanel.TopLeft);
-        var bottomRight = HostToPicturePixel(onPanel.BottomRight);
-        PlaceViewerCropSelection(new Rect(
-            new Point(Math.Round(topLeft.X), Math.Round(topLeft.Y)),
-            new Point(Math.Round(bottomRight.X), Math.Round(bottomRight.Y))));
     }
 
-    // Either button's last step: crop mode on, the area cut down to the
-    // picture, shown with its buttons. Nothing when none of it falls on the
-    // picture.
+    // THE LAST AREA GOES BACK WHOLE OR NOT AT ALL (2026-11-03, on request).
+    // It used to be cut down to what fell on the picture - and an area wholly
+    // off a smaller picture turned crop mode on and drew nothing, so the
+    // button read as a second 자르기. Either way the rectangle that came back
+    // was not the one remembered, and nothing said so. Now an area that does
+    // not lie inside the picture on screen greys its button, with the reason
+    // in its tooltip, and a press always puts back exactly what was kept.
+    //
+    // ONE PIXEL OVER AN EDGE COUNTS AS ON IT, and is taken back to the edge.
+    // An area drawn against the picture's edge comes back from the panel's
+    // units through a division, and rounding can put that edge a pixel out -
+    // which would grey the button on the very picture it was drawn on.
+    private const double ViewerCropReuseSlack = 1;
+
+    private Rect? FitViewerCropArea(Rect area)
+    {
+        if (_viewerPixelWidth <= 0 || _viewerPixelHeight <= 0 || area.Width < 1 || area.Height < 1 ||
+            area.Left < -ViewerCropReuseSlack || area.Top < -ViewerCropReuseSlack ||
+            area.Right > _viewerPixelWidth + ViewerCropReuseSlack ||
+            area.Bottom > _viewerPixelHeight + ViewerCropReuseSlack)
+        {
+            return null;
+        }
+
+        area.Intersect(new Rect(0, 0, _viewerPixelWidth, _viewerPixelHeight));
+        return area.IsEmpty || area.Width < 1 || area.Height < 1 ? null : area;
+    }
+
+    // The image button's area in the pixels of the picture on screen - the
+    // file's, less where a temporary crop starts - or null when it does not
+    // fit there.
+    private Rect? ViewerCropReuseTarget
+        => LastViewerCropArea is { } area
+            ? FitViewerCropArea(new Rect(area.X - _viewerCropAppliedOrigin.X, area.Y - _viewerCropAppliedOrigin.Y,
+                area.Width, area.Height))
+            : null;
+
+    // The panel button's: the pixels that place on the panel covers now, to
+    // the NEAREST whole ones - outward rounding would grow the same area by a
+    // pixel on the same picture, out of nothing but float noise. It moves with
+    // the zoom, the pan and the panel's width, so its button is asked again
+    // on every one of those (UpdateViewerCropReusePanelButton).
+    private Rect? ViewerCropReusePanelTarget
+    {
+        get
+        {
+            if (LastViewerCropPanelArea is not { } onPanel)
+            {
+                return null;
+            }
+
+            var topLeft = HostToPicturePixel(onPanel.TopLeft);
+            var bottomRight = HostToPicturePixel(onPanel.BottomRight);
+            return FitViewerCropArea(new Rect(
+                new Point(Math.Round(topLeft.X), Math.Round(topLeft.Y)),
+                new Point(Math.Round(bottomRight.X), Math.Round(bottomRight.Y))));
+        }
+    }
+
+    // Asked with the crop overlay, on every zoom, pan frame and resize: one
+    // rectangle mapped and compared. Its two tooltips are fixed strings, so a
+    // frame that changes nothing writes nothing.
+    private void UpdateViewerCropReusePanelButton()
+    {
+        bool stored = LastViewerCropPanelArea is not null;
+        bool canCrop = CanCropViewerPicture;
+        bool fits = canCrop && ViewerCropReusePanelTarget is not null;
+        if (ViewerCropReusePanelButton.IsEnabled != fits)
+        {
+            ViewerCropReusePanelButton.IsEnabled = fits;
+        }
+
+        string tip = stored && canCrop && !fits ? Strings.ViewerCropReusePanelOutside : Strings.ViewerCropReusePanel;
+        if (!ReferenceEquals(ViewerCropReusePanelButton.ToolTip, tip))
+        {
+            ViewerCropReusePanelButton.ToolTip = tip;
+        }
+    }
+
+    // Either button's last step: crop mode on, the area shown with its
+    // buttons. The callers have already checked that it fits.
     private void PlaceViewerCropSelection(Rect area)
     {
         if (!_viewerCropMode)
