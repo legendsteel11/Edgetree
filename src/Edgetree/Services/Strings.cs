@@ -505,7 +505,7 @@ public static class Strings
     // temporary crop; 저장 says where it writes, since it asks nothing.
     public static string ViewerCrop = "자르기 (F4) · Ctrl+C로 영역 복사";
     public static string ViewerCropUnavailable = "이 형식은 자를 수 없습니다";
-    public static string ViewerCropSave = "저장 Ctrl+S (이름-crop) · 다른 이름으로 저장 Ctrl+Shift+S";
+    public static string ViewerCropSave = "저장 Ctrl+S (이름-cropped) · 다른 이름으로 저장 Ctrl+Shift+S";
     public static string ViewerCropRevert = "자르기 취소 (Ctrl+Z)";
     public static string ViewerCropApply = "잘라서 보기";
     public static string ViewerCropCaptionFormat = "{0} × {1}  ·  자른 이미지 (저장 전)";
@@ -528,7 +528,7 @@ public static class Strings
     public static string ViewerRotateRight = "오른쪽으로 회전";
     public static string ViewerRotateUnavailable = "이 형식은 회전할 수 없습니다";
     public static string ViewerRotateCaptionFormat = "{0} × {1}  ·  회전한 이미지 (저장 전)";
-    public static string ViewerRotateSave = "저장 Ctrl+S (이름-rotate) · 다른 이름으로 저장 Ctrl+Shift+S";
+    public static string ViewerRotateSave = "저장 Ctrl+S (이름-rotated) · 다른 이름으로 저장 Ctrl+Shift+S";
     public static string ViewerRotateRevert = "회전 취소 (Ctrl+Z)";
     public static string ViewerEditRevert = "편집 취소 (Ctrl+Z)";
     public static string ViewerRotateSaveFailedTitle = "회전한 이미지를 저장하지 못했습니다";
@@ -1462,7 +1462,7 @@ public static class Strings
         ViewerClose = "Close the multimedia panel (Ctrl+W)";
         ViewerCrop = "Crop (F4) · Ctrl+C copies the area";
         ViewerCropUnavailable = "This format can't be cropped";
-        ViewerCropSave = "Save Ctrl+S (name-crop) · Save as Ctrl+Shift+S";
+        ViewerCropSave = "Save Ctrl+S (name-cropped) · Save as Ctrl+Shift+S";
         ViewerCropRevert = "Undo crop (Ctrl+Z)";
         ViewerCropApply = "Crop and view";
         ViewerCropCaptionFormat = "{0} × {1}  ·  Cropped (not saved)";
@@ -1480,7 +1480,7 @@ public static class Strings
         ViewerRotateRight = "Rotate right";
         ViewerRotateUnavailable = "This format can't be rotated";
         ViewerRotateCaptionFormat = "{0} × {1}  ·  Rotated (not saved)";
-        ViewerRotateSave = "Save Ctrl+S (name-rotate) · Save as Ctrl+Shift+S";
+        ViewerRotateSave = "Save Ctrl+S (name-rotated) · Save as Ctrl+Shift+S";
         ViewerRotateRevert = "Undo rotation (Ctrl+Z)";
         ViewerEditRevert = "Undo edits (Ctrl+Z)";
         ViewerRotateSaveFailedTitle = "The rotated image could not be saved";

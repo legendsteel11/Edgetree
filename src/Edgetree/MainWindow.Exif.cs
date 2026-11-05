@@ -514,7 +514,7 @@ public partial class MainWindow
 
     // Beside the original as name-metadataremoved, numbered " (2)" on as a
     // paste numbers a copy - never over anything. Named for what was done to
-    // it, as -crop and -rotate are, which stays true
+    // it, as -cropped and -rotated are (see the crop's save), which stays true
     // of a copy with only some of it gone. "-clean" was first, and read as the
     // picture itself having been cleaned up (on request, 2026-11-05).
     private static string ViewerMetadataCopyTarget(string source, string folder)

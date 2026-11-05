@@ -93,7 +93,7 @@ public partial class MainWindow
     // anything shows (TakeViewerCropAsync). One at a time: until the 11-03
     // review the guard went up only once the cut was in hand, so a second
     // press inside that second ran beside the first - two saves taking the
-    // same -crop name, the second reporting a failure the first had not had,
+    // same -cropped name, the second reporting a failure the first had not had,
     // and two cuts adding the rectangle's offset to the origin twice. The
     // buttons that start one are greyed meanwhile, which is also the only
     // sign the press was taken.
@@ -1142,7 +1142,7 @@ public partial class MainWindow
     }
 
     // A turned picture counts as a temporary crop here: Ctrl+C copies it as
-    // it stands, Ctrl+S saves it as name-rotate.
+    // it stands, Ctrl+S saves it as name-rotated.
     private bool HasViewerCropToTake
         => (_viewerCropMode && _viewerCropSelection is not null) || _viewerCropApplied is not null || _viewerTurn != 0;
 
@@ -1544,9 +1544,15 @@ public partial class MainWindow
 
     // ----- Save --------------------------------------------------------------
 
-    // BESIDE THE ORIGINAL, under its name with -crop, numbered " (2)" on as
+    // BESIDE THE ORIGINAL, under its name with -cropped, numbered " (2)" on as
     // paste numbers a copy - never over anything. Or, with askName, wherever
     // the save dialog says, which may write over a file it asked about.
+    //
+    // THE SUFFIX SAYS WHAT WAS DONE TO THE COPY, in the past form: -cropped,
+    // -rotated, and the EXIF view's -metadataremoved (2026-11-05, the author's
+    // choice of the most exact). They were -crop and -rotate until then -
+    // changed before either was released, so no copy in anyone's hands has
+    // the old names.
     //
     // In the original's format where WPF can write it (JPEG at quality 95,
     // PNG, BMP, TIFF, GIF), PNG otherwise - WebP, HEIC, AVIF and an icon have
@@ -1555,7 +1561,7 @@ public partial class MainWindow
     // already in its pixels (a separate EXIF view and editor is planned).
     //
     // A PICTURE ONLY TURNED (2026-11-05) is saved the same way, as
-    // name-rotate - the author's call, over writing the turn into the file
+    // name-rotated - the author's call, over writing the turn into the file
     // itself: the original stays as it was, and 저장 means one thing whatever
     // was done. A JPEG going to a JPEG is then its own bytes with the
     // orientation tag turned (WriteViewerTurnedJpeg), so it loses nothing;
@@ -1594,7 +1600,7 @@ public partial class MainWindow
 
             string extension = CropSaveExtension(Path.GetExtension(path));
             target = FileOperationService.GetUniqueDestination(
-                Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + (turnOnly ? "-rotate" : "-crop") + extension));
+                Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + (turnOnly ? "-rotated" : "-cropped") + extension));
             bool replace = false;
 
             if (askName)

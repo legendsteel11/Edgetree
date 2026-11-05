@@ -14,7 +14,7 @@ namespace SidebarExplorer.App;
 // being able to keep it would be half a feature. It is a temporary edit of
 // the same kind as the crop's (MainWindow.Crop.cs): the same take-back
 // (Ctrl+Z, the bar's undo) to the picture as the file has it, the same save
-// beside the original - as name-rotate when nothing was cut - and a crop can
+// beside the original - as name-rotated when nothing was cut - and a crop can
 // be drawn on a turned picture or a cut turned.
 //
 // THE PICTURE ON SCREEN TURNS AT ONCE, from whatever the panel had decoded:
@@ -40,7 +40,7 @@ public partial class MainWindow
     // replaces. Null while the picture is not turned.
     private BitmapSource? _viewerTurnBase;
 
-    // Turned, and nothing cut: what a save writes as name-rotate.
+    // Turned, and nothing cut: what a save writes as name-rotated.
     private bool ViewerTurnedOnly => _viewerTurn != 0 && _viewerCropApplied is null;
 
     // Where a crop can be, except an animation: a turn would stop it on one
