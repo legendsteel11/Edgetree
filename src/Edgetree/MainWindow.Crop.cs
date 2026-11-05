@@ -207,6 +207,8 @@ public partial class MainWindow
                 : string.Format(Strings.ViewerCropReuseOutsideFormat, area.X, area.Y, area.Width, area.Height,
                     _viewerPixelWidth, _viewerPixelHeight);
         UpdateViewerCropReusePanelButton();
+        // The EXIF view's slot answers the same moments (MainWindow.Exif.cs).
+        UpdateViewerExif();
 
         if (!wanted)
         {

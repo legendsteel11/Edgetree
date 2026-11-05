@@ -146,6 +146,10 @@ public class AppPreset
 
         // 이미지 테두리 표시 (2026-11-03), on the same terms.
         nameof(AppSettings.ViewerPictureOutline),
+
+        // EXIF 정보 표시 (2026-11-05): a display switch on the panel too, and
+        // one that takes room from the picture - part of the shape.
+        nameof(AppSettings.ViewerExif),
     };
 
     internal static readonly string[] LookFields =

@@ -625,6 +625,9 @@ public static class HelpContent
                     R("회전 후 Ctrl+S · Ctrl+Shift+S · Ctrl+Z", "이름-rotate로 저장 · 다른 이름으로 저장 · 회전 취소",
                       "Ctrl+S · Ctrl+Shift+S · Ctrl+Z after rotating",
                       "Save beside it as name-rotate · save under a name you choose · undo the rotation"),
+                    R("상단 EXIF 정보 표시 버튼", "캡션 아래에 카메라 · 노출 · 위치 등 촬영 정보 표시",
+                      "The EXIF button at the top",
+                      "Shows camera, exposure, location and other shooting details under the caption"),
                 }),
 
                 new Group(T("영상", "Film"), new[]

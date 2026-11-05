@@ -1614,6 +1614,12 @@ public partial class MainWindow : Window
         // against the default dark ground, 3.4:1 against white.
         SetLocalBrush(resources, "ViewerTextLineNumberForeground",
             useLightInk ? Color.FromRgb(0x7A, 0x7D, 0x84) : Color.FromRgb(0x8A, 0x8D, 0x94));
+        // THE EXIF VIEW'S LABELS (2026-11-05, on request: the names a step
+        // under their values), on the line numbers' step for the line numbers'
+        // reason - a backed-off ink derived against this panel's ground, not
+        // an opacity - under a key of their own, so either can move alone.
+        SetLocalBrush(resources, "ViewerExifLabelForeground",
+            useLightInk ? Color.FromRgb(0x7A, 0x7D, 0x84) : Color.FromRgb(0x8A, 0x8D, 0x94));
         // THE TEXT VIEW'S GROUND WHILE READING (2026-10-13, on request: the two
         // states should differ at a glance). Given to editing first, and
         // moved to reading the same day once both had been seen; editing
@@ -13267,6 +13273,7 @@ public partial class MainWindow : Window
             // asks for the clock on its own way up.
             UpdateViewerClock();
             UpdateViewerPictureOutline();
+            UpdateViewerExif();
             _filmstripBuiltFor = default;
             UpdateViewerCarousel();
             ApplyFilmstripLayout();
@@ -14368,6 +14375,10 @@ public partial class MainWindow : Window
             0, carouselTop, 0, Math.Max(0, carouselTotal - carouselTop));
         Resources["ViewerCaptionPanelMargin"] = new Thickness(
             10, 0, 10, Math.Round(10.0 * compact));
+        // The EXIF view inside its divider: the caption's sides, and a little
+        // air above and below on the same curve (2026-11-05).
+        Resources["ViewerExifPadding"] = new Thickness(
+            10, Math.Round(6.0 * compact), 10, Math.Round(6.0 * compact));
         // THE NAME'S OWN ROOM WHEN NO CAROUSEL ROW STANDS OVER IT (2026-10-13,
         // on report). The caption's top is 0 because the carousel row brings
         // its own 4 above it; with that row hidden - a text file, a folder -

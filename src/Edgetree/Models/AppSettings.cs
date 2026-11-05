@@ -482,6 +482,10 @@ public class AppSettings
     // where a crop has to stop. OFF by default: nobody had missed it until the
     // crop arrived.
     public bool ViewerPictureOutline { get; set; } = false;
+    // EXIF 정보 표시 (2026-11-05): the shooting details under a picture's
+    // caption, switched from the picture bar. OFF by default: it takes height
+    // from the picture, and most pictures in a sidebar are not photographs.
+    public bool ViewerExif { get; set; } = false;
 
     // 시계 크기, as a multiple of the size the panel would choose on its own
     // (asked 2026-08-16, by someone who saw it).

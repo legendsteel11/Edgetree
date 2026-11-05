@@ -409,6 +409,7 @@
              them while the text shrank, and the small font sizes read as gaps
              with text in them. -->
         <Thickness x:Key="ViewerCaptionPanelMargin">10,0,10,10</Thickness>
+        <Thickness x:Key="ViewerExifPadding">10,6,10,6</Thickness>
         <Thickness x:Key="ViewerCarouselBarMargin">0,4,0,2</Thickness>
         <Thickness x:Key="ViewerMediaBarMargin">0,8,0,0</Thickness>
         <Thickness x:Key="ViewerMediaContentPadding">6,5,6,3</Thickness>
@@ -7898,7 +7899,8 @@
                     BorderThickness="1,0,0,0"
                     PreviewMouseDown="ViewerPanel_PreviewMouseDown"
                     PreviewMouseMove="ViewerPanel_PreviewMouseMove"
-                    MouseLeave="ViewerPanel_MouseLeave">
+                    MouseLeave="ViewerPanel_MouseLeave"
+                    SizeChanged="ViewerPanel_SizeChanged">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="*"/>
@@ -7912,6 +7914,10 @@
                              The strip goes last, where a thing you pick FROM
                              belongs: everything above it is the one file, and
                              everything in it is the choice of another. -->
+                        <RowDefinition Height="Auto"/>
+                        <!-- The EXIF view (2026-11-05), under the caption for the
+                             same reason: it is about the one file. Collapsed
+                             unless it is switched on over a picture. -->
                         <RowDefinition Height="Auto"/>
                         <!-- The filmstrip. Auto, and collapsed when the strip is
                              off, so a viewer without one lays out exactly as it
@@ -8998,18 +9004,39 @@
                                             Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                 </Button>
                             </StackPanel>
-                            <!-- The panel's close, as the text and PDF bars'. -->
-                            <Button Grid.Column="1"
-                                    Style="{StaticResource ViewerTextBarButtonStyle}"
-                                    Margin="4,0,0,0"
-                                    Click="ViewerTextClosePanel_Click"
-                                    ToolTip="{x:Static services:Strings.ViewerClose}">
-                                <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
-                                        Fill="{DynamicResource ForegroundText}"
-                                        Stretch="Uniform"
-                                        Width="{DynamicResource PathBarGlyphSize}"
-                                        Height="{DynamicResource PathBarGlyphSize}"/>
-                            </Button>
+                            <StackPanel Grid.Column="1"
+                                    Orientation="Horizontal">
+                                <!-- EXIF 정보 표시 (2026-11-05): the shooting
+                                     details under the caption, on and off, kept
+                                     (MainWindow.Exif.cs). With the close rather
+                                     than the tools: it changes what is shown, not
+                                     the picture. Material Symbols "info" at opsz 20,
+                                     taken onto the 20 grid as the turns are; its
+                                     ink is centred in the box (2 to 18). -->
+                                <ToggleButton x:Name="ViewerExifToggle"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        Margin="4,0,0,0"
+                                        Click="ViewerExifToggle_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerExifToggle}">
+                                    <Path Data="M9.25,14h1.5v-5h-1.5v5Zm1.281,-6.714q0.219,-0.214,0.219,-0.531t-0.214,-0.536q-0.214,-0.219,-0.531,-0.219t-0.536,0.214q-0.219,0.214,-0.219,0.531t0.214,0.536q0.214,0.219,0.531,0.219t0.536,-0.214ZM10.006,18Q8.354,18,6.896,17.375t-2.552,-1.719Q3.25,14.563,2.625,13.105t-0.625,-3.115Q2,8.333,2.625,6.885q0.625,-1.448,1.719,-2.542T6.895,2.625q1.457,-0.625,3.115,-0.625t3.105,0.625q1.448,0.625,2.542,1.719T17.375,6.89q0.625,1.453,0.625,3.104Q18,11.646,17.375,13.104t-1.719,2.552Q14.563,16.75,13.11,17.375q-1.453,0.625,-3.104,0.625Zm-0.006,-1.5q2.708,0,4.604,-1.896t1.896,-4.604q0,-2.708,-1.896,-4.604t-4.604,-1.896q-2.708,0,-4.604,1.896t-1.896,4.604q0,2.708,1.896,4.604t4.604,1.896Zm0,-6.5Z M0 0H20M0 20H20"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarListGlyphSize}"
+                                            Height="{DynamicResource PathBarListGlyphSize}"
+                                            Fill="{Binding Foreground,
+                                                RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                </ToggleButton>
+                                <!-- The panel's close, as the text and PDF bars'. -->
+                                <Button Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        Click="ViewerTextClosePanel_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerClose}">
+                                    <Path Data="M256-200l-56-56 224-224-224-224 56-56 224 224 224-224 56 56-224 224 224 224-56 56-224-224-224 224Z"
+                                            Fill="{DynamicResource ForegroundText}"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarGlyphSize}"
+                                            Height="{DynamicResource PathBarGlyphSize}"/>
+                                </Button>
+                            </StackPanel>
                         </Grid>
                     </Border>
                     <!-- Zoom navigator: the whole picture small, with a box
@@ -10085,6 +10112,36 @@
                          chips' unchecked ink (ForegroundText at the chips'
                          own 0.65 - matching them is the user's spec here, so
                          the no-opacity rule yields to the pairing). -->
+                    <!-- The EXIF view's slot (MainWindow.Exif.cs): all fifteen
+                         fields always in their places, so its height follows
+                         the column count alone and the strip does not move
+                         from one picture to the next; the cells are built in
+                         code. A divider across the panel's width above it,
+                         the picture bar's own line (on request: the caption's
+                         group and this one set apart, lightly) - so it goes
+                         with 영역 구분선 as every panel line does. Inside it the
+                         caption's side margins, so its left edge is the
+                         caption's. -->
+                    <Border x:Name="ViewerExifHost"
+                            Grid.Row="2"
+                            Visibility="Collapsed"
+                            BorderThickness="0,1,0,0"
+                            BorderBrush="{DynamicResource PanelDividerBrush}"
+                            Padding="{DynamicResource ViewerExifPadding}"
+                            SizeChanged="ViewerExifHost_SizeChanged">
+                        <StackPanel>
+                            <ScrollViewer x:Name="ViewerExifScroll"
+                                    Template="{StaticResource MinimalScrollViewerTemplate}"
+                                    Focusable="False"
+                                    HorizontalScrollBarVisibility="Disabled"
+                                    VerticalScrollBarVisibility="Auto">
+                                <UniformGrid x:Name="ViewerExifGrid"
+                                        Grid.IsSharedSizeScope="True"
+                                        VerticalAlignment="Top"
+                                        Columns="1"/>
+                            </ScrollViewer>
+                        </StackPanel>
+                    </Border>
                     <!-- The filmstrip: the carousel counter, opened out. What
                          < 35 / 257 > says in numbers this says in pictures, and
                          it walks the SAME list (GetViewerCarouselItems) so the
@@ -10119,7 +10176,7 @@
                          (2026-08-26, on report - the resting line was the only
                          thing saying the edge could be dragged at all). -->
                     <Border x:Name="ViewerFilmstripHost"
-                            Grid.Row="2"
+                            Grid.Row="3"
                             BorderThickness="0,1,0,0"
                             BorderBrush="Transparent"
                             Visibility="Collapsed">

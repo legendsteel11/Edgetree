@@ -532,6 +532,27 @@ public static class Strings
     public static string ViewerRotateRevert = "회전 취소 (Ctrl+Z)";
     public static string ViewerEditRevert = "편집 취소 (Ctrl+Z)";
     public static string ViewerRotateSaveFailedTitle = "회전한 이미지를 저장하지 못했습니다";
+    // The EXIF view (2026-11-05). The labels are Windows' own, read off its
+    // property descriptions on a Korean Windows (the Details tab's names),
+    // so the panel and Explorer call a field the same thing - 노출 바이어스,
+    // not 노출 보정. 위치 is the one the app names: Windows has 위도 and 경도
+    // as two rows, the panel shows them as one.
+    public static string ViewerExifToggle = "EXIF 정보 표시";
+    public static string ExifCameraMaker = "카메라 제조업체";
+    public static string ExifCameraModel = "카메라 모델";
+    public static string ExifLensModel = "렌즈 모델";
+    public static string ExifDateTaken = "찍은 날짜";
+    public static string ExifExposureTime = "노출 시간";
+    public static string ExifFNumber = "F-스톱";
+    public static string ExifIsoSpeed = "ISO 감도";
+    public static string ExifExposureBias = "노출 바이어스";
+    public static string ExifExposureProgram = "노출 프로그램";
+    public static string ExifMeteringMode = "측광 모드";
+    public static string ExifFlash = "플래시 모드";
+    public static string ExifFocalLength = "초점 거리";
+    public static string ExifFocalLength35mm = "35mm 초점 거리";
+    public static string ExifProgram = "프로그램 이름";
+    public static string ExifLocation = "위치";
     // The footer's now-playing row, which only exists while the viewer is shut
     // and 배경 재생 is holding a track.
     public static string FooterNowPlayingOpen = "멀티미디어 패널에서 열기";
@@ -1432,6 +1453,22 @@ public static class Strings
         ViewerRotateRevert = "Undo rotation (Ctrl+Z)";
         ViewerEditRevert = "Undo edits (Ctrl+Z)";
         ViewerRotateSaveFailedTitle = "The rotated image could not be saved";
+        ViewerExifToggle = "Show EXIF information";
+        ExifCameraMaker = "Camera maker";
+        ExifCameraModel = "Camera model";
+        ExifLensModel = "Lens model";
+        ExifDateTaken = "Date taken";
+        ExifExposureTime = "Exposure time";
+        ExifFNumber = "F-stop";
+        ExifIsoSpeed = "ISO speed";
+        ExifExposureBias = "Exposure bias";
+        ExifExposureProgram = "Exposure program";
+        ExifMeteringMode = "Metering mode";
+        ExifFlash = "Flash mode";
+        ExifFocalLength = "Focal length";
+        ExifFocalLength35mm = "35mm focal length";
+        ExifProgram = "Program name";
+        ExifLocation = "Location";
         FooterNowPlayingOpen = "Open in the multimedia panel";
         FooterHeldFilmResume = "Resume";
         ViewerNowPlayingLabel = "Now playing";
