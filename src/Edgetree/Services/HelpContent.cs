@@ -628,6 +628,9 @@ public static class HelpContent
                     R("상단 EXIF 정보 표시 버튼", "캡션 아래에 카메라 · 노출 · 위치 등 촬영 정보 표시",
                       "The EXIF button at the top",
                       "Shows camera, exposure, location and other shooting details under the caption"),
+                    R("상단 속성 제거 버튼 (JPEG)", "선택한 항목을 제거한 사본을 원본 옆에 이름-clean으로 저장 · Esc로 종료",
+                      "The remove properties button at the top (JPEG)",
+                      "Saves a copy without the ticked items beside the original as name-clean · Esc to stop"),
                 }),
 
                 new Group(T("영상", "Film"), new[]

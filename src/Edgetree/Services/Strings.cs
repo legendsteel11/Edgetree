@@ -538,6 +538,18 @@ public static class Strings
     // not 노출 보정. 위치 is the one the app names: Windows has 위도 and 경도
     // as two rows, the panel shows them as one.
     public static string ViewerExifToggle = "EXIF 정보 표시";
+    // 속성 제거 in the EXIF view (2026-11-05). 그 밖의 정보 is the row for what
+    // the view does not show; its value cell says what that is.
+    public static string ViewerExifRemove = "속성 제거";
+    public static string ViewerExifRemoveUnavailable = "JPEG만 속성을 제거할 수 있습니다";
+    public static string ExifOther = "그 밖의 정보";
+    public static string ExifOtherDetail = "카메라 메모 · 일련번호 · 내장 썸네일 · 편집 기록 · 작성자 · 저작권 등";
+    public static string ExifSelectAll = "전체 선택";
+    public static string ExifRemoveSave = "제거 후 사본 저장";
+    public static string ExifRemoveSaveTip = "선택한 항목을 제거한 사본을 원본 옆에 이름-clean으로 저장 (방향 · 색 프로필은 유지)";
+    public static string ExifRemoveFailedTitle = "속성을 제거한 사본을 저장하지 못했습니다";
+    public static string ExifRemoveUnreadable = "이 파일의 구조를 읽을 수 없어 속성을 제거하지 않았습니다.";
+    public static string ExifRemoveNotGone = "저장할 사본에 제거할 항목이 남아 있어 저장하지 않았습니다.";
     public static string ExifCameraMaker = "카메라 제조업체";
     public static string ExifCameraModel = "카메라 모델";
     public static string ExifLensModel = "렌즈 모델";
@@ -1454,6 +1466,16 @@ public static class Strings
         ViewerEditRevert = "Undo edits (Ctrl+Z)";
         ViewerRotateSaveFailedTitle = "The rotated image could not be saved";
         ViewerExifToggle = "Show EXIF information";
+        ViewerExifRemove = "Remove properties";
+        ViewerExifRemoveUnavailable = "Properties can be removed from JPEG files only";
+        ExifOther = "Everything else";
+        ExifOtherDetail = "Maker's note · serial numbers · embedded thumbnail · edit history · author · copyright and more";
+        ExifSelectAll = "Select all";
+        ExifRemoveSave = "Remove and save a copy";
+        ExifRemoveSaveTip = "Saves a copy without the ticked items beside the original as name-clean (orientation and color profile kept)";
+        ExifRemoveFailedTitle = "The copy without the properties could not be saved";
+        ExifRemoveUnreadable = "The file's structure could not be read, so nothing was removed.";
+        ExifRemoveNotGone = "The copy still held an item to be removed, so it was not saved.";
         ExifCameraMaker = "Camera maker";
         ExifCameraModel = "Camera model";
         ExifLensModel = "Lens model";

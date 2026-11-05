@@ -1987,8 +1987,9 @@ public partial class MainWindow : Window
         }
 
         // Crop mode's Esc and Ctrl+C, ahead of the full screen's Esc and the
-        // tree's Ctrl+C below (MainWindow.Crop.cs).
-        if (HandleViewerCropKey(e))
+        // tree's Ctrl+C below (MainWindow.Crop.cs); then 속성 제거's Esc
+        // (MainWindow.Exif.cs), which crop mode's takes first when both are on.
+        if (HandleViewerCropKey(e) || HandleViewerExifKey(e))
         {
             e.Handled = true;
             return;

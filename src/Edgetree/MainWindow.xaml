@@ -678,6 +678,85 @@
             <Setter Property="Focusable"
                     Value="False"/>
         </Style>
+        <!-- The EXIF view's check boxes (2026-11-05): the PDF password row's
+             box, drawn the same way - a WPF default is white on a dark panel -
+             in the panel's own ink, with its content (if any) beside it. Not
+             focusable, so a click leaves the keyboard in the tree. -->
+        <Style x:Key="ViewerCheckBoxStyle"
+                TargetType="CheckBox">
+            <Setter Property="Focusable"
+                    Value="False"/>
+            <Setter Property="Cursor"
+                    Value="Hand"/>
+            <Setter Property="VerticalAlignment"
+                    Value="Center"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="CheckBox">
+                        <StackPanel Orientation="Horizontal"
+                                Background="Transparent">
+                            <Border x:Name="Box"
+                                    Width="13"
+                                    Height="13"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderBrush="{DynamicResource ControlBorder}"
+                                    BorderThickness="1"
+                                    CornerRadius="2"
+                                    SnapsToDevicePixels="True">
+                                <Path x:Name="Mark"
+                                        Data="M 1.5,5.5 L 4.5,8.5 L 9.5,2.5"
+                                        Stroke="{DynamicResource ForegroundText}"
+                                        StrokeThickness="1.6"
+                                        StrokeStartLineCap="Round"
+                                        StrokeEndLineCap="Round"
+                                        StrokeLineJoin="Round"
+                                        Visibility="Collapsed"/>
+                            </Border>
+                            <ContentPresenter x:Name="Content"
+                                    Margin="6,0,0,0"
+                                    VerticalAlignment="Center"/>
+                        </StackPanel>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked"
+                                    Value="True">
+                                <Setter TargetName="Mark"
+                                        Property="Visibility"
+                                        Value="Visible"/>
+                            </Trigger>
+                            <Trigger Property="Content"
+                                    Value="{x:Null}">
+                                <Setter TargetName="Content"
+                                        Property="Margin"
+                                        Value="0"/>
+                            </Trigger>
+                            <Trigger Property="IsMouseOver"
+                                    Value="True">
+                                <Setter TargetName="Box"
+                                        Property="BorderBrush"
+                                        Value="{DynamicResource ForegroundText}"/>
+                            </Trigger>
+                            <!-- A box with nothing to tick (an EXIF row the file
+                                 has no value for) stays drawn, faint, so the
+                                 column of boxes has no gaps in it (on request,
+                                 2026-11-05: gaps read as confusing). Opacity
+                                 here means "unavailable", as on the chips'
+                                 greyed steps - not "secondary". 0.6: 0.35 was
+                                 first, and read as too faint for a box that
+                                 cannot be ticked anyway (on report). -->
+                            <Trigger Property="IsEnabled"
+                                    Value="False">
+                                <Setter TargetName="Box"
+                                        Property="Opacity"
+                                        Value="0.6"/>
+                                <Setter Property="Cursor"
+                                        Value="Arrow"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
         <Style x:Key="ViewerTextBarGlyphStyle"
                 TargetType="Path">
             <Setter Property="Fill"
@@ -9006,6 +9085,28 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1"
                                     Orientation="Horizontal">
+                                <!-- 속성 제거 (2026-11-05, the author's design): the
+                                     EXIF view's rows get check boxes, and the ticked
+                                     ones are left out of a copy saved beside the
+                                     original (MainWindow.Exif.cs). A JPEG only, and
+                                     a mode like the crop's: Esc or this again ends it.
+                                     Material Symbols "ink_eraser" at opsz 20 on the 20
+                                     grid; its ink sits a unit high in the box (2 to 16),
+                                     as the file draws it. -->
+                                <ToggleButton x:Name="ViewerExifRemoveToggle"
+                                        Style="{StaticResource PathBarToggleStyle}"
+                                        Margin="4,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerExifRemoveToggle_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerExifRemove}">
+                                    <Path Data="M14,14.5h4v1.5H12.5l1.5,-1.5Zm-9.104,1.5L2.438,13.542q-0.437,-0.437,-0.448,-1.052T2.438,11.417l8.979,-8.979q0.458,-0.458,1.063,-0.458t1.068,0.464L17.563,6.458q0.438,0.438,0.448,1.052T17.563,8.583L10.146,16H4.896Zm4.625,-1.5 6.979,-6.979 -4.021,-4.021 -8.979,8.979 2.021,2.021h4Zm0.479,-4.5Z M0 0H20M0 20H20"
+                                            Stretch="Uniform"
+                                            Width="{DynamicResource PathBarListGlyphSize}"
+                                            Height="{DynamicResource PathBarListGlyphSize}"
+                                            Fill="{Binding Foreground,
+                                                RelativeSource={RelativeSource AncestorType=ToggleButton}}"/>
+                                </ToggleButton>
                                 <!-- EXIF 정보 표시 (2026-11-05): the shooting
                                      details under the caption, on and off, kept
                                      (MainWindow.Exif.cs). With the close rather
@@ -9015,7 +9116,7 @@
                                      ink is centred in the box (2 to 18). -->
                                 <ToggleButton x:Name="ViewerExifToggle"
                                         Style="{StaticResource PathBarToggleStyle}"
-                                        Margin="4,0,0,0"
+                                        Margin="2,0,0,0"
                                         Click="ViewerExifToggle_Click"
                                         ToolTip="{x:Static services:Strings.ViewerExifToggle}">
                                     <Path Data="M9.25,14h1.5v-5h-1.5v5Zm1.281,-6.714q0.219,-0.214,0.219,-0.531t-0.214,-0.536q-0.214,-0.219,-0.531,-0.219t-0.536,0.214q-0.219,0.214,-0.219,0.531t0.214,0.536q0.214,0.219,0.531,0.219t0.536,-0.214ZM10.006,18Q8.354,18,6.896,17.375t-2.552,-1.719Q3.25,14.563,2.625,13.105t-0.625,-3.115Q2,8.333,2.625,6.885q0.625,-1.448,1.719,-2.542T6.895,2.625q1.457,-0.625,3.115,-0.625t3.105,0.625q1.448,0.625,2.542,1.719T17.375,6.89q0.625,1.453,0.625,3.104Q18,11.646,17.375,13.104t-1.719,2.552Q14.563,16.75,13.11,17.375q-1.453,0.625,-3.104,0.625Zm-0.006,-1.5q2.708,0,4.604,-1.896t1.896,-4.604q0,-2.708,-1.896,-4.604t-4.604,-1.896q-2.708,0,-4.604,1.896t-1.896,4.604q0,2.708,1.896,4.604t4.604,1.896Zm0,-6.5Z M0 0H20M0 20H20"
@@ -10140,6 +10241,39 @@
                                         VerticalAlignment="Top"
                                         Columns="1"/>
                             </ScrollViewer>
+                            <!-- 속성 제거's own row, under the fields while the
+                                 mode is on: 전체 선택 on the left, the save on the
+                                 right, the save greyed until something is ticked.
+                                 Outside the scroller, so it is always in reach. -->
+                            <DockPanel x:Name="ViewerExifRemoveRow"
+                                    Visibility="Collapsed"
+                                    Margin="0,6,0,0"
+                                    LastChildFill="False">
+                                <CheckBox x:Name="ViewerExifSelectAll"
+                                        DockPanel.Dock="Left"
+                                        Style="{StaticResource ViewerCheckBoxStyle}"
+                                        Foreground="{DynamicResource ForegroundText}"
+                                        FontSize="{DynamicResource MenuThumbnailInfoFontSize}"
+                                        Content="{x:Static services:Strings.ExifSelectAll}"
+                                        Click="ViewerExifSelectAll_Click"/>
+                                <Button x:Name="ViewerExifRemoveSave"
+                                        DockPanel.Dock="Right"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Content="{x:Static services:Strings.ExifRemoveSave}"
+                                        ToolTip="{x:Static services:Strings.ExifRemoveSaveTip}"
+                                        Click="ViewerExifRemoveSave_Click">
+                                    <Button.Style>
+                                        <Style TargetType="Button"
+                                                BasedOn="{StaticResource FooterActionChipStyle}">
+                                            <Setter Property="Opacity"
+                                                    Value="1"/>
+                                            <Setter Property="FontSize"
+                                                    Value="{DynamicResource ViewerChipGlyphFontSize}"/>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DockPanel>
                         </StackPanel>
                     </Border>
                     <!-- The filmstrip: the carousel counter, opened out. What
