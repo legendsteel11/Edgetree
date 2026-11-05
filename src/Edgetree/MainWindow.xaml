@@ -419,6 +419,9 @@
         <system:Double x:Key="PathBarButtonSize">22</system:Double>
         <system:Double x:Key="PathBarGlyphSize">12</system:Double>
         <system:Double x:Key="PathBarListGlyphSize">15</system:Double>
+        <!-- The picture bar's two turns, a pixel over the marks beside them -
+             see their buttons for the measurement. -->
+        <system:Double x:Key="PathBarRotateGlyphSize">16</system:Double>
         <Thickness x:Key="PathBarRowMargin">6,5,6,2</Thickness>
         <!-- The text view's edit bar and find row, the bar lined up with the
              path bar's top seat - see where both are set in ApplyLayoutMetrics. -->
@@ -8828,10 +8831,10 @@
                     <!-- THE PICTURE'S BAR (2026-11-03, the author's design):
                          the text and PDF bars' seat and build - the same
                          style and size resources, so Ctrl+/- moves all three
-                         together - with 자르기 first, then the crop's 저장 and
-                         자르기 취소 (greyed until there is a temporary crop to
-                         save or take back), and the panel's close at the right
-                         end. Over the top of
+                         together - with 자르기 first, the two turns after it
+                         (2026-11-05), then 저장 and the undo (greyed until there
+                         is a cut or a turn to save or take back), and the
+                         panel's close at the right end. Over the top of
                          the picture's cell; the host is pushed down by its
                          height (ApplyViewerPictureBarInset) so the picture
                          fits under it rather than behind it.
@@ -8917,6 +8920,56 @@
                                         Click="ViewerCropReusePanel_Click"
                                         ToolTip="{x:Static services:Strings.ViewerCropReusePanel}">
                                     <Path Data="M14.5,19V16h-9q-0.62,0-1.06-0.44T4,14.5v-9H1V4H4V1H5.5V14.5H19V16H16v3H14.5Zm0-6V5.5H7V4h7.5q0.62,0 1.06,0.44T16,5.5V13H14.5Z M9.993,7.597C9.693,7.597 9.448,7.711 9.258,7.938 9.068,8.165 8.973,8.466 8.973,8.84L8.973,9.221C8.973,9.549 9.059,9.816 9.232,10.023 9.405,10.23 9.633,10.334 9.914,10.334 10.248,10.334 10.507,10.205 10.691,9.947 10.875,9.688 10.967,9.323 10.967,8.85 10.967,8.015 10.642,7.597 9.993,7.597z M10.54,6.475C11.156,6.475 11.631,6.686 11.967,7.108 12.302,7.53 12.47,8.104 12.47,8.831 12.47,9.623 12.274,10.258 11.883,10.738 11.492,11.217 10.972,11.457 10.322,11.457 9.75,11.457 9.314,11.234 9.014,10.789L8.996,10.789 8.996,13.525 7.53,13.525 7.53,6.591 8.996,6.591 8.996,7.305 9.014,7.305C9.376,6.751,9.885,6.475,10.54,6.475z M0 0H20M0 20H20"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
+                                <!-- 왼쪽으로 회전 · 오른쪽으로 회전 (2026-11-05, the
+                                     author's design): a quarter turn a press, and the
+                                     turned picture is kept by the 저장 beside them
+                                     (MainWindow.Rotate.cs). Material Symbols
+                                     "rotate_left" / "rotate_right" at opsz 20, taken
+                                     off the 960 grid onto the bar's 20 one - x / 48,
+                                     (y + 960) / 48, the sum that turns the 960 crop
+                                     into the author's own file exactly - and boxed as
+                                     the crop is.
+                                     A PIXEL LARGER THAN THE MARKS BESIDE THEM
+                                     (PathBarRotateGlyphSize, 16 at the default size;
+                                     the author's call off a 10x capture, 2026-11-05).
+                                     At 15 the box centred 2.5px into the 20 inside
+                                     the outline, layout rounding put it at 3, and the
+                                     ink stood 11 by 12 with 5 left and 4 right of it.
+                                     At 16 the box sits 2 in, on whole pixels: ink 12 by
+                                     13, 4 and 4 across, 4 and 3 down (an odd remainder
+                                     - the nearest to even there is), and the faint rows
+                                     above and below it gone. Then a pixel up, on the
+                                     author's next capture: 3 above and 4 below. A whole
+                                     pixel of margin rather than the box moved inside
+                                     the path data, so it stays on whole pixels at every
+                                     Ctrl+/- size. Both measured by rendering the button
+                                     offscreen before the build. -->
+                                <Button x:Name="ViewerRotateLeftButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerRotateLeft_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerRotateLeft}">
+                                    <Path Data="M9.25,18.896q-1.146,-0.125,-2.219,-0.615T5.083,16.917l1.063,-1.062q0.667,0.646,1.458,1.021t1.646,0.5v1.521Zm1.5,0v-1.521q2.083,-0.292,3.417,-1.812t1.333,-3.625q0,-2.292,-1.594,-3.885T10.021,6.458h-0.562l1.604,1.583 -1.062,1.063 -3.542,-3.521 3.542,-3.542 1.063,1.063 -1.875,1.854h0.813q1.458,0,2.729,0.542t2.219,1.49Q15.896,7.938,16.448,9.208T17,11.938q0,2.729,-1.781,4.698T10.75,18.896ZM4.125,15.75q-0.604,-0.937,-0.865,-1.969T3,11.688h1.521q0,0.771,0.167,1.521t0.563,1.438l-1.125,1.104Zm-0.896,-5.562q0.229,-0.875,0.677,-1.687t1.135,-1.5l1.063,1.042q-0.479,0.479,-0.792,1.021t-0.5,1.125h-1.583Z M0 0H20M0 20H20"
+                                            Width="{DynamicResource PathBarRotateGlyphSize}"
+                                            Height="{DynamicResource PathBarRotateGlyphSize}"
+                                            Margin="0,-1,0,1"
+                                            Style="{StaticResource ViewerTextBarGlyphStyle}"/>
+                                </Button>
+                                <Button x:Name="ViewerRotateRightButton"
+                                        Style="{StaticResource ViewerTextBarButtonStyle}"
+                                        Margin="2,0,0,0"
+                                        IsEnabled="False"
+                                        ToolTipService.ShowOnDisabled="True"
+                                        Click="ViewerRotateRight_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerRotateRight}">
+                                    <Path Data="M10.75,18.896v-1.521q0.854,-0.125,1.646,-0.5t1.458,-1.021l1.063,1.063q-0.875,0.875,-1.948,1.365T10.75,18.896Zm-1.5,0Q6.563,18.604,4.781,16.635T3,11.938q0,-1.458,0.552,-2.729t1.5,-2.219Q6,6.042,7.271,5.5t2.729,-0.542h0.813l-1.875,-1.854 1.063,-1.062 3.542,3.542 -3.542,3.521 -1.062,-1.062 1.604,-1.583h-0.562q-2.292,0,-3.885,1.594T4.5,11.938q0,2.104,1.333,3.625t3.417,1.813v1.521Zm6.625,-3.146 -1.125,-1.104q0.396,-0.687,0.563,-1.437t0.167,-1.521h1.521q0,1.063,-0.26,2.094T15.875,15.75Zm0.896,-5.562h-1.583q-0.187,-0.583,-0.5,-1.125t-0.792,-1.021l1.063,-1.042q0.688,0.688,1.135,1.5t0.677,1.688Z M0 0H20M0 20H20"
+                                            Width="{DynamicResource PathBarRotateGlyphSize}"
+                                            Height="{DynamicResource PathBarRotateGlyphSize}"
+                                            Margin="0,-1,0,1"
                                             Style="{StaticResource ViewerTextBarGlyphStyle}"/>
                                 </Button>
                                 <Button x:Name="ViewerCropSaveButton"

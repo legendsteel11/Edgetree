@@ -521,6 +521,17 @@ public static class Strings
         "이전 영역 불러오기 (이미지 기준)\n저장된 영역이 이 이미지를 벗어납니다 (영역 x {0}, y {1} · {2} × {3} / 이미지 {4} × {5})";
     public static string ViewerCropReusePanelOutside =
         "이전 영역 불러오기 (패널 기준)\n저장된 영역이 지금 화면의 이미지를 벗어납니다";
+    // The bar's two turns (2026-11-05), under Windows' own names for them. A
+    // turn lights the same 저장 and undo as a cut; their tooltips say which
+    // file is written and what is taken back.
+    public static string ViewerRotateLeft = "왼쪽으로 회전";
+    public static string ViewerRotateRight = "오른쪽으로 회전";
+    public static string ViewerRotateUnavailable = "이 형식은 회전할 수 없습니다";
+    public static string ViewerRotateCaptionFormat = "{0} × {1}  ·  회전한 이미지 (저장 전)";
+    public static string ViewerRotateSave = "저장 Ctrl+S (이름-rotate) · 다른 이름으로 저장 Ctrl+Shift+S";
+    public static string ViewerRotateRevert = "회전 취소 (Ctrl+Z)";
+    public static string ViewerEditRevert = "편집 취소 (Ctrl+Z)";
+    public static string ViewerRotateSaveFailedTitle = "회전한 이미지를 저장하지 못했습니다";
     // The footer's now-playing row, which only exists while the viewer is shut
     // and 배경 재생 is holding a track.
     public static string FooterNowPlayingOpen = "멀티미디어 패널에서 열기";
@@ -1413,6 +1424,14 @@ public static class Strings
             "Reuse the last area (on the image)\nThe saved area falls outside this image (area x {0}, y {1} · {2} × {3} / image {4} × {5})";
         ViewerCropReusePanelOutside =
             "Reuse the last area (on the panel)\nThe saved area falls outside the image as it is shown now";
+        ViewerRotateLeft = "Rotate left";
+        ViewerRotateRight = "Rotate right";
+        ViewerRotateUnavailable = "This format can't be rotated";
+        ViewerRotateCaptionFormat = "{0} × {1}  ·  Rotated (not saved)";
+        ViewerRotateSave = "Save Ctrl+S (name-rotate) · Save as Ctrl+Shift+S";
+        ViewerRotateRevert = "Undo rotation (Ctrl+Z)";
+        ViewerEditRevert = "Undo edits (Ctrl+Z)";
+        ViewerRotateSaveFailedTitle = "The rotated image could not be saved";
         FooterNowPlayingOpen = "Open in the multimedia panel";
         FooterHeldFilmResume = "Resume";
         ViewerNowPlayingLabel = "Now playing";

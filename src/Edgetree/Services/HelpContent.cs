@@ -612,6 +612,14 @@ public static class HelpContent
                       "Ctrl+S · Ctrl+Shift+S while cropping", "Save beside it as name-crop · save under a name you choose"),
                     R("자르기 중 Ctrl+Z · Esc", "자르기 취소 · 자르기 종료",
                       "Ctrl+Z · Esc while cropping", "Undo the crop · stop cropping"),
+                    // Turning (2026-11-05), the bar's other tool, after the
+                    // crop it sits beside.
+                    R("상단 왼쪽으로 회전 · 오른쪽으로 회전", "90도씩 회전, 저장은 원본 옆에 이름-rotate로 (JPEG는 화질 손실 없음)",
+                      "Rotate left · Rotate right at the top",
+                      "Turns it 90° at a time; saving puts name-rotate beside the original (JPEG with no loss of quality)"),
+                    R("회전 후 Ctrl+S · Ctrl+Shift+S · Ctrl+Z", "이름-rotate로 저장 · 다른 이름으로 저장 · 회전 취소",
+                      "Ctrl+S · Ctrl+Shift+S · Ctrl+Z after rotating",
+                      "Save beside it as name-rotate · save under a name you choose · undo the rotation"),
                 }),
 
                 new Group(T("영상", "Film"), new[]

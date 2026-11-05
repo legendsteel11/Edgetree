@@ -14018,6 +14018,7 @@ public partial class MainWindow : Window
         Resources["PathBarButtonSize"] = Math.Max(12.0, pathBarHeight - 2.0);
         Resources["PathBarGlyphSize"] = Math.Round(pathBarFont);
         Resources["PathBarListGlyphSize"] = Math.Round(pathBarFont * 1.25);
+        Resources["PathBarRotateGlyphSize"] = Math.Round(pathBarFont * 1.25) + 1;
         // The 5-above/2-below split is deliberate and stays a split - see the
         // XAML's own comment for the move that produced it. Only its size
         // follows the font; the horizontal 6 lines the strip up with the chips
@@ -26344,8 +26345,10 @@ public partial class MainWindow : Window
                     return;
                 }
 
-                _viewerDecodedWidth = bitmap.PixelWidth;
-                ViewerImage.Source = bitmap;
+                // Turned on its way in while the picture is (2026-11-05).
+                var arrived = TurnViewerArrival(bitmap);
+                _viewerDecodedWidth = arrived.PixelWidth;
+                ViewerImage.Source = arrived;
                 return;
             }
 
@@ -37560,6 +37563,16 @@ public partial class MainWindow : Window
             return;
         }
 
+        // A turned picture neither (2026-11-05): the reload is the new-file
+        // path, which lets every edit go (DiscardViewerCrop). It asks for a
+        // decode sized for its side at the new width instead, which is
+        // swapped in turned, as on the press.
+        if (_viewerTurn != 0)
+        {
+            RequestViewerTurnedDecode();
+            return;
+        }
+
         if (_pendingViewerPath is { } shown && (IsViewerText(shown) || IsViewerPdf(shown)))
         {
             return;
@@ -37865,10 +37878,12 @@ public partial class MainWindow : Window
             if (_viewerOpen && ViewerShowsSizedShellPicture &&
                 string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
             {
+                // Measured on the side that runs across the panel, which a
+                // quarter turn (2026-11-05) makes its height.
                 if (whole is not null && _viewerCropApplied is null &&
-                    whole.PixelWidth > _viewerDecodedWidth)
+                    (_viewerTurn % 2 == 1 ? whole.PixelHeight : whole.PixelWidth) > _viewerDecodedWidth)
                 {
-                    ViewerImage.Source = whole;
+                    ViewerImage.Source = TurnViewerArrival(whole);
                 }
                 _viewerDecodedWidth = _viewerPixelWidth;
                 LogViewerPixelFidelity();

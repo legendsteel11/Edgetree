@@ -26,7 +26,9 @@ namespace SidebarExplorer.App;
 // picture, and Ctrl+C copying what it covers (the first stage); then the
 // buttons that stand by a finished rectangle, the temporary crop, and
 // the two saves (the second). The whole design, with what was settled and
-// why, is in the project notes on the crop round.
+// why, is in the project notes on the crop round. The bar's two turns
+// (2026-11-05) live in MainWindow.Rotate.cs and share the temporary edit,
+// its take-back and its saves with the crop.
 //
 // THE RECTANGLE LIVES IN THE PICTURE'S OWN PIXELS - the original's, as shown,
 // EXIF orientation applied - never in screen coordinates. The panel draws a
@@ -70,8 +72,8 @@ public partial class MainWindow
     // Null while the picture on screen is the file's.
     private BitmapSource? _viewerCropApplied;
 
-    // What the panel showed before the first temporary crop, so 자르기 취소
-    // puts it back without reading the file again (a NAS costs seconds). An
+    // What the panel showed before the first temporary crop or turn, so the
+    // undo puts it back without reading the file again (a NAS costs seconds). An
     // animated GIF is the exception: its frames were let go when the crop
     // replaced it, and it is read again.
     private sealed record ViewerCropOriginal(
@@ -82,6 +84,7 @@ public partial class MainWindow
     // Where the temporary crop on screen starts in the FILE's pixels - every
     // cut that made it, added up - so a rectangle drawn on it is remembered
     // as the part of the file it really covers (see RememberViewerCropArea).
+    // The file as turned, if it is: a turn of the cut turns this with it.
     // Zero while the picture on screen is the file's.
     private Point _viewerCropAppliedOrigin;
 
@@ -166,11 +169,26 @@ public partial class MainWindow
             ExitViewerCropMode();
         }
 
-        // 저장 and 자르기 취소 answer the temporary crop; a rectangle alone is
-        // saved from the buttons beside it.
+        // The two turns (MainWindow.Rotate.cs), greyed while a cut is being
+        // taken - a turn of a cut is taken on a worker as well.
+        bool canTurn = CanTurnViewerPicture;
+        ViewerRotateLeftButton.IsEnabled = canTurn && !_viewerCropBusy;
+        ViewerRotateRightButton.IsEnabled = canTurn && !_viewerCropBusy;
+        ViewerRotateLeftButton.ToolTip = canTurn ? Strings.ViewerRotateLeft : Strings.ViewerRotateUnavailable;
+        ViewerRotateRightButton.ToolTip = canTurn ? Strings.ViewerRotateRight : Strings.ViewerRotateUnavailable;
+
+        // 저장 and the undo answer the temporary edit - a crop, a turn, or
+        // both; a rectangle alone is saved from the buttons beside it. Their
+        // tooltips say which: 저장 names the file it will write, the undo what
+        // it takes back.
         bool applied = _viewerCropApplied is not null;
-        ViewerCropSaveButton.IsEnabled = applied && !_viewerCropBusy;
-        ViewerCropRevertButton.IsEnabled = applied;
+        bool turned = _viewerTurn != 0;
+        ViewerCropSaveButton.IsEnabled = (applied || turned) && !_viewerCropBusy;
+        ViewerCropSaveButton.ToolTip = ViewerTurnedOnly ? Strings.ViewerRotateSave : Strings.ViewerCropSave;
+        ViewerCropRevertButton.IsEnabled = applied || turned;
+        ViewerCropRevertButton.ToolTip = applied && turned ? Strings.ViewerEditRevert
+            : turned ? Strings.ViewerRotateRevert
+            : Strings.ViewerCropRevert;
         // The buttons only, not the plate: a press on a greyed button goes to
         // its first enabled parent, and the plate's handler keeps it off the
         // picture, where it would start a new rectangle.
@@ -285,16 +303,19 @@ public partial class MainWindow
         ViewerImageHost.Cursor = ViewerHostRestCursor;
     }
 
-    // Crop mode AND the temporary crop, for the moments the picture itself
-    // goes: another file, the panel closing. Nothing is put back on screen -
-    // what comes next replaces it - and nothing is asked: the cut is a few
-    // seconds' work, and the picture it came from is untouched on disk.
+    // Crop mode AND the temporary edit - a cut, a turn - for the moments the
+    // picture itself goes: another file, the panel closing. Nothing is put
+    // back on screen - what comes next replaces it - and nothing is asked: the
+    // edit is a few seconds' work, and the picture it came from is untouched
+    // on disk.
     private void DiscardViewerCrop()
     {
         ExitViewerCropMode();
         _viewerCropApplied = null;
         _viewerCropOriginal = null;
         _viewerCropAppliedOrigin = default;
+        _viewerTurn = 0;
+        _viewerTurnBase = null;
         ViewerCropSaveButton.IsEnabled = false;
         ViewerCropRevertButton.IsEnabled = false;
     }
@@ -1048,13 +1069,15 @@ public partial class MainWindow
             return true;
         }
 
-        // 자르기 취소 (2026-11-03, on request). The whole way back to the
-        // picture as the file has it, as the button does - not one cut at a
-        // time. With no temporary crop the key is left alone: the text view
-        // answers it inside the editor, and the tree since the same evening
-        // with 복사 취소 · 이동 취소 - so a second Ctrl+Z after a crop is
-        // taken back undoes the last paste, as a second undo does anywhere.
-        if (_viewerCropApplied is not null && e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
+        // 자르기 취소 (2026-11-03, on request), and a turn's 회전 취소 since
+        // 11-05. The whole way back to the picture as the file has it, as the
+        // button does - not one cut or turn at a time. With no temporary edit
+        // the key is left alone: the text view answers it inside the editor,
+        // and the tree since the same evening with 복사 취소 · 이동 취소 - so a
+        // second Ctrl+Z after an edit is taken back undoes the last paste, as
+        // a second undo does anywhere.
+        if ((_viewerCropApplied is not null || _viewerTurn != 0) &&
+            e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
         {
             RevertViewerCrop();
             return true;
@@ -1116,8 +1139,10 @@ public partial class MainWindow
         return false;
     }
 
+    // A turned picture counts as a temporary crop here: Ctrl+C copies it as
+    // it stands, Ctrl+S saves it as name-rotate.
     private bool HasViewerCropToTake
-        => (_viewerCropMode && _viewerCropSelection is not null) || _viewerCropApplied is not null;
+        => (_viewerCropMode && _viewerCropSelection is not null) || _viewerCropApplied is not null || _viewerTurn != 0;
 
     // ----- The buttons -------------------------------------------------------
 
@@ -1190,8 +1215,10 @@ public partial class MainWindow
         UpdateViewerPictureBar();
     }
 
-    // 자르기 취소: the picture as it was before the first temporary crop, at
-    // rest, crop mode off.
+    // 자르기 취소 · 회전 취소: the picture as it was before the first cut or
+    // turn, at rest, crop mode off. The file's picture a turn was applied to
+    // goes back in place of the one kept at the start where it can: a sharper
+    // decode may have replaced it since (TurnViewerArrival).
     private void RevertViewerCrop()
     {
         if (_viewerCropOriginal is not { } original)
@@ -1199,10 +1226,13 @@ public partial class MainWindow
             return;
         }
 
+        var turnBase = _viewerTurnBase;
         ExitViewerCropMode();
         _viewerCropApplied = null;
         _viewerCropOriginal = null;
         _viewerCropAppliedOrigin = default;
+        _viewerTurn = 0;
+        _viewerTurnBase = null;
 
         if (original.WasAnimated)
         {
@@ -1212,10 +1242,10 @@ public partial class MainWindow
             return;
         }
 
-        ViewerImage.Source = original.Source;
+        ViewerImage.Source = turnBase ?? original.Source;
         _viewerPixelWidth = original.PixelWidth;
         _viewerPixelHeight = original.PixelHeight;
-        _viewerDecodedWidth = original.DecodedWidth;
+        _viewerDecodedWidth = turnBase?.PixelWidth ?? original.DecodedWidth;
         SetViewerCaption(original.Caption);
         ShowViewerAtRest();
         UpdateViewerPictureBar();
@@ -1233,15 +1263,27 @@ public partial class MainWindow
 
     // What a copy or a save takes: the rectangle, cut from the temporary crop
     // if there is one and from the file's own pixels if not; or, with no
-    // rectangle or when asked for it whole, the temporary crop. Null when
+    // rectangle or when asked for it whole, the temporary crop - or, turned
+    // with nothing cut, the whole turned picture at full resolution. Null when
     // there is nothing.
     private async Task<BitmapSource?> TakeViewerCropAsync(bool wholeApplied = false)
     {
-        if (wholeApplied || !(_viewerCropMode && _viewerCropSelection is { } selection))
+        Rect selection;
+        if (!wholeApplied && _viewerCropMode && _viewerCropSelection is { } drawn)
+        {
+            selection = drawn;
+        }
+        else if (ViewerTurnedOnly)
+        {
+            selection = new Rect(0, 0, _viewerPixelWidth, _viewerPixelHeight);
+        }
+        else
         {
             return _viewerCropApplied;
         }
 
+        // Read before the first await: the picture the cut is of.
+        int turn = _viewerTurn;
         var area = new Int32Rect((int)selection.X, (int)selection.Y, (int)selection.Width, (int)selection.Height);
         if (area.Width <= 0 || area.Height <= 0)
         {
@@ -1272,11 +1314,12 @@ public partial class MainWindow
         // the most there is to have.
         if (ViewerShowsSizedShellPicture)
         {
-            if (await FetchViewerShellWhole(path) is not { } whole)
+            if (await FetchViewerShellWhole(path) is not { } fetched)
             {
                 return null;
             }
 
+            var whole = TurnBitmap(fetched, turn);
             double scale = (double)whole.PixelWidth / _viewerPixelWidth;
             return CutViewerBitmap(whole, scale >= 0.999
                 ? area
@@ -1284,7 +1327,7 @@ public partial class MainWindow
                     Math.Max(1, (int)(area.Width * scale)), Math.Max(1, (int)(area.Height * scale))));
         }
 
-        return await Task.Run(() => DecodeViewerOriginal(path) is { } original
+        return await Task.Run(() => DecodeViewerOriginal(path, turn) is { } original
             ? CutViewerBitmap(original, area)
             : null);
     }
@@ -1509,6 +1552,13 @@ public partial class MainWindow
     // the camera's record of the old one is not its own, and the EXIF turn is
     // already in its pixels (a separate EXIF view and editor is planned).
     //
+    // A PICTURE ONLY TURNED (2026-11-05) is saved the same way, as
+    // name-rotate - the author's call, over writing the turn into the file
+    // itself: the original stays as it was, and 저장 means one thing whatever
+    // was done. A JPEG going to a JPEG is then its own bytes with the
+    // orientation tag turned (WriteViewerTurnedJpeg), so it loses nothing;
+    // anything else is written from the turned pixels as a cut is.
+    //
     // After it: back to the picture as the file has it, crop mode off - the
     // job is done - and the panel stays on the original. The new file is put
     // in the tree and the strip at once rather than when the watcher gets to
@@ -1521,21 +1571,28 @@ public partial class MainWindow
             return;
         }
 
-        bool saved;
-        string? error;
+        bool turnOnly = ViewerTurnedOnly && (wholeApplied || !(_viewerCropMode && _viewerCropSelection is not null));
+        int turn = _viewerTurn;
+        bool saved = false;
+        string? error = null;
         string target;
         SetViewerCropBusy(true);
         try
         {
-            var cut = await TakeViewerCropAsync(wholeApplied);
-            if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+            // A turn needs no pixels yet: a JPEG's are not read at all.
+            BitmapSource? cut = null;
+            if (!turnOnly)
             {
-                return;
+                cut = await TakeViewerCropAsync(wholeApplied);
+                if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
             }
 
             string extension = CropSaveExtension(Path.GetExtension(path));
             target = FileOperationService.GetUniqueDestination(
-                Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + "-crop" + extension));
+                Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + (turnOnly ? "-rotate" : "-crop") + extension));
             bool replace = false;
 
             if (askName)
@@ -1572,7 +1629,30 @@ public partial class MainWindow
                 }
             }
 
-            (saved, error) = await Task.Run(() => WriteViewerCrop(cut, target, replace));
+            bool written = false;
+            if (turnOnly && IsJpegExtension(Path.GetExtension(path)) && IsJpegExtension(Path.GetExtension(target)))
+            {
+                if (await Task.Run(() => WriteViewerTurnedJpeg(path, target, turn, replace)) is { } outcome)
+                {
+                    (saved, error) = outcome;
+                    written = true;
+                }
+                else
+                {
+                    ViewerLoadLog($"rotate save: the orientation tag could not carry the turn, pixels re-encoded  {Path.GetFileName(path)}");
+                }
+            }
+
+            if (!written)
+            {
+                cut ??= await TakeViewerCropAsync(wholeApplied: true);
+                if (cut is null || !string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    return;
+                }
+
+                (saved, error) = await Task.Run(() => WriteViewerCrop(cut, target, replace));
+            }
         }
         finally
         {
@@ -1581,14 +1661,15 @@ public partial class MainWindow
 
         if (!saved)
         {
-            MessageBox.Show(this, error ?? string.Empty, Strings.ViewerCropSaveFailedTitle,
+            MessageBox.Show(this, error ?? string.Empty,
+                turnOnly ? Strings.ViewerRotateSaveFailedTitle : Strings.ViewerCropSaveFailedTitle,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         if (string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
         {
-            if (_viewerCropApplied is not null)
+            if (_viewerCropApplied is not null || _viewerTurn != 0)
             {
                 RevertViewerCrop();
             }
@@ -1678,14 +1759,15 @@ public partial class MainWindow
     }
 
     // The same decode LoadViewerImage makes, at full size: one open, the EXIF
-    // turn applied, frozen so it can cross threads. Null where the panel's own
-    // decode would have failed too - and where the full-resolution pass's
+    // turn applied and then the panel's own (quarterTurns, see
+    // MainWindow.Rotate.cs), frozen so it can cross threads. Null where the
+    // panel's own decode would have failed too - and where the full-resolution pass's
     // would (OutOfMemoryException, COMException; see its safety device in
     // MainWindow.xaml.cs), since this is the same uncapped decode. Those two
     // were missing until the 11-03 review, and either one, coming back
     // through an async void, ended the app. The same pair is caught
     // wherever this path allocates a picture's worth: the cut, the encoders.
-    private static BitmapSource? DecodeViewerOriginal(string path)
+    private static BitmapSource? DecodeViewerOriginal(string path, int quarterTurns = 0)
     {
         try
         {
@@ -1703,7 +1785,7 @@ public partial class MainWindow
 
             var oriented = ApplyExifOrientation(decoded, orientation);
             oriented.Freeze();
-            return oriented;
+            return TurnBitmap(oriented, quarterTurns);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
                                        or FileFormatException or ArgumentException or InvalidOperationException
