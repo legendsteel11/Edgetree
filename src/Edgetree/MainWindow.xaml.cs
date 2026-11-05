@@ -2099,8 +2099,10 @@ public partial class MainWindow : Window
         // it has always meant in the tree - open the row with its default app,
         // expand the folder - so what is given up is narrow: opening an image
         // in the system photo app by keyboard, while that same image is
-        // already on screen here. Double-click and the row menu's 열기 both
-        // still do it.
+        // already on screen here. The row menu's 기본 프로그램에서 열기 still
+        // does it, and Shift+Enter since 2026-11-05, which is the key that row
+        // names on such a file (it said Enter, and Enter brought up this). The
+        // double-click no longer does when 더블클릭으로 열기 is on.
         //
         // "A decoded picture" is _viewerShowingDecodedImage, not merely a
         // Source: a video's or a PSD's SHELL PREVIEW rides in the same Image
@@ -15271,7 +15273,19 @@ public partial class MainWindow : Window
             case Key.Enter:
                 // Enter and a double-click mean one thing, so they take one
                 // answer - splitting them would give a single intent two.
-                if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } enterItem ||
+                //
+                // SHIFT+ENTER IS THE ROW MENU'S 기본 프로그램에서 열기, always
+                // (2026-11-05): a file the panel can show has no plain Enter
+                // that reaches the default program - see where the row menu
+                // names this key. Only Enter with no modifier ever reaches the
+                // full-screen toggle in MainWindow_PreviewKeyDown, so Shift
+                // arrives here. A folder takes it as Enter.
+                if (Keyboard.Modifiers == ModifierKeys.Shift &&
+                    ExplorerTree.SelectedItem is FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false })
+                {
+                    OpenItem_Click(sender, e);
+                }
+                else if (ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } enterItem ||
                     !OpenByGestureInViewer(enterItem))
                 {
                     OpenItem_Click(sender, e);
@@ -18194,6 +18208,17 @@ public partial class MainWindow : Window
         // a row naming an action it would then decline to perform. The
         // action toggles now (see OpenItem_Click), so both words are always
         // true and the row is never dead.
+        //
+        // THE KEY IT SHOWS IS ONE THAT DOES IT (2026-11-05). Enter on a file
+        // the panel can show is not the default program: with a picture on
+        // screen it is the full-screen toggle, and with 더블클릭으로 열기 on it
+        // opens the panel, as the double-click does. So the row said Enter
+        // over a picture, Enter brought up the full screen, and the default
+        // program (an image viewer chosen in Windows) never opened. Shift+Enter
+        // opens the default program for any file (ExplorerTree_KeyDown), and
+        // that is what the row names on those files. The tree's row only:
+        // the thumbnail cells' menu shares this code and its row has never
+        // named a key, which is left as it was.
         if (FindTaggedMenuElement<MenuItem>(menu, "open") is { } openItem)
         {
             openItem.Header = isFolder
@@ -18201,6 +18226,12 @@ public partial class MainWindow : Window
                     ? Strings.MenuCollapseFolder
                     : Strings.MenuExpandFolder)
                 : Strings.MenuOpen;
+            if (!string.IsNullOrEmpty(openItem.InputGestureText))
+            {
+                openItem.InputGestureText = !isFolder && subject is { } fileRow && HasViewerPreview(fileRow.FullPath)
+                    ? "Shift+Enter"
+                    : "Enter";
+            }
         }
 
         // "Open with" only makes sense for files - folders don't have a

@@ -257,6 +257,11 @@ public static class HelpContent
                     R("Ctrl + 휠", "빠른 스크롤", "Ctrl + wheel", "Scroll about five times faster"),
                     R("Ctrl + / −", "글자 크기 조절", "Ctrl + / −", "Text size"),
                     R("Enter", "열기", "Enter", "Open"),
+                    // 2026-11-05: on a picture or a film, Enter is the panel's
+                    // (full screen, or 더블클릭으로 열기), so the default program
+                    // needed a key of its own - the one the row menu names.
+                    R("Shift+Enter", "기본 프로그램에서 열기 (이미지 · 영상 포함)",
+                      "Shift+Enter", "Open in default app (images and video included)"),
                     R("F2", "이름 바꾸기", "F2", "Rename"),
                     R("F5", "새로고침", "F5", "Refresh"),
                     R("F7", "새 폴더", "F7", "New folder"),
