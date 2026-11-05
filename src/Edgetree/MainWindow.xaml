@@ -744,8 +744,17 @@
                                  greyed steps - not "secondary". 0.6: 0.35 was
                                  first, and read as too faint for a box that
                                  cannot be ticked anyway (on report). -->
+                            <!-- The text beside a greyed box (전체 선택 with
+                                 nothing to tick) greys with it, a step further
+                                 than the box: text keeps its full ink until it
+                                 cannot be used, so 0.6 on it would read as a
+                                 label rather than as unavailable (on request,
+                                 2026-11-05). -->
                             <Trigger Property="IsEnabled"
                                     Value="False">
+                                <Setter TargetName="Content"
+                                        Property="Opacity"
+                                        Value="0.45"/>
                                 <Setter TargetName="Box"
                                         Property="Opacity"
                                         Value="0.6"/>
@@ -1749,6 +1758,14 @@
                     Tag="extract"
                     Visibility="Collapsed"
                     Click="ExtractItem_Click"/>
+            <!-- 선택 파일 메타데이터 제거 (2026-11-05): a copy of each JPEG without its
+                 metadata, in 압축's family - it puts new files down rather
+                 than changing the ones clicked. Shown only where a JPEG is
+                 among the rows (see ConfigureSharedRowMenuItems). -->
+            <MenuItem Header="{x:Static services:Strings.MenuRemoveMetadata}"
+                    Tag="removeMetadata"
+                    Visibility="Collapsed"
+                    Click="RemoveMetadataItem_Click"/>
             <MenuItem Header="{x:Static services:Strings.MenuRename}"
                     Tag="rename"
                     InputGestureText="F2"
@@ -9085,7 +9102,7 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1"
                                     Orientation="Horizontal">
-                                <!-- 속성 제거 (2026-11-05, the author's design): the
+                                <!-- 메타데이터 제거 (2026-11-05, the author's design): the
                                      EXIF view's rows get check boxes, and the ticked
                                      ones are left out of a copy saved beside the
                                      original (MainWindow.Exif.cs). A JPEG only, and
@@ -9093,13 +9110,13 @@
                                      Material Symbols "ink_eraser" at opsz 20 on the 20
                                      grid; its ink sits a unit high in the box (2 to 16),
                                      as the file draws it. -->
-                                <ToggleButton x:Name="ViewerExifRemoveToggle"
+                                <ToggleButton x:Name="ViewerMetadataRemoveToggle"
                                         Style="{StaticResource PathBarToggleStyle}"
                                         Margin="4,0,0,0"
                                         IsEnabled="False"
                                         ToolTipService.ShowOnDisabled="True"
-                                        Click="ViewerExifRemoveToggle_Click"
-                                        ToolTip="{x:Static services:Strings.ViewerExifRemove}">
+                                        Click="ViewerMetadataRemoveToggle_Click"
+                                        ToolTip="{x:Static services:Strings.ViewerMetadataRemove}">
                                     <Path Data="M14,14.5h4v1.5H12.5l1.5,-1.5Zm-9.104,1.5L2.438,13.542q-0.437,-0.437,-0.448,-1.052T2.438,11.417l8.979,-8.979q0.458,-0.458,1.063,-0.458t1.068,0.464L17.563,6.458q0.438,0.438,0.448,1.052T17.563,8.583L10.146,16H4.896Zm4.625,-1.5 6.979,-6.979 -4.021,-4.021 -8.979,8.979 2.021,2.021h4Zm0.479,-4.5Z M0 0H20M0 20H20"
                                             Stretch="Uniform"
                                             Width="{DynamicResource PathBarListGlyphSize}"
@@ -10241,11 +10258,11 @@
                                         VerticalAlignment="Top"
                                         Columns="1"/>
                             </ScrollViewer>
-                            <!-- 속성 제거's own row, under the fields while the
+                            <!-- 메타데이터 제거's own row, under the fields while the
                                  mode is on: 전체 선택 on the left, the save on the
                                  right, the save greyed until something is ticked.
                                  Outside the scroller, so it is always in reach. -->
-                            <DockPanel x:Name="ViewerExifRemoveRow"
+                            <DockPanel x:Name="ViewerMetadataRemoveRow"
                                     Visibility="Collapsed"
                                     Margin="0,6,0,0"
                                     LastChildFill="False">
@@ -10256,13 +10273,13 @@
                                         FontSize="{DynamicResource MenuThumbnailInfoFontSize}"
                                         Content="{x:Static services:Strings.ExifSelectAll}"
                                         Click="ViewerExifSelectAll_Click"/>
-                                <Button x:Name="ViewerExifRemoveSave"
+                                <Button x:Name="ViewerMetadataRemoveSave"
                                         DockPanel.Dock="Right"
                                         IsEnabled="False"
                                         ToolTipService.ShowOnDisabled="True"
-                                        Content="{x:Static services:Strings.ExifRemoveSave}"
-                                        ToolTip="{x:Static services:Strings.ExifRemoveSaveTip}"
-                                        Click="ViewerExifRemoveSave_Click">
+                                        Content="{x:Static services:Strings.MetadataRemoveSave}"
+                                        ToolTip="{x:Static services:Strings.MetadataRemoveSaveTip}"
+                                        Click="ViewerMetadataRemoveSave_Click">
                                     <Button.Style>
                                         <Style TargetType="Button"
                                                 BasedOn="{StaticResource FooterActionChipStyle}">
@@ -10498,6 +10515,10 @@
                                             Tag="extract"
                                             Visibility="Collapsed"
                                             Click="ExtractItem_Click"/>
+                                    <MenuItem Header="{x:Static services:Strings.MenuRemoveMetadata}"
+                                            Tag="removeMetadata"
+                                            Visibility="Collapsed"
+                                            Click="RemoveMetadataItem_Click"/>
                                     <MenuItem Header="{x:Static services:Strings.MenuRename}"
                                             Tag="rename"
                                             InputGestureText="F2"

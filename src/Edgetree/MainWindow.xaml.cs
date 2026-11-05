@@ -1987,9 +1987,9 @@ public partial class MainWindow : Window
         }
 
         // Crop mode's Esc and Ctrl+C, ahead of the full screen's Esc and the
-        // tree's Ctrl+C below (MainWindow.Crop.cs); then 속성 제거's Esc
+        // tree's Ctrl+C below (MainWindow.Crop.cs); then 메타데이터 제거's Esc
         // (MainWindow.Exif.cs), which crop mode's takes first when both are on.
-        if (HandleViewerCropKey(e) || HandleViewerExifKey(e))
+        if (HandleViewerCropKey(e) || HandleViewerMetadataKey(e))
         {
             e.Handled = true;
             return;
@@ -18196,6 +18196,22 @@ public partial class MainWindow : Window
         if (FindTaggedMenuElement<MenuItem>(menu, "compress") is { } compressItem)
         {
             compressItem.IsEnabled = subject is { IsPlaceholder: false, IsShowMore: false, Parent: not null };
+        }
+
+        // 선택 파일 메타데이터 제거 (2026-11-05): wherever a JPEG is among the rows the
+        // command would take, the others being skipped. Read from the rows'
+        // names only - the existence check GetEffectiveSelection makes is a
+        // stat per row, which on a share is a round trip per row, and the
+        // menu must not wait on it. "…" when it will ask for a folder.
+        if (FindTaggedMenuElement<MenuItem>(menu, "removeMetadata") is { } removeMetadataItem)
+        {
+            IEnumerable<FileSystemItem> rows = _multiSelection.Count > 0
+                ? _multiSelection
+                : subject is { } menuRow ? new[] { menuRow } : Array.Empty<FileSystemItem>();
+            int jpegs = rows.Count(r => r is { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } &&
+                                        IsJpegExtension(Path.GetExtension(r.FullPath)));
+            removeMetadataItem.Visibility = jpegs > 0 ? Visibility.Visible : Visibility.Collapsed;
+            removeMetadataItem.Header = jpegs > 1 ? Strings.MenuRemoveMetadataMany : Strings.MenuRemoveMetadata;
         }
 
         // Shown only on an actual .zip row, and never on a multi-selection

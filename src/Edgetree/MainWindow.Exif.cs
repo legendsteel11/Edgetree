@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using SidebarExplorer.App.Models;
 using SidebarExplorer.App.Services;
 // WinForms is a global using in this project (the tray icon), and it has a
 // CheckBox, a MessageBox and a KeyEventArgs of its own.
@@ -11,7 +12,7 @@ using MessageBox = System.Windows.MessageBox;
 
 namespace SidebarExplorer.App;
 
-// ===== The panel's EXIF view and 속성 제거 (2026-11-05, the author's design) =====
+// ===== The panel's EXIF view and 메타데이터 제거 (2026-11-05, the author's design) =====
 //
 // A picture's shooting details under its caption, above the thumbnail bar -
 // what the picture IS sits together, and the strip stays last, as the row a
@@ -32,14 +33,14 @@ namespace SidebarExplorer.App;
 // ONE, TWO OR THREE COLUMNS by the panel's width (asked for with the design),
 // worked out on a size change only. Read row by row.
 //
-// 속성 제거 IS A MODE OF THIS VIEW (on request: a box before each row rather
+// 메타데이터 제거 IS A MODE OF THIS VIEW (on request: a box before each row rather
 // than a window of its own). The picture bar's eraser turns it on - the view
 // with it - and Esc, the eraser again, another file or the view going end it.
 // While it is on, each row with a value gets a box, 그 밖의 정보 appears as a
 // sixteenth row for what the view does not show, and a row under them holds
 // 전체 선택 and the save. The ticked rows are left out of a COPY beside the
-// original, name-clean, which is written the way the crop's save writes and
-// read back before it is kept (see WriteViewerExifRemoved); the picture's
+// original, name-metadataremoved, which is written the way the crop's save writes and
+// read back before it is kept (see WriteViewerMetadataRemoved); the picture's
 // bytes are not touched (JpegMetadataRemover). The panel stays on the
 // original, and the copy is put in the tree at once.
 public partial class MainWindow
@@ -52,9 +53,9 @@ public partial class MainWindow
     // The fields the file on screen has values for.
     private readonly HashSet<PhotoInfoService.Field> _viewerExifPresent = new();
 
-    private bool _viewerExifRemoving;
+    private bool _viewerMetadataRemoving;
     // A copy being written, from the press until it is kept or refused.
-    private bool _viewerExifBusy;
+    private bool _viewerMetadataBusy;
 
     private static readonly PhotoInfoService.Field[] ViewerExifFields = Enum.GetValues<PhotoInfoService.Field>();
 
@@ -64,6 +65,7 @@ public partial class MainWindow
     private CheckBox[]? _viewerExifFieldChecks;
     private CheckBox? _viewerExifOtherCheck;
     private FrameworkElement? _viewerExifOtherCell;
+    private TextBlock? _viewerExifOtherValue;
 
     // A picture on screen in the panel, by the file's kind rather than by
     // what has been decoded: between two pictures the slot stays, rather than
@@ -84,7 +86,7 @@ public partial class MainWindow
     }
 
     // A JPEG with its bar up - the only kind JpegMetadataRemover writes.
-    private bool CanRemoveViewerExif
+    private bool CanRemoveViewerMetadata
         => ViewerPictureBarWanted && _pendingViewerPath is { } path && IsJpegExtension(Path.GetExtension(path));
 
     private void ViewerExifToggle_Click(object sender, RoutedEventArgs e)
@@ -100,12 +102,12 @@ public partial class MainWindow
     {
         ViewerExifToggle.IsChecked = _settings.ViewerExif;
 
-        bool canRemove = CanRemoveViewerExif;
-        ViewerExifRemoveToggle.IsEnabled = canRemove && !_viewerExifBusy;
-        ViewerExifRemoveToggle.ToolTip = canRemove ? Strings.ViewerExifRemove : Strings.ViewerExifRemoveUnavailable;
+        bool canRemove = CanRemoveViewerMetadata;
+        ViewerMetadataRemoveToggle.IsEnabled = canRemove && !_viewerMetadataBusy;
+        ViewerMetadataRemoveToggle.ToolTip = canRemove ? Strings.ViewerMetadataRemove : Strings.ViewerMetadataRemoveUnavailable;
         if (!canRemove)
         {
-            ExitViewerExifRemoval();
+            ExitViewerMetadataRemoval();
         }
 
         if (!ViewerExifWanted || _pendingViewerPath is not { } path)
@@ -115,7 +117,7 @@ public partial class MainWindow
                 ViewerExifHost.Visibility = Visibility.Collapsed;
             }
             _viewerExifPath = null;
-            ExitViewerExifRemoval();
+            ExitViewerMetadataRemoval();
             return;
         }
 
@@ -134,7 +136,7 @@ public partial class MainWindow
         // Another file: a tick on one picture means nothing on the next, and
         // the last file's values go at once rather than standing under this
         // one's name until its own arrive.
-        ExitViewerExifRemoval();
+        ExitViewerMetadataRemoval();
         _viewerExifPath = path;
         int ticket = ++_viewerExifTicket;
         ShowViewerExif([]);
@@ -170,7 +172,7 @@ public partial class MainWindow
             }
         }
 
-        ApplyViewerExifRemoval();
+        ApplyViewerMetadataRemoval();
     }
 
     // The cells, once. Built in code, so every brush and size is set by
@@ -193,9 +195,10 @@ public partial class MainWindow
             ViewerExifGrid.Children.Add(cell);
         }
 
+        // Its value is what the row stands for, and only where the file has
+        // some of it (ApplyViewerMetadataRemoval).
         var (otherCell, otherCheck, otherValue) = ViewerExifCell(Strings.ExifOther);
-        otherValue.Text = Strings.ExifOtherDetail;
-        otherValue.ToolTip = Strings.ExifOtherDetail;
+        _viewerExifOtherValue = otherValue;
         otherCell.Visibility = Visibility.Collapsed;
         _viewerExifOtherCheck = otherCheck;
         _viewerExifOtherCell = otherCell;
@@ -256,25 +259,25 @@ public partial class MainWindow
         _ => string.Empty,
     };
 
-    // ----- 속성 제거 ------------------------------------------------------------
+    // ----- 메타데이터 제거 ------------------------------------------------------
 
-    private void ViewerExifRemoveToggle_Click(object sender, RoutedEventArgs e)
+    private void ViewerMetadataRemoveToggle_Click(object sender, RoutedEventArgs e)
     {
-        if (_viewerExifRemoving)
+        if (_viewerMetadataRemoving)
         {
-            ExitViewerExifRemoval();
+            ExitViewerMetadataRemoval();
         }
         else
         {
-            EnterViewerExifRemoval();
+            EnterViewerMetadataRemoval();
         }
     }
 
-    private void EnterViewerExifRemoval()
+    private void EnterViewerMetadataRemoval()
     {
-        if (!CanRemoveViewerExif)
+        if (!CanRemoveViewerMetadata)
         {
-            ViewerExifRemoveToggle.IsChecked = false;
+            ViewerMetadataRemoveToggle.IsChecked = false;
             return;
         }
 
@@ -286,25 +289,73 @@ public partial class MainWindow
         }
         UpdateViewerExif();
 
-        _viewerExifRemoving = true;
+        _viewerMetadataRemoving = true;
         foreach (var check in ViewerExifAllChecks)
         {
             check.IsChecked = false;
         }
-        ApplyViewerExifRemoval();
+        ApplyViewerMetadataRemoval();
+        CheckViewerOtherMetadata();
     }
 
     // Every way out. Safe when the mode is already off.
-    private void ExitViewerExifRemoval()
+    private void ExitViewerMetadataRemoval()
     {
-        ViewerExifRemoveToggle.IsChecked = false;
-        if (!_viewerExifRemoving)
+        ViewerMetadataRemoveToggle.IsChecked = false;
+        if (!_viewerMetadataRemoving)
         {
             return;
         }
 
-        _viewerExifRemoving = false;
-        ApplyViewerExifRemoval();
+        _viewerMetadataRemoving = false;
+        _viewerOtherMetadataPresent = false;
+        ++_viewerOtherMetadataTicket;
+        ApplyViewerMetadataRemoval();
+    }
+
+    // WHETHER 그 밖의 정보 HOLDS ANYTHING, asked of the remover itself: the
+    // file taken through it with that row alone ticked, and compared byte for
+    // byte. The fifteen rows know from what Windows reads; this row is what
+    // Windows does not read, so nothing else can say. Its box was live on
+    // every file at first, and a copy already stripped of everything offered
+    // it again (on report, 2026-11-05). Greyed until the answer is in - the
+    // whole file is read, which on a share is a moment.
+    private bool _viewerOtherMetadataPresent;
+    private int _viewerOtherMetadataTicket;
+
+    private void CheckViewerOtherMetadata()
+    {
+        _viewerOtherMetadataPresent = false;
+        int ticket = ++_viewerOtherMetadataTicket;
+        if (_pendingViewerPath is not { } path)
+        {
+            return;
+        }
+
+        Task.Run(() =>
+        {
+            bool present;
+            try
+            {
+                byte[] original = File.ReadAllBytes(path);
+                present = JpegMetadataRemover.Remove(original, [], other: true) is { } copy &&
+                          !copy.AsSpan().SequenceEqual(original);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OutOfMemoryException)
+            {
+                present = false;
+            }
+
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (ticket == _viewerOtherMetadataTicket && _viewerMetadataRemoving &&
+                    string.Equals(_pendingViewerPath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    _viewerOtherMetadataPresent = present;
+                    ApplyViewerMetadataRemoval();
+                }
+            });
+        });
     }
 
     private IEnumerable<CheckBox> ViewerExifAllChecks
@@ -314,9 +365,9 @@ public partial class MainWindow
     // file's values say. A row with no value keeps a box, greyed: with no box
     // at all (the first version) the column of boxes had gaps in it and read
     // as confusing (on report, 2026-11-05).
-    private void ApplyViewerExifRemoval()
+    private void ApplyViewerMetadataRemoval()
     {
-        ViewerExifRemoveToggle.IsChecked = _viewerExifRemoving;
+        ViewerMetadataRemoveToggle.IsChecked = _viewerMetadataRemoving;
         if (_viewerExifFieldChecks is null || _viewerExifOtherCheck is null || _viewerExifOtherCell is null)
         {
             return;
@@ -326,27 +377,37 @@ public partial class MainWindow
         {
             bool present = _viewerExifPresent.Contains(ViewerExifFields[i]);
             var check = _viewerExifFieldChecks[i];
-            check.Visibility = _viewerExifRemoving ? Visibility.Visible : Visibility.Collapsed;
+            check.Visibility = _viewerMetadataRemoving ? Visibility.Visible : Visibility.Collapsed;
             check.IsEnabled = present;
-            if (!_viewerExifRemoving || !present)
+            if (!_viewerMetadataRemoving || !present)
             {
                 check.IsChecked = false;
             }
         }
 
-        _viewerExifOtherCheck.Visibility = _viewerExifRemoving ? Visibility.Visible : Visibility.Collapsed;
-        _viewerExifOtherCell.Visibility = _viewerExifRemoving ? Visibility.Visible : Visibility.Collapsed;
-        if (!_viewerExifRemoving)
+        _viewerExifOtherCheck.Visibility = _viewerMetadataRemoving ? Visibility.Visible : Visibility.Collapsed;
+        _viewerExifOtherCell.Visibility = _viewerMetadataRemoving ? Visibility.Visible : Visibility.Collapsed;
+        _viewerExifOtherCheck.IsEnabled = _viewerOtherMetadataPresent;
+        if (!_viewerMetadataRemoving || !_viewerOtherMetadataPresent)
         {
             _viewerExifOtherCheck.IsChecked = false;
         }
 
-        ViewerExifRemoveRow.Visibility = _viewerExifRemoving ? Visibility.Visible : Visibility.Collapsed;
-        UpdateViewerExifRemoveState();
+        // Empty where there is nothing of it, as any row without a value is -
+        // a copy already stripped showed the list of what it no longer had
+        // (on report, 2026-11-05). Empty while the answer is being found too.
+        if (_viewerExifOtherValue is { } otherValue)
+        {
+            otherValue.Text = _viewerOtherMetadataPresent ? Strings.ExifOtherDetail : string.Empty;
+            otherValue.ToolTip = _viewerOtherMetadataPresent ? Strings.ExifOtherDetail : null;
+        }
+
+        ViewerMetadataRemoveRow.Visibility = _viewerMetadataRemoving ? Visibility.Visible : Visibility.Collapsed;
+        UpdateViewerMetadataRemoveState();
         UpdateViewerExifLayout();
     }
 
-    private void ViewerExifCheck_Click(object sender, RoutedEventArgs e) => UpdateViewerExifRemoveState();
+    private void ViewerExifCheck_Click(object sender, RoutedEventArgs e) => UpdateViewerMetadataRemoveState();
 
     private void ViewerExifSelectAll_Click(object sender, RoutedEventArgs e)
     {
@@ -358,35 +419,37 @@ public partial class MainWindow
                 check.IsChecked = on;
             }
         }
-        UpdateViewerExifRemoveState();
+        UpdateViewerMetadataRemoveState();
     }
 
     // 전체 선택 follows the boxes that can be ticked; the save wants at least
     // one.
-    private void UpdateViewerExifRemoveState()
+    private void UpdateViewerMetadataRemoveState()
     {
         var shown = ViewerExifAllChecks.Where(c => c.Visibility == Visibility.Visible && c.IsEnabled).ToList();
         bool any = shown.Any(c => c.IsChecked == true);
         ViewerExifSelectAll.IsChecked = shown.Count > 0 && shown.All(c => c.IsChecked == true);
-        ViewerExifRemoveSave.IsEnabled = _viewerExifRemoving && any && !_viewerExifBusy;
+        // Nothing to tick, nothing to select (on report, 2026-11-05).
+        ViewerExifSelectAll.IsEnabled = shown.Count > 0 && !_viewerMetadataBusy;
+        ViewerMetadataRemoveSave.IsEnabled = _viewerMetadataRemoving && any && !_viewerMetadataBusy;
     }
 
-    private bool HandleViewerExifKey(KeyEventArgs e)
+    private bool HandleViewerMetadataKey(KeyEventArgs e)
     {
-        if (_viewerExifRemoving && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None &&
+        if (_viewerMetadataRemoving && e.Key == Key.Escape && Keyboard.Modifiers == ModifierKeys.None &&
             !KeyboardInTextField)
         {
-            ExitViewerExifRemoval();
+            ExitViewerMetadataRemoval();
             return true;
         }
         return false;
     }
 
-    private void ViewerExifRemoveSave_Click(object sender, RoutedEventArgs e) => SaveViewerExifRemoval();
+    private void ViewerMetadataRemoveSave_Click(object sender, RoutedEventArgs e) => SaveViewerMetadataRemoval();
 
-    private async void SaveViewerExifRemoval()
+    private async void SaveViewerMetadataRemoval()
     {
-        if (_viewerExifBusy || !_viewerExifRemoving || _viewerExifFieldChecks is null ||
+        if (_viewerMetadataBusy || !_viewerMetadataRemoving || _viewerExifFieldChecks is null ||
             _pendingViewerPath is not { } path || Path.GetDirectoryName(path) is not { Length: > 0 } folder)
         {
             return;
@@ -402,33 +465,42 @@ public partial class MainWindow
             fields = [.. ViewerExifFields];
         }
 
-        string target = FileOperationService.GetUniqueDestination(
-            Path.Combine(folder, Path.GetFileNameWithoutExtension(path) + "-clean" + Path.GetExtension(path).ToLowerInvariant()));
+        string target = ViewerMetadataCopyTarget(path, folder);
 
-        (bool Saved, string? Error) outcome;
-        _viewerExifBusy = true;
-        UpdateViewerExifRemoveState();
+        (MetadataRemoval Outcome, string? Error) result;
+        _viewerMetadataBusy = true;
+        UpdateViewerMetadataRemoveState();
         UpdateViewerExif();
         try
         {
-            outcome = await Task.Run(() => WriteViewerExifRemoved(path, target, fields, other));
+            result = await Task.Run(() => WriteViewerMetadataRemoved(path, target, fields, other));
         }
         finally
         {
-            _viewerExifBusy = false;
+            _viewerMetadataBusy = false;
         }
 
-        if (!outcome.Saved)
+        if (result.Outcome == MetadataRemoval.Failed)
         {
             UpdateViewerExif();
-            UpdateViewerExifRemoveState();
-            MessageBox.Show(this, outcome.Error ?? string.Empty, Strings.ExifRemoveFailedTitle,
+            UpdateViewerMetadataRemoveState();
+            MessageBox.Show(this, result.Error ?? string.Empty, Strings.MetadataRemoveFailedTitle,
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
-        ExitViewerExifRemoval();
+        ExitViewerMetadataRemoval();
         UpdateViewerExif();
+
+        // A copy the same as the file, byte for byte, is not written (see
+        // WriteViewerMetadataRemoved) - and the hand is told, since no file
+        // appears.
+        if (result.Outcome == MetadataRemoval.NothingToRemove)
+        {
+            MessageBox.Show(this, Strings.MetadataRemoveNothing, Strings.ViewerMetadataRemove,
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
         string? savedFolder = Path.GetDirectoryName(target);
         if (ViewerItem?.Parent is { IsDirectory: true } parent &&
@@ -438,9 +510,27 @@ public partial class MainWindow
         }
     }
 
+    private enum MetadataRemoval { Saved, NothingToRemove, Failed }
+
+    // Beside the original as name-metadataremoved, numbered " (2)" on as a
+    // paste numbers a copy - never over anything. Named for what was done to
+    // it, as -crop and -rotate are, which stays true
+    // of a copy with only some of it gone. "-clean" was first, and read as the
+    // picture itself having been cleaned up (on request, 2026-11-05).
+    private static string ViewerMetadataCopyTarget(string source, string folder)
+        => FileOperationService.GetUniqueDestination(Path.Combine(folder,
+            Path.GetFileNameWithoutExtension(source) + "-metadataremoved" + Path.GetExtension(source).ToLowerInvariant()));
+
     // A worker. The copy is written as the crop's save writes - a hidden file
     // beside the target, moved into place - under the target's own extension,
     // so Windows reads it with the same property handler the panel did.
+    //
+    // NOTHING TO REMOVE, NOTHING WRITTEN (2026-11-05, agreed before the
+    // many-file version): a copy that comes out the same as the file, byte
+    // for byte - a wallpaper with no EXIF and 그 밖의 정보 ticked - would be a
+    // second file of the same thing under another name. The test is the
+    // bytes, not "has EXIF": a file with none can still carry XMP, a comment
+    // or something after the picture.
     //
     // SAFETY DEVICE: the copy is READ BACK before it is kept. It must open at
     // the original's size and orientation, and the panel's own reading
@@ -449,7 +539,7 @@ public partial class MainWindow
     // know to look, Windows reading it from there. A copy that fails is not
     // kept, and the message says why. What it hides: nothing that is saved;
     // a refused copy is the only thing it can cause.
-    private static (bool Saved, string? Error) WriteViewerExifRemoved(
+    private static (MetadataRemoval Outcome, string? Error) WriteViewerMetadataRemoved(
         string source, string target, IReadOnlyList<PhotoInfoService.Field> fields, bool other)
     {
         byte[] original;
@@ -459,12 +549,17 @@ public partial class MainWindow
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            return (false, ex.Message);
+            return (MetadataRemoval.Failed, ex.Message);
         }
 
         if (JpegMetadataRemover.Remove(original, fields, other) is not { } copy)
         {
-            return (false, Strings.ExifRemoveUnreadable);
+            return (MetadataRemoval.Failed, Strings.MetadataRemoveUnreadable);
+        }
+
+        if (copy.AsSpan().SequenceEqual(original))
+        {
+            return (MetadataRemoval.NothingToRemove, null);
         }
 
         string folder = Path.GetDirectoryName(target) ?? string.Empty;
@@ -477,15 +572,15 @@ public partial class MainWindow
                 stream.Write(copy);
             }
 
-            if (!ReadsAsCleaned(temp, original, fields))
+            if (!ReadsWithoutRemoved(temp, original, fields))
             {
                 File.Delete(temp);
-                return (false, Strings.ExifRemoveNotGone);
+                return (MetadataRemoval.Failed, Strings.MetadataRemoveNotGone);
             }
 
             File.SetAttributes(temp, FileAttributes.Normal);
             File.Move(temp, target, overwrite: false);
-            return (true, null);
+            return (MetadataRemoval.Saved, null);
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or NotSupportedException
                                        or ArgumentException)
@@ -497,11 +592,11 @@ public partial class MainWindow
             catch (Exception cleanup) when (cleanup is IOException or UnauthorizedAccessException)
             {
             }
-            return (false, ex.Message);
+            return (MetadataRemoval.Failed, ex.Message);
         }
     }
 
-    private static bool ReadsAsCleaned(string path, byte[] original, IReadOnlyList<PhotoInfoService.Field> removed)
+    private static bool ReadsWithoutRemoved(string path, byte[] original, IReadOnlyList<PhotoInfoService.Field> removed)
     {
         try
         {
@@ -529,6 +624,179 @@ public partial class MainWindow
                                        or System.Runtime.InteropServices.COMException)
         {
             return false;
+        }
+    }
+
+    // ----- 선택 파일 메타데이터 제거, from the row menus --------------------------
+    //
+    // The panel's mode is one picture; the tree's and the thumbnail cells'
+    // menus are many (2026-11-05, agreed with the design). Every JPEG among
+    // the rows, with everything removed - the panel's 전체 선택 with 그 밖의
+    // 정보 - each into a copy. One file goes beside itself as name-metadataremoved, as
+    // the panel's save does. More go into a folder asked for, offered as a new
+    // "metadataremoved" folder beside them, the copies under their own names -
+    // or name-metadataremoved where the folder chosen is their own. A file with nothing to
+    // remove gets no copy, nor does a row that is not a JPEG; one line says
+    // so, and nothing is said when every copy was written: the files
+    // appearing is the answer, as it is for 압축.
+    private bool _viewerMetadataBatchBusy;
+
+    private async void RemoveMetadataItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewerMetadataBatchBusy)
+        {
+            return;
+        }
+
+        var rows = GetEffectiveSelection();
+        var jpegs = rows
+            .Where(r => r is { IsPlaceholder: false, IsShowMore: false, IsDirectory: false } &&
+                        IsJpegExtension(Path.GetExtension(r.FullPath)))
+            .ToList();
+        int notJpeg = rows.Count - jpegs.Count;
+        if (jpegs.Count == 0)
+        {
+            return;
+        }
+
+        string? folder = null;
+        string? created = null;
+        if (jpegs.Count > 1)
+        {
+            string home = MenuRowSubject?.Parent?.FullPath ?? Path.GetDirectoryName(jpegs[0].FullPath) ?? string.Empty;
+
+            // The folder offered is made first, so the dialog can open on it;
+            // it goes again, if still empty, when another is chosen or none.
+            try
+            {
+                created = FileOperationService.GetUniqueDestination(Path.Combine(home, "metadataremoved"));
+                Directory.CreateDirectory(created);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            {
+                created = null;
+            }
+
+            var dialog = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = Strings.MetadataRemoveFolderTitle,
+                InitialDirectory = home,
+                FolderName = created ?? home,
+            };
+            bool chosen = dialog.ShowDialog(this) == true;
+            folder = chosen ? dialog.FolderName : null;
+            if (created is not null && (folder is null || !SamePath(folder, created)))
+            {
+                DeleteIfEmpty(created);
+                created = null;
+            }
+            if (folder is null)
+            {
+                return;
+            }
+        }
+
+        var sources = jpegs.Select(j => j.FullPath).ToList();
+        (int Saved, int Nothing, int Failed, string? Error) counts;
+        _viewerMetadataBatchBusy = true;
+        try
+        {
+            counts = await Task.Run(() =>
+            {
+                int saved = 0, nothing = 0, failed = 0;
+                string? error = null;
+                foreach (string source in sources)
+                {
+                    string own = Path.GetDirectoryName(source) ?? string.Empty;
+                    string target = folder is null || SamePath(folder, own)
+                        ? ViewerMetadataCopyTarget(source, own)
+                        : FileOperationService.GetUniqueDestination(Path.Combine(folder, Path.GetFileName(source)));
+                    var (outcome, message) = WriteViewerMetadataRemoved(source, target, ViewerExifFields, other: true);
+                    switch (outcome)
+                    {
+                        case MetadataRemoval.Saved:
+                            saved++;
+                            break;
+                        case MetadataRemoval.NothingToRemove:
+                            nothing++;
+                            break;
+                        default:
+                            failed++;
+                            error ??= message;
+                            break;
+                    }
+                }
+                return (saved, nothing, failed, error);
+            });
+        }
+        finally
+        {
+            _viewerMetadataBatchBusy = false;
+        }
+
+        if (counts.Saved == 0 && created is not null)
+        {
+            DeleteIfEmpty(created);
+        }
+
+        foreach (var parent in jpegs.Select(j => j.Parent).OfType<FileSystemItem>().Distinct())
+        {
+            RefreshFolderPreservingState(parent);
+        }
+
+        if (counts.Nothing == 0 && counts.Failed == 0 && notJpeg == 0)
+        {
+            return;
+        }
+
+        string text;
+        if (jpegs.Count == 1 && notJpeg == 0 && counts.Nothing == 1)
+        {
+            text = Strings.MetadataRemoveNothing;
+        }
+        else
+        {
+            var lines = new List<string>();
+            if (counts.Saved > 0)
+            {
+                lines.Add(string.Format(Strings.MetadataRemoveSavedFormat, counts.Saved));
+            }
+            if (counts.Nothing > 0)
+            {
+                lines.Add(string.Format(Strings.MetadataRemoveNothingFormat, counts.Nothing));
+            }
+            if (notJpeg > 0)
+            {
+                lines.Add(string.Format(Strings.MetadataRemoveNotJpegFormat, notJpeg));
+            }
+            if (counts.Failed > 0)
+            {
+                lines.Add(string.Format(Strings.MetadataRemoveFailedFormat, counts.Failed) +
+                          (counts.Error is { Length: > 0 } reason ? " " + reason : string.Empty));
+            }
+            text = string.Join(" ", lines);
+        }
+
+        MessageBox.Show(this, text, Strings.MenuRemoveMetadata, MessageBoxButton.OK,
+            counts.Failed > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    private static bool SamePath(string a, string b)
+        => string.Equals(Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar),
+                         Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar),
+                         StringComparison.OrdinalIgnoreCase);
+
+    private static void DeleteIfEmpty(string folder)
+    {
+        try
+        {
+            if (Directory.Exists(folder) && !Directory.EnumerateFileSystemEntries(folder).Any())
+            {
+                Directory.Delete(folder);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
         }
     }
 
@@ -566,7 +834,7 @@ public partial class MainWindow
         double fontSize = TryFindResource("MenuThumbnailInfoFontSize") is double size ? size : 11;
         double width = ViewerExifHost.ActualWidth - ViewerExifHost.Padding.Left - ViewerExifHost.Padding.Right;
         int columns = width > 0 ? Math.Clamp((int)(width / (fontSize * 20)), 1, 3) : 1;
-        int cells = ViewerExifFields.Length + (_viewerExifRemoving ? 1 : 0);
+        int cells = ViewerExifFields.Length + (_viewerMetadataRemoving ? 1 : 0);
         int rows = (cells + columns - 1) / columns;
         if (ViewerExifGrid.Columns != columns)
         {

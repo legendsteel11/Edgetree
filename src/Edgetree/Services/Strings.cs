@@ -538,18 +538,37 @@ public static class Strings
     // not 노출 보정. 위치 is the one the app names: Windows has 위도 and 경도
     // as two rows, the panel shows them as one.
     public static string ViewerExifToggle = "EXIF 정보 표시";
-    // 속성 제거 in the EXIF view (2026-11-05). 그 밖의 정보 is the row for what
-    // the view does not show; its value cell says what that is.
-    public static string ViewerExifRemove = "속성 제거";
-    public static string ViewerExifRemoveUnavailable = "JPEG만 속성을 제거할 수 있습니다";
+    // 메타데이터 제거 in the EXIF view (2026-11-05). 그 밖의 정보 is the row for
+    // what the view does not show; its value cell says what that is.
+    //
+    // METADATA, NOT 속성 (on request, the same day): 속성 is a file's
+    // information as a whole - name, size, dates - and the app's own 속성 is
+    // Windows' properties window (Alt+Enter); and EXIF alone is too narrow, the
+    // removal taking XMP, IPTC, comments and what follows the picture too.
+    // 메타데이터 is the word photo software uses for all of it. The view stays
+    // EXIF 정보 표시: what it shows is EXIF.
+    public static string ViewerMetadataRemove = "메타데이터 제거";
+    public static string ViewerMetadataRemoveUnavailable = "JPEG만 메타데이터를 제거할 수 있습니다";
     public static string ExifOther = "그 밖의 정보";
     public static string ExifOtherDetail = "카메라 메모 · 일련번호 · 내장 썸네일 · 편집 기록 · 작성자 · 저작권 등";
     public static string ExifSelectAll = "전체 선택";
-    public static string ExifRemoveSave = "제거 후 사본 저장";
-    public static string ExifRemoveSaveTip = "선택한 항목을 제거한 사본을 원본 옆에 이름-clean으로 저장 (방향 · 색 프로필은 유지)";
-    public static string ExifRemoveFailedTitle = "속성을 제거한 사본을 저장하지 못했습니다";
-    public static string ExifRemoveUnreadable = "이 파일의 구조를 읽을 수 없어 속성을 제거하지 않았습니다.";
-    public static string ExifRemoveNotGone = "저장할 사본에 제거할 항목이 남아 있어 저장하지 않았습니다.";
+    public static string MetadataRemoveSave = "제거 후 사본 저장";
+    public static string MetadataRemoveSaveTip = "선택한 항목을 제거한 사본을 원본 옆에 이름-metadataremoved로 저장 (방향 · 색 프로필은 유지)";
+    public static string MetadataRemoveFailedTitle = "메타데이터를 제거한 사본을 저장하지 못했습니다";
+    public static string MetadataRemoveUnreadable = "이 파일의 구조를 읽을 수 없어 메타데이터를 제거하지 않았습니다.";
+    public static string MetadataRemoveNotGone = "저장할 사본에 제거할 항목이 남아 있어 저장하지 않았습니다.";
+    public static string MetadataRemoveNothing = "제거할 메타데이터가 없어 사본을 만들지 않았습니다.";
+    // The row menus' 선택 파일 메타데이터 제거 (2026-11-05; 메타데이터 모두
+    // 제거 for an hour, renamed on request - it names what it acts on): every
+    // JPEG among the rows, everything removed. "…" on a multi-selection,
+    // which asks for a folder.
+    public static string MenuRemoveMetadata = "선택 파일 메타데이터 제거";
+    public static string MenuRemoveMetadataMany = "선택 파일 메타데이터 제거…";
+    public static string MetadataRemoveFolderTitle = "메타데이터를 제거한 사본을 저장할 폴더";
+    public static string MetadataRemoveSavedFormat = "{0}장을 저장했습니다.";
+    public static string MetadataRemoveNothingFormat = "{0}장은 제거할 메타데이터가 없어 건너뛰었습니다.";
+    public static string MetadataRemoveNotJpegFormat = "{0}개는 JPEG가 아니어서 건너뛰었습니다.";
+    public static string MetadataRemoveFailedFormat = "{0}장은 저장하지 못했습니다.";
     public static string ExifCameraMaker = "카메라 제조업체";
     public static string ExifCameraModel = "카메라 모델";
     public static string ExifLensModel = "렌즈 모델";
@@ -1466,16 +1485,24 @@ public static class Strings
         ViewerEditRevert = "Undo edits (Ctrl+Z)";
         ViewerRotateSaveFailedTitle = "The rotated image could not be saved";
         ViewerExifToggle = "Show EXIF information";
-        ViewerExifRemove = "Remove properties";
-        ViewerExifRemoveUnavailable = "Properties can be removed from JPEG files only";
+        ViewerMetadataRemove = "Remove metadata";
+        ViewerMetadataRemoveUnavailable = "Metadata can be removed from JPEG files only";
         ExifOther = "Everything else";
         ExifOtherDetail = "Maker's note · serial numbers · embedded thumbnail · edit history · author · copyright and more";
         ExifSelectAll = "Select all";
-        ExifRemoveSave = "Remove and save a copy";
-        ExifRemoveSaveTip = "Saves a copy without the ticked items beside the original as name-clean (orientation and color profile kept)";
-        ExifRemoveFailedTitle = "The copy without the properties could not be saved";
-        ExifRemoveUnreadable = "The file's structure could not be read, so nothing was removed.";
-        ExifRemoveNotGone = "The copy still held an item to be removed, so it was not saved.";
+        MetadataRemoveSave = "Remove and save a copy";
+        MetadataRemoveSaveTip = "Saves a copy without the ticked items beside the original as name-metadataremoved (orientation and color profile kept)";
+        MetadataRemoveFailedTitle = "The copy without the metadata could not be saved";
+        MetadataRemoveUnreadable = "The file's structure could not be read, so no metadata was removed.";
+        MetadataRemoveNotGone = "The copy still held an item to be removed, so it was not saved.";
+        MetadataRemoveNothing = "There was no metadata to remove, so no copy was made.";
+        MenuRemoveMetadata = "Remove metadata from the selected file";
+        MenuRemoveMetadataMany = "Remove metadata from the selected files…";
+        MetadataRemoveFolderTitle = "Folder for the copies without metadata";
+        MetadataRemoveSavedFormat = "Copies saved: {0}.";
+        MetadataRemoveNothingFormat = "No metadata to remove, skipped: {0}.";
+        MetadataRemoveNotJpegFormat = "Not JPEG files, skipped: {0}.";
+        MetadataRemoveFailedFormat = "Could not be saved: {0}.";
         ExifCameraMaker = "Camera maker";
         ExifCameraModel = "Camera model";
         ExifLensModel = "Lens model";

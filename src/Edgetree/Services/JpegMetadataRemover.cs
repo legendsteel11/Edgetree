@@ -4,7 +4,7 @@ using System.Xml.Linq;
 
 namespace SidebarExplorer.App.Services;
 
-// 속성 제거 for a JPEG (2026-11-05, the author's design): the rows ticked in
+// 메타데이터 제거 for a JPEG (2026-11-05, the author's design): the rows ticked in
 // the panel's EXIF view taken out of a COPY of the file, every byte of the
 // picture left as it was.
 //
