@@ -1677,6 +1677,16 @@ public partial class MainWindow
             {
                 ExitViewerCropMode();
             }
+
+            // WRITTEN OVER THE FILE ON SCREEN - its own name chosen in the save
+            // dialog: what the panel holds is that file as it was, so it is
+            // read again. Missing until 2026-11-05 (found reading the code,
+            // not seen): the crop's save left the old picture on screen.
+            if (string.Equals(Path.GetFullPath(target), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
+            {
+                _pendingViewerPath = null;
+                UpdateViewerPreview();
+            }
         }
 
         string? savedFolder = Path.GetDirectoryName(target);
