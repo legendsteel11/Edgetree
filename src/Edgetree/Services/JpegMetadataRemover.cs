@@ -11,8 +11,8 @@ namespace SidebarExplorer.App.Services;
 // A ROW TAKES ITS COMPANIONS WITH IT. 위치 is the whole GPS directory -
 // altitude, the satellite clock, the lot - not the two numbers shown; 찍은
 // 날짜 every date tag; 렌즈 모델 the lens's make, specification and serial
-// number; the camera's and the lens's rows the maker's note (see its entry).
-// Left behind, the companion would say what the row was taken out to hide.
+// number. Left behind, the companion would say what the row was taken out to
+// hide.
 //
 // AND WHAT THIS CANNOT READ GOES WITH THE ROWS THAT SAY WHEN, WHERE AND WITH
 // WHAT (2026-11-06 review, measured on a Galaxy S24 Ultra's photo): with 찍은
@@ -20,12 +20,15 @@ namespace SidebarExplorer.App.Services;
 // the exact shooting time twice - Samsung's trailer after the picture
 // (Image_UTC_Data, to the millisecond) and an APP4 block of its own - and the
 // country (MCC_Data). A Motion Photo's video or an MPF picture would carry the
-// same, and IPTC and extended XMP hold place names and dates this does not
-// take apart. So PhotoInfoService's read-back proves nothing here, and each
-// of those is dropped whole when any of OpaqueRows is ticked, the rule
-// TrimXmp already keeps for a packet it cannot read. What it costs: on that
-// phone the trailer is also the HDR gain map, so the copy loses the HDR boost
-// on an HDR screen; the headers and XMP entries pointing at it go with it.
+// same. IPTC and XMP hold place names and dates under names no list can
+// finish - a drone's position, an edit history's times - and a maker's note
+// and the embedded thumbnail are read by nothing here at all. So
+// PhotoInfoService's read-back proves nothing, and when any of OpaqueRows is
+// ticked every one of those is dropped whole, the rule TrimXmp keeps for a
+// packet it cannot read. What it costs: on that phone the trailer is also the
+// HDR gain map, so the copy loses the HDR boost on an HDR screen, and a
+// rating, keywords or caption held only in XMP or IPTC go too. The original
+// keeps all of it.
 //
 // AND 그 밖의 정보 IS EVERYTHING THE VIEW DOES NOT SHOW that a person might
 // mind: the maker's note (some carry the body's serial number), the serial
@@ -132,17 +135,14 @@ public static class JpegMetadataRemover
         [0xA434] = [PhotoInfoService.Field.LensModel],
         [0xA435] = [PhotoInfoService.Field.LensModel],     // LensSerialNumber, also with 그 밖의 정보
         [0xA431] = [PhotoInfoService.Field.CameraModel],   // BodySerialNumber, also with 그 밖의 정보
-        // THE MAKER'S NOTE GOES WITH THE CAMERA AND THE LENS, and with 그 밖의
-        // 정보. Measured on a Canon EOS 70D's file: with Model taken out,
-        // "Canon EOS 70D" was still in its maker's note, and the lens's name
-        // too - and a maker's note is laid out the maker's own way, so it
-        // names the brand with no text in it at all.
-        [0x927C] =
-        [
-            PhotoInfoService.Field.CameraMaker,
-            PhotoInfoService.Field.CameraModel,
-            PhotoInfoService.Field.LensModel,
-        ],
+        // THE MAKER'S NOTE GOES WITH OpaqueRows, and with 그 밖의 정보. Measured
+        // on a Canon EOS 70D's file: with Model taken out, "Canon EOS 70D" was
+        // still in its maker's note, and the lens's name too - and a maker's
+        // note is laid out the maker's own way, so it names the brand with no
+        // text in it at all. The same goes for a time or a place: no textual
+        // date showed in the S24's or the 70D's, but nothing here can read
+        // one that is not text.
+        [0x927C] = OpaqueRows,
     };
 
     private static readonly HashSet<int> ExifOtherTags =
@@ -156,33 +156,16 @@ public static class JpegMetadataRemover
     ];
 
     // The same facts as XMP properties, for a packet that repeats them (a file
-    // through Lightroom or Photoshop does): namespace, then local name.
+    // through Lightroom or Photoshop does): namespace, then local name. Only
+    // the rows that leave the packet standing: any of OpaqueRows takes all of it.
     private const string TiffNs = "http://ns.adobe.com/tiff/1.0/";
     private const string ExifNs = "http://ns.adobe.com/exif/1.0/";
     private const string ExifExNs = "http://cipa.jp/exif/1.0/";
-    private const string AuxNs = "http://ns.adobe.com/exif/1.0/aux/";
     private const string XmpNs = "http://ns.adobe.com/xap/1.0/";
-    private const string PhotoshopNs = "http://ns.adobe.com/photoshop/1.0/";
-    private const string IptcCoreNs = "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/";
-    private const string IptcExtNs = "http://iptc.org/std/Iptc4xmpExt/2008-02-29/";
-
-    // What points at data appended after the picture: a gain map's and a
-    // Motion Photo's directory. Goes when that data does, or a reader would
-    // look for it in a file that no longer has it.
-    private static readonly string[] AppendedDataNs =
-    [
-        "http://ns.google.com/photos/1.0/container/",
-        "http://ns.google.com/photos/1.0/container/item/",
-        "http://ns.google.com/photos/1.0/camera/",
-        "http://ns.adobe.com/hdr-gain-map/1.0/",
-    ];
 
     private static PhotoInfoService.Field? XmpField(XName name) => (name.NamespaceName, name.LocalName) switch
     {
-        (TiffNs, "Make") => PhotoInfoService.Field.CameraMaker,
-        (TiffNs, "Model") => PhotoInfoService.Field.CameraModel,
         (TiffNs, "Software") => PhotoInfoService.Field.Program,
-        (TiffNs, "DateTime") => PhotoInfoService.Field.DateTaken,
         (ExifNs, "ExposureTime" or "ShutterSpeedValue") => PhotoInfoService.Field.ExposureTime,
         (ExifNs, "FNumber" or "ApertureValue") => PhotoInfoService.Field.FNumber,
         (ExifNs, "ISOSpeedRatings" or "PhotographicSensitivity") => PhotoInfoService.Field.IsoSpeed,
@@ -192,30 +175,10 @@ public static class JpegMetadataRemover
         (ExifNs, "Flash") => PhotoInfoService.Field.Flash,
         (ExifNs, "FocalLength") => PhotoInfoService.Field.FocalLength,
         (ExifNs, "FocalLengthIn35mmFilm") => PhotoInfoService.Field.FocalLength35mm,
-        (ExifNs, "DateTimeOriginal" or "DateTimeDigitized") => PhotoInfoService.Field.DateTaken,
-        (ExifNs, var gps) when gps.StartsWith("GPS", StringComparison.Ordinal) => PhotoInfoService.Field.Location,
-        (ExifExNs, "LensModel" or "LensMake" or "LensSpecification" or "LensSerialNumber") => PhotoInfoService.Field.LensModel,
-        (ExifExNs, "BodySerialNumber") => PhotoInfoService.Field.CameraModel,
         (ExifExNs, "PhotographicSensitivity" or "ISOSpeed") => PhotoInfoService.Field.IsoSpeed,
-        (AuxNs, "Lens" or "LensInfo" or "LensID" or "LensSerialNumber") => PhotoInfoService.Field.LensModel,
-        (AuxNs, "SerialNumber") => PhotoInfoService.Field.CameraModel,
-        (XmpNs, "CreateDate" or "ModifyDate" or "MetadataDate") => PhotoInfoService.Field.DateTaken,
         (XmpNs, "CreatorTool") => PhotoInfoService.Field.Program,
-        (PhotoshopNs, "DateCreated") => PhotoInfoService.Field.DateTaken,
-        (PhotoshopNs, "City" or "State" or "Country") => PhotoInfoService.Field.Location,
-        (IptcCoreNs, "Location" or "CountryCode") => PhotoInfoService.Field.Location,
-        (IptcExtNs, "LocationCreated" or "LocationShown") => PhotoInfoService.Field.Location,
         _ => null,
     };
-
-    // GPSTimeStamp and GPSDateStamp are the shooting time in UTC, so a date
-    // tick takes them as well as 위치 does (the same pair as the GPS directory's
-    // 0x0007 and 0x001D in Tiff.Remove).
-    private static bool XmpGoes(XName name, HashSet<PhotoInfoService.Field> remove, bool appendedDataGone)
-        => XmpField(name) is { } field && remove.Contains(field) ||
-           remove.Contains(PhotoInfoService.Field.DateTaken) && name.NamespaceName == ExifNs &&
-               name.LocalName is "GPSTimeStamp" or "GPSDateStamp" ||
-           appendedDataGone && AppendedDataNs.Contains(name.NamespaceName);
 
     private static readonly byte[] ExifId = "Exif\0\0"u8.ToArray();
     private static readonly byte[] XmpId = "http://ns.adobe.com/xap/1.0/\0"u8.ToArray();
@@ -275,7 +238,7 @@ public static class JpegMetadataRemover
                 // right (see the note above).
                 exifBlock = null;
             }
-            else if (!tiff.Remove(remove, other))
+            else if (!tiff.Remove(remove, other, opaqueGoes))
             {
                 return null;
             }
@@ -298,7 +261,7 @@ public static class JpegMetadataRemover
                 continue;
             }
 
-            if (Kept(jpeg, segment, other, opaqueGoes) is not { } kept)
+            if (Kept(jpeg, segment, opaqueGoes) is not { } kept)
             {
                 continue;
             }
@@ -307,7 +270,7 @@ public static class JpegMetadataRemover
             {
                 // A packet repeating a ticked row's facts loses them too.
                 int bodyStart = segment.Start + 4 + XmpId.Length;
-                if (TrimXmp(jpeg[bodyStart..segment.End], remove, opaqueGoes) is { } packet)
+                if (TrimXmp(jpeg[bodyStart..segment.End], remove) is { } packet)
                 {
                     if (packet.Length > 0 && packet.Length + XmpId.Length + 2 <= 0xFFFF)
                     {
@@ -349,9 +312,8 @@ public static class JpegMetadataRemover
 
     // Null: not copied. True: copied (an XMP packet perhaps trimmed). The
     // headers and the colour profile always stay; everything else that is
-    // metadata goes with 그 밖의 정보, and with opaqueGoes all of it but the
-    // main XMP packet, which is read and trimmed instead.
-    private static bool? Kept(byte[] jpeg, Segment segment, bool other, bool opaqueGoes)
+    // metadata goes with 그 밖의 정보 and with OpaqueRows.
+    private static bool? Kept(byte[] jpeg, Segment segment, bool opaqueGoes)
     {
         byte marker = segment.Marker;
         if (marker is < 0xE0 or > 0xEF && marker != 0xFE)
@@ -372,15 +334,6 @@ public static class JpegMetadataRemover
             return true;
         }
 
-        if (other)
-        {
-            return null;
-        }
-        if (marker == 0xE1 && Is(jpeg, segment, XmpId))
-        {
-            return true;
-        }
-
         return opaqueGoes ? null : true;
     }
 
@@ -388,7 +341,7 @@ public static class JpegMetadataRemover
     // rows. Null when nothing was taken (the original bytes stand); empty
     // when the packet is gone. A packet this cannot read is dropped whole
     // rather than kept: a ticked row's value may be in it.
-    private static byte[]? TrimXmp(byte[] body, HashSet<PhotoInfoService.Field> remove, bool appendedDataGone)
+    private static byte[]? TrimXmp(byte[] body, HashSet<PhotoInfoService.Field> remove)
     {
         string text = Encoding.UTF8.GetString(body);
         int start = text.IndexOf("<x:xmpmeta", StringComparison.Ordinal);
@@ -422,14 +375,14 @@ public static class JpegMetadataRemover
         {
             foreach (var attribute in element.Attributes().ToList())
             {
-                if (XmpGoes(attribute.Name, remove, appendedDataGone))
+                if (XmpField(attribute.Name) is { } field && remove.Contains(field))
                 {
                     attribute.Remove();
                     changed = true;
                 }
             }
 
-            if (element.Parent is not null && XmpGoes(element.Name, remove, appendedDataGone))
+            if (element.Parent is not null && XmpField(element.Name) is { } elementField && remove.Contains(elementField))
             {
                 element.Remove();
                 changed = true;
@@ -698,7 +651,7 @@ public static class JpegMetadataRemover
                    Entries(exif).Any(e => ExifTags.TryGetValue(U16(e), out var f) && f.Contains(field));
         }
 
-        public bool Remove(HashSet<PhotoInfoService.Field> fields, bool other)
+        public bool Remove(HashSet<PhotoInfoService.Field> fields, bool other, bool opaqueGoes)
         {
             // The EXIF directory first: its place is read from IFD0, which is
             // compacted after.
@@ -733,7 +686,7 @@ public static class JpegMetadataRemover
             // The thumbnail's directory, read before IFD0 moves.
             int next = NextIfdPosition(_ifd0);
             long ifd1 = U32(next);
-            if (other && ifd1 != 0)
+            if (opaqueGoes && ifd1 != 0)
             {
                 if (!DirectoryFits(ifd1))
                 {
@@ -764,7 +717,7 @@ public static class JpegMetadataRemover
                 return false;
             }
 
-            if (other)
+            if (opaqueGoes)
             {
                 Write32(NextIfdPosition(_ifd0), 0);
             }
