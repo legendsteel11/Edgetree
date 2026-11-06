@@ -14,6 +14,19 @@ namespace SidebarExplorer.App.Services;
 // number; the camera's and the lens's rows the maker's note (see its entry).
 // Left behind, the companion would say what the row was taken out to hide.
 //
+// AND WHAT THIS CANNOT READ GOES WITH THE ROWS THAT SAY WHEN, WHERE AND WITH
+// WHAT (2026-11-06 review, measured on a Galaxy S24 Ultra's photo): with 찍은
+// 날짜 and 위치 ticked, Windows read the copy clean while the bytes still held
+// the exact shooting time twice - Samsung's trailer after the picture
+// (Image_UTC_Data, to the millisecond) and an APP4 block of its own - and the
+// country (MCC_Data). A Motion Photo's video or an MPF picture would carry the
+// same, and IPTC and extended XMP hold place names and dates this does not
+// take apart. So PhotoInfoService's read-back proves nothing here, and each
+// of those is dropped whole when any of OpaqueRows is ticked, the rule
+// TrimXmp already keeps for a packet it cannot read. What it costs: on that
+// phone the trailer is also the HDR gain map, so the copy loses the HDR boost
+// on an HDR screen; the headers and XMP entries pointing at it go with it.
+//
 // AND 그 밖의 정보 IS EVERYTHING THE VIEW DOES NOT SHOW that a person might
 // mind: the maker's note (some carry the body's serial number), the serial
 // numbers, the embedded thumbnail (which can still show the picture as it
@@ -34,8 +47,9 @@ namespace SidebarExplorer.App.Services;
 // copied: the EXIF block's offsets are counted from its own start.
 //
 // EVERY ROW AND 그 밖의 정보 TOGETHER is the whole lot, and then the EXIF block
-// is not edited but replaced by one holding only the orientation, so the
-// copy carries no zeroed husk. Every row means all fifteen as the caller
+// is not edited but replaced by one holding only the orientation and, on a
+// picture that is not sRGB, its colour space, so the copy carries no zeroed
+// husk. Every row means all fifteen as the caller
 // passes them: the panel asks for all of them when every row it SHOWS is
 // ticked, since a file can hold a row it shows nothing for - a Canon writes a
 // GPS directory with a version number in it and no position, and that alone
@@ -45,17 +59,35 @@ namespace SidebarExplorer.App.Services;
 // lie down without it), the colour profile (colours shift without it), the
 // JFIF and Adobe headers (the Adobe one says how the colours are coded), and
 // the tags that describe the picture itself - sizes, colour space, versions.
+// A camera set to Adobe RGB says so ONLY in those tags (ColorSpace 0xFFFF and
+// InteropIndex R03, no profile in the file), so the whole lot carries them
+// over: without them a colour-managed viewer reads the copy as sRGB and the
+// colours shift (2026-11-06 review).
 public static class JpegMetadataRemover
 {
     // What one tag belongs to. A tag in two (a serial number) goes when either
     // is ticked.
     private static readonly Dictionary<int, PhotoInfoService.Field[]> Ifd0Tags = new()
     {
+        [0x000B] = [PhotoInfoService.Field.Program],       // ProcessingSoftware
         [0x010F] = [PhotoInfoService.Field.CameraMaker],
         [0x0110] = [PhotoInfoService.Field.CameraModel],
         [0x0131] = [PhotoInfoService.Field.Program],
         [0x0132] = [PhotoInfoService.Field.DateTaken],
+        // HostComputer: an iPhone writes its model here.
+        [0x013C] = [PhotoInfoService.Field.CameraModel, PhotoInfoService.Field.Program],
     };
+
+    // The rows that take along everything this cannot read item by item (see
+    // the note above).
+    private static readonly PhotoInfoService.Field[] OpaqueRows =
+    [
+        PhotoInfoService.Field.CameraMaker,
+        PhotoInfoService.Field.CameraModel,
+        PhotoInfoService.Field.LensModel,
+        PhotoInfoService.Field.DateTaken,
+        PhotoInfoService.Field.Location,
+    ];
 
     // Taken with 그 밖의 정보 only.
     private static readonly HashSet<int> Ifd0OtherTags =
@@ -131,6 +163,19 @@ public static class JpegMetadataRemover
     private const string AuxNs = "http://ns.adobe.com/exif/1.0/aux/";
     private const string XmpNs = "http://ns.adobe.com/xap/1.0/";
     private const string PhotoshopNs = "http://ns.adobe.com/photoshop/1.0/";
+    private const string IptcCoreNs = "http://iptc.org/std/Iptc4xmpCore/1.0/xmlns/";
+    private const string IptcExtNs = "http://iptc.org/std/Iptc4xmpExt/2008-02-29/";
+
+    // What points at data appended after the picture: a gain map's and a
+    // Motion Photo's directory. Goes when that data does, or a reader would
+    // look for it in a file that no longer has it.
+    private static readonly string[] AppendedDataNs =
+    [
+        "http://ns.google.com/photos/1.0/container/",
+        "http://ns.google.com/photos/1.0/container/item/",
+        "http://ns.google.com/photos/1.0/camera/",
+        "http://ns.adobe.com/hdr-gain-map/1.0/",
+    ];
 
     private static PhotoInfoService.Field? XmpField(XName name) => (name.NamespaceName, name.LocalName) switch
     {
@@ -157,8 +202,20 @@ public static class JpegMetadataRemover
         (XmpNs, "CreateDate" or "ModifyDate" or "MetadataDate") => PhotoInfoService.Field.DateTaken,
         (XmpNs, "CreatorTool") => PhotoInfoService.Field.Program,
         (PhotoshopNs, "DateCreated") => PhotoInfoService.Field.DateTaken,
+        (PhotoshopNs, "City" or "State" or "Country") => PhotoInfoService.Field.Location,
+        (IptcCoreNs, "Location" or "CountryCode") => PhotoInfoService.Field.Location,
+        (IptcExtNs, "LocationCreated" or "LocationShown") => PhotoInfoService.Field.Location,
         _ => null,
     };
+
+    // GPSTimeStamp and GPSDateStamp are the shooting time in UTC, so a date
+    // tick takes them as well as 위치 does (the same pair as the GPS directory's
+    // 0x0007 and 0x001D in Tiff.Remove).
+    private static bool XmpGoes(XName name, HashSet<PhotoInfoService.Field> remove, bool appendedDataGone)
+        => XmpField(name) is { } field && remove.Contains(field) ||
+           remove.Contains(PhotoInfoService.Field.DateTaken) && name.NamespaceName == ExifNs &&
+               name.LocalName is "GPSTimeStamp" or "GPSDateStamp" ||
+           appendedDataGone && AppendedDataNs.Contains(name.NamespaceName);
 
     private static readonly byte[] ExifId = "Exif\0\0"u8.ToArray();
     private static readonly byte[] XmpId = "http://ns.adobe.com/xap/1.0/\0"u8.ToArray();
@@ -169,6 +226,9 @@ public static class JpegMetadataRemover
     private const int GpsPointer = 0x8825;
     private const int ExifPointer = 0x8769;
     private const int OrientationTag = 0x0112;
+    private const int ColourSpaceTag = 0xA001;
+    private const int InteropPointer = 0xA005;
+    private const int InteropIndexTag = 0x0001;
 
     private readonly record struct Segment(int Start, int End, byte Marker);
 
@@ -187,8 +247,13 @@ public static class JpegMetadataRemover
         var exif = segments.FirstOrDefault(s => s.Marker == 0xE1 && Is(jpeg, s, ExifId));
         bool hasExif = exif.End > 0;
 
+        // What goes whole: 그 밖의 정보 takes it anyway, and these rows do too.
+        bool opaqueGoes = other || OpaqueRows.Any(remove.Contains);
+
         byte[]? exifBlock = null;
         int orientation = 1;
+        int? colourSpace = null;
+        byte[]? interopIndex = null;
         if (hasExif)
         {
             // The TIFF block alone, edited on a copy: its offsets count from
@@ -202,9 +267,12 @@ public static class JpegMetadataRemover
             }
 
             orientation = tiff.Orientation;
+            colourSpace = tiff.ColourSpace;
+            interopIndex = tiff.InteropIndex;
             if (other && AllPresentRowsTicked(tiff, remove))
             {
-                // Everything: no EXIF but the orientation (see the note above).
+                // Everything: no EXIF but what the picture needs to be shown
+                // right (see the note above).
                 exifBlock = null;
             }
             else if (!tiff.Remove(remove, other))
@@ -225,12 +293,12 @@ public static class JpegMetadataRemover
                 }
                 else
                 {
-                    WriteOrientationOnly(output, orientation);
+                    WriteSmallestExif(output, orientation, colourSpace, interopIndex);
                 }
                 continue;
             }
 
-            if (Kept(jpeg, segment, other) is not { } kept)
+            if (Kept(jpeg, segment, other, opaqueGoes) is not { } kept)
             {
                 continue;
             }
@@ -239,7 +307,7 @@ public static class JpegMetadataRemover
             {
                 // A packet repeating a ticked row's facts loses them too.
                 int bodyStart = segment.Start + 4 + XmpId.Length;
-                if (TrimXmp(jpeg[bodyStart..segment.End], remove) is { } packet)
+                if (TrimXmp(jpeg[bodyStart..segment.End], remove, opaqueGoes) is { } packet)
                 {
                     if (packet.Length > 0 && packet.Length + XmpId.Length + 2 <= 0xFFFF)
                     {
@@ -255,8 +323,9 @@ public static class JpegMetadataRemover
         // The image itself, from the first scan to the end of the picture.
         output.Write(jpeg, scanStart, imageEnd - scanStart);
 
-        // What follows the picture is kept unless 그 밖의 정보 is ticked.
-        if (!other && imageEnd < jpeg.Length)
+        // What follows the picture stays only while nothing that takes it is
+        // ticked.
+        if (!opaqueGoes && imageEnd < jpeg.Length)
         {
             output.Write(jpeg, imageEnd, jpeg.Length - imageEnd);
         }
@@ -280,8 +349,9 @@ public static class JpegMetadataRemover
 
     // Null: not copied. True: copied (an XMP packet perhaps trimmed). The
     // headers and the colour profile always stay; everything else that is
-    // metadata goes with 그 밖의 정보.
-    private static bool? Kept(byte[] jpeg, Segment segment, bool other)
+    // metadata goes with 그 밖의 정보, and with opaqueGoes all of it but the
+    // main XMP packet, which is read and trimmed instead.
+    private static bool? Kept(byte[] jpeg, Segment segment, bool other, bool opaqueGoes)
     {
         byte marker = segment.Marker;
         if (marker is < 0xE0 or > 0xEF && marker != 0xFE)
@@ -302,14 +372,23 @@ public static class JpegMetadataRemover
             return true;
         }
 
-        return other ? null : true;
+        if (other)
+        {
+            return null;
+        }
+        if (marker == 0xE1 && Is(jpeg, segment, XmpId))
+        {
+            return true;
+        }
+
+        return opaqueGoes ? null : true;
     }
 
     // tiff:Model="..." and its kind, as attributes or elements, for the ticked
     // rows. Null when nothing was taken (the original bytes stand); empty
     // when the packet is gone. A packet this cannot read is dropped whole
     // rather than kept: a ticked row's value may be in it.
-    private static byte[]? TrimXmp(byte[] body, HashSet<PhotoInfoService.Field> remove)
+    private static byte[]? TrimXmp(byte[] body, HashSet<PhotoInfoService.Field> remove, bool appendedDataGone)
     {
         string text = Encoding.UTF8.GetString(body);
         int start = text.IndexOf("<x:xmpmeta", StringComparison.Ordinal);
@@ -343,14 +422,14 @@ public static class JpegMetadataRemover
         {
             foreach (var attribute in element.Attributes().ToList())
             {
-                if (XmpField(attribute.Name) is { } field && remove.Contains(field))
+                if (XmpGoes(attribute.Name, remove, appendedDataGone))
                 {
                     attribute.Remove();
                     changed = true;
                 }
             }
 
-            if (element.Parent is not null && XmpField(element.Name) is { } elementField && remove.Contains(elementField))
+            if (element.Parent is not null && XmpGoes(element.Name, remove, appendedDataGone))
             {
                 element.Remove();
                 changed = true;
@@ -377,24 +456,89 @@ public static class JpegMetadataRemover
         output.Write(body);
     }
 
-    // The same 36-byte block JpegOrientation inserts; nothing when the
-    // picture stands as stored.
-    private static void WriteOrientationOnly(MemoryStream output, int orientation)
+    // What the whole lot leaves. With only an orientation this is the same
+    // 36-byte block JpegOrientation inserts; nothing at all when the picture
+    // stands as stored and is sRGB, which is what a reader assumes of a file
+    // that says nothing. Reads back as itself, so a copy run through the
+    // remover again comes out byte-identical and has nothing to remove.
+    private static void WriteSmallestExif(MemoryStream output, int orientation, int? colourSpace, byte[]? interopIndex)
     {
-        if (orientation is < 2 or > 8)
+        bool turned = orientation is >= 2 and <= 8;
+        bool notSrgb = colourSpace is { } space && space != 1;
+        if (!turned && !notSrgb)
         {
             return;
         }
 
-        output.Write(
-        [
-            0xFF, 0xE1, 0x00, 0x22,
-            (byte)'E', (byte)'x', (byte)'i', (byte)'f', 0x00, 0x00,
-            (byte)'M', (byte)'M', 0x00, 0x2A, 0x00, 0x00, 0x00, 0x08,
-            0x00, 0x01,
-            0x01, 0x12, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, (byte)orientation, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00,
-        ]);
+        var tiff = new MemoryStream();
+        void Write16(int value)
+        {
+            tiff.WriteByte((byte)(value >> 8));
+            tiff.WriteByte((byte)value);
+        }
+        void Write32(int value)
+        {
+            Write16(value >> 16);
+            Write16(value & 0xFFFF);
+        }
+        void Entry(int tag, int type, int value)
+        {
+            Write16(tag);
+            Write16(type);
+            Write32(1);
+            if (type == 3)
+            {
+                // A short sits at the front of the value's four bytes.
+                Write16(value);
+                Write16(0);
+            }
+            else
+            {
+                Write32(value);
+            }
+        }
+
+        tiff.Write("MM"u8);
+        Write16(0x2A);
+        Write32(8);
+
+        int ifd0Entries = (turned ? 1 : 0) + (notSrgb ? 1 : 0);
+        Write16(ifd0Entries);
+        if (turned)
+        {
+            Entry(OrientationTag, 3, orientation);
+        }
+
+        int exifAt = 8 + 2 + ifd0Entries * 12 + 4;
+        if (notSrgb)
+        {
+            Entry(ExifPointer, 4, exifAt);
+        }
+        Write32(0);
+
+        if (notSrgb)
+        {
+            int exifEntries = interopIndex is null ? 1 : 2;
+            Write16(exifEntries);
+            Entry(ColourSpaceTag, 3, colourSpace!.Value);
+            if (interopIndex is not null)
+            {
+                Entry(InteropPointer, 4, exifAt + 2 + exifEntries * 12 + 4);
+            }
+            Write32(0);
+
+            if (interopIndex is not null)
+            {
+                Write16(1);
+                Write16(InteropIndexTag);
+                Write16(2);
+                Write32(interopIndex.Length);
+                tiff.Write(interopIndex);
+                Write32(0);
+            }
+        }
+
+        WriteSegment(output, 0xE1, ExifId, tiff.ToArray());
     }
 
     // The segments before the first scan, where that scan starts, and where
@@ -515,6 +659,28 @@ public static class JpegMetadataRemover
                 ? U16(entry + 8) is var value and >= 1 and <= 8 ? value : 1
                 : 1;
 
+        public int? ColourSpace
+            => ExifIfd() is { } exif && Find(exif, ColourSpaceTag) is { } entry && U16(entry + 2) == 3
+                ? U16(entry + 8)
+                : null;
+
+        // R03 and its kind, as stored: three letters and a zero, which fit in
+        // the entry itself. Anything longer is not one of the defined values.
+        public byte[]? InteropIndex
+        {
+            get
+            {
+                if (ExifIfd() is not { } exif || Find(exif, InteropPointer) is not { } pointer ||
+                    U32(pointer + 8) is var interop && !DirectoryFits(interop) ||
+                    Find((int)interop, InteropIndexTag) is not { } entry ||
+                    U16(entry + 2) != 2 || U32(entry + 4) != 4)
+                {
+                    return null;
+                }
+                return _data[(entry + 8)..(entry + 12)];
+            }
+        }
+
         // Whether the file holds anything for this row.
         public bool Has(PhotoInfoService.Field field)
         {
@@ -543,12 +709,24 @@ public static class JpegMetadataRemover
                 return false;
             }
 
-            if (fields.Contains(PhotoInfoService.Field.Location) && Find(_ifd0, GpsPointer) is { } gps)
+            if (Find(_ifd0, GpsPointer) is { } gps)
             {
                 long gpsIfd = U32(gps + 8);
-                if (!DirectoryFits(gpsIfd) || !ClearDirectory((int)gpsIfd))
+                if (fields.Contains(PhotoInfoService.Field.Location))
                 {
-                    return false;
+                    if (!DirectoryFits(gpsIfd) || !ClearDirectory((int)gpsIfd))
+                    {
+                        return false;
+                    }
+                }
+                else if (fields.Contains(PhotoInfoService.Field.DateTaken))
+                {
+                    // GPSTimeStamp and GPSDateStamp: the shooting time again,
+                    // in UTC, on a photo whose position is staying.
+                    if (!DirectoryFits(gpsIfd) || !RemoveEntries((int)gpsIfd, tag => tag is 0x0007 or 0x001D))
+                    {
+                        return false;
+                    }
                 }
             }
 
