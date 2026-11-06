@@ -98,6 +98,8 @@ public partial class MainWindow
     // buttons that start one are greyed meanwhile, which is also the only
     // sign the press was taken.
     private bool _viewerCropBusy;
+    // Of those, a save under way (LeaveViewerCrop).
+    private bool _viewerCropSaving;
 
     // When the rectangle on screen was last put there by the hand - drawn,
     // moved, sized, or brought back by 이전 영역 불러오기 - held against
@@ -307,11 +309,68 @@ public partial class MainWindow
         ViewerImageHost.Cursor = ViewerHostRestCursor;
     }
 
+    // A PERSON LEAVING A CUT IS ASKED (2026-11-06, on request): another file,
+    // the panel closing. A turn alone is not: it is one press to make again,
+    // and a picture is often turned only to be looked at, so asking would
+    // stop the walk down a folder at every one. A cut is work done by hand,
+    // and 이전 영역 불러오기 brings back only the last area of it.
+    //
+    // ASKED AFTER THE PANEL HAS MOVED ON, not on the way. The tree's selection
+    // has already gone by the time the panel hears of it, so there is no
+    // staying put to offer - that would be the app moving the tree by itself
+    // - and a dialog inside the selection path would pump messages with the
+    // move half done, for a refresh to land in. The cut is whole and frozen,
+    // so it can be written from here whatever the panel shows by then. Not
+    // at exit: a question there could hold up a Windows shutdown.
+    //
+    // NOT ABOUT A CUT ALREADY BEING SAVED (Ctrl+S, then straight on: it would be
+    // called unsaved while it was being written), nor one taken from the last
+    // file's picture in the wait for this one: it would go out under this
+    // file's name. _viewerZoomPath is the file whose picture is on screen.
+    private void LeaveViewerCrop(string? path)
+    {
+        var cut = _viewerCropApplied;
+        bool ofThisFile = string.Equals(_viewerZoomPath, path, StringComparison.OrdinalIgnoreCase);
+        DiscardViewerCrop();
+        if (cut is not null && path is not null && ofThisFile && !_viewerCropSaving)
+        {
+            Dispatcher.BeginInvoke(() => AskToSaveViewerCut(cut, path));
+        }
+    }
+
+    private async void AskToSaveViewerCut(BitmapSource cut, string path)
+    {
+        string folder = Path.GetDirectoryName(path) ?? string.Empty;
+        string target = FileOperationService.GetUniqueDestination(Path.Combine(
+            folder, Path.GetFileNameWithoutExtension(path) + "-cropped" + CropSaveExtension(Path.GetExtension(path))));
+
+        // Yes is the default: Enter keeps the cut, and a copy written by a
+        // reflex costs less than a cut lost to one.
+        if (MessageBox.Show(this, string.Format(Strings.ViewerCropLeaveAsk, Path.GetFileName(target)),
+                Strings.ViewerCropLeaveTitle, MessageBoxButton.YesNo, MessageBoxImage.Question,
+                MessageBoxResult.Yes) != MessageBoxResult.Yes)
+        {
+            return;
+        }
+
+        var (saved, error) = await Task.Run(() => WriteViewerCrop(cut, target, false));
+        if (!saved)
+        {
+            MessageBox.Show(this, error ?? string.Empty, Strings.ViewerCropSaveFailedTitle,
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        if (FindLoadedItemForPath(folder) is { ChildrenLoaded: true } loaded)
+        {
+            RefreshFolderPreservingState(loaded);
+        }
+    }
+
     // Crop mode AND the temporary edit - a cut, a turn - for the moments the
-    // picture itself goes: another file, the panel closing. Nothing is put
-    // back on screen - what comes next replaces it - and nothing is asked: the
-    // edit is a few seconds' work, and the picture it came from is untouched
-    // on disk.
+    // picture itself goes. Nothing is put back on screen - what comes next
+    // replaces it - and nothing is asked here: the picture it came from is
+    // untouched on disk, and LeaveViewerCrop is what asks about a cut.
     private void DiscardViewerCrop()
     {
         ExitViewerCropMode();
@@ -1598,6 +1657,7 @@ public partial class MainWindow
         string? error = null;
         string target;
         SetViewerCropBusy(true);
+        _viewerCropSaving = true;
         try
         {
             // A turn needs no pixels yet: a JPEG's are not read at all.
@@ -1677,6 +1737,7 @@ public partial class MainWindow
         }
         finally
         {
+            _viewerCropSaving = false;
             SetViewerCropBusy(false);
         }
 

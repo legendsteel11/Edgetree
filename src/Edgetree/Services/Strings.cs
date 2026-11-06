@@ -509,6 +509,8 @@ public static class Strings
     public static string ViewerCropSave = "저장 Ctrl+S (이름-cropped) · 다른 이름으로 저장 Ctrl+Shift+S";
     public static string ViewerCropRevert = "자르기 취소 (Ctrl+Z)";
     public static string ViewerCropApply = "잘라서 보기";
+    public static string ViewerCropLeaveTitle = "자른 이미지가 저장되지 않았습니다";
+    public static string ViewerCropLeaveAsk = "{0}(으)로 저장하시겠습니까?";
     public static string ViewerCropCaptionFormat = "{0} × {1}  ·  자른 이미지 (저장 전)";
     public static string ViewerCropSaveFilter =
         "PNG 이미지 (*.png)|*.png|JPEG 이미지 (*.jpg)|*.jpg;*.jpeg;*.jfif|BMP 이미지 (*.bmp)|*.bmp|TIFF 이미지 (*.tif)|*.tif;*.tiff|GIF 이미지 (*.gif)|*.gif";
@@ -1468,6 +1470,8 @@ public static class Strings
         ViewerCropSave = "Save Ctrl+S (name-cropped) · Save as Ctrl+Shift+S";
         ViewerCropRevert = "Undo crop (Ctrl+Z)";
         ViewerCropApply = "Crop and view";
+        ViewerCropLeaveTitle = "The cropped image has not been saved";
+        ViewerCropLeaveAsk = "Save it as {0}?";
         ViewerCropCaptionFormat = "{0} × {1}  ·  Cropped (not saved)";
         ViewerCropSaveFilter =
             "PNG image (*.png)|*.png|JPEG image (*.jpg)|*.jpg;*.jpeg;*.jfif|BMP image (*.bmp)|*.bmp|TIFF image (*.tif)|*.tif;*.tiff|GIF image (*.gif)|*.gif";

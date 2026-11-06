@@ -25029,9 +25029,10 @@ public partial class MainWindow : Window
         // The band's corner grips only exist while the panel does - see their
         // note in the XAML.
         UpdateResizeThumbVisibility();
+        string? closing = _pendingViewerPath;
         _pendingViewerPath = null;
         _viewerTreeShare = null;
-        DiscardViewerCrop();
+        LeaveViewerCrop(closing);
         // Nothing is being shown, so nothing is driving what is shown. Reopening
         // starts from the tree again, which is where the eye button lives.
         _viewerListOverride = null;
@@ -25431,8 +25432,9 @@ public partial class MainWindow : Window
         var item = ViewerItem;
         if (item is null || item.IsPlaceholder || item.IsShowMore)
         {
+            string? emptied = _pendingViewerPath;
             _pendingViewerPath = null;
-            DiscardViewerCrop();
+            LeaveViewerCrop(emptied);
             StopViewerGif();
             // AND NOT THE SOUND - the same skip the file branch below already
             // makes (2026-08-11). This is the path an empty panel takes, and
@@ -25476,10 +25478,12 @@ public partial class MainWindow : Window
             UpdateViewerCarousel();
             return;
         }
+        string? leaving = _pendingViewerPath;
         _pendingViewerPath = path;
-        // A rectangle drawn on one picture means nothing on the next, and a
-        // temporary crop goes without a question (see DiscardViewerCrop).
-        DiscardViewerCrop();
+        // A rectangle drawn on one picture means nothing on the next. A
+        // temporary edit goes with it, and a cut is asked about once the panel
+        // has moved (see LeaveViewerCrop).
+        LeaveViewerCrop(leaving);
         // A new file always ends the old animation - and the old playback,
         // which is also where the previous video's file handle is released.
         // The same-path early return above is what lets a playing GIF (or
@@ -26445,10 +26449,11 @@ public partial class MainWindow : Window
             // file's picture stays up until this one lands and the bar stays
             // live over it - which is what keeps a walk down a folder from
             // flickering - so a turn or a crop pressed in that gap was made on
-            // the wrong picture, and on a NAS the gap is seconds. Nothing real
-            // can stand here: a first pass only comes from the new-file path,
-            // which let every edit go, and no reload runs under one
-            // (ReloadViewerAtSettledWidth).
+            // the wrong picture, and on a NAS the gap is seconds. It goes, as
+            // anything would on the new-file path this pass comes from. So
+            // does a press in the wait after a width drag's reload
+            // (ReloadViewerAtSettledWidth), made on the right picture: that
+            // one is lost, with nothing wrong left on screen.
             DiscardViewerCrop();
 
             if (bitmap is null)
