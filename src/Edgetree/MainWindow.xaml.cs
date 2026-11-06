@@ -15316,8 +15316,16 @@ public partial class MainWindow : Window
             // 복사 취소 · 이동 취소, where Ctrl+V is. A name box in the tree
             // keeps its own Ctrl+Z: the box handles the key first, so it never
             // bubbles up to here.
+            //
+            // ONE PRESS, NOT A HELD KEY (2026-11-06 review). A second press
+            // after a crop's take-back is meant to reach this; the same press
+            // held a moment too long is not, and on a share the files it
+            // removes have no bin to come back from.
             case Key.Z when Keyboard.Modifiers == ModifierKeys.Control:
-                UndoLastArrival();
+                if (!e.IsRepeat)
+                {
+                    UndoLastArrival();
+                }
                 e.Handled = true;
                 break;
             case Key.X when Keyboard.Modifiers == ModifierKeys.Control:

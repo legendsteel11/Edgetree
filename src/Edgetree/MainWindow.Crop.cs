@@ -185,7 +185,9 @@ public partial class MainWindow
         bool turned = _viewerTurn != 0;
         ViewerCropSaveButton.IsEnabled = (applied || turned) && !_viewerCropBusy;
         ViewerCropSaveButton.ToolTip = ViewerTurnedOnly ? Strings.ViewerRotateSave : Strings.ViewerCropSave;
-        ViewerCropRevertButton.IsEnabled = applied || turned;
+        // Not while a cut is being taken: it would land after the take-back
+        // and put back what the press had just removed (HandleViewerCropKey).
+        ViewerCropRevertButton.IsEnabled = (applied || turned) && !_viewerCropBusy;
         ViewerCropRevertButton.ToolTip = applied && turned ? Strings.ViewerEditRevert
             : turned ? Strings.ViewerRotateRevert
             : Strings.ViewerCropRevert;
@@ -1078,10 +1080,19 @@ public partial class MainWindow
         // and the tree since the same evening with 복사 취소 · 이동 취소 - so a
         // second Ctrl+Z after an edit is taken back undoes the last paste, as
         // a second undo does anywhere.
-        if ((_viewerCropApplied is not null || _viewerTurn != 0) &&
+        //
+        // WHILE A CUT IS BEING TAKEN the press is swallowed (2026-11-06
+        // review): on a NAS the decode takes seconds, and a take-back in that
+        // gap was undone by the cut landing, a turned cut standing on screen
+        // with the turn already cleared. Nor is it handed on to the tree, whose
+        // answer would be to take the last paste away.
+        if ((_viewerCropApplied is not null || _viewerTurn != 0 || _viewerCropBusy) &&
             e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            RevertViewerCrop();
+            if (!_viewerCropBusy)
+            {
+                RevertViewerCrop();
+            }
             return true;
         }
 
