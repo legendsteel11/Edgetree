@@ -26411,6 +26411,16 @@ public partial class MainWindow : Window
                 return;
             }
 
+            // A PRESS MADE DURING THE WAIT (2026-11-06 review). The last
+            // file's picture stays up until this one lands and the bar stays
+            // live over it - which is what keeps a walk down a folder from
+            // flickering - so a turn or a crop pressed in that gap was made on
+            // the wrong picture, and on a NAS the gap is seconds. Nothing real
+            // can stand here: a first pass only comes from the new-file path,
+            // which let every edit go, and no reload runs under one
+            // (ReloadViewerAtSettledWidth).
+            DiscardViewerCrop();
+
             if (bitmap is null)
             {
                 ShowViewerIcon(path);
@@ -26608,6 +26618,7 @@ public partial class MainWindow : Window
         _viewerGifNextFrame = 0;
 
         // Mirror of LoadViewerImage's arrival block.
+        DiscardViewerCrop();
         ViewerIconImage.Visibility = Visibility.Collapsed;
         ViewerIconImage.Source = null;
         ViewerImage.Visibility = Visibility.Visible;
