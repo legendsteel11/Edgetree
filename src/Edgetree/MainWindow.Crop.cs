@@ -1089,7 +1089,9 @@ public partial class MainWindow
         if ((_viewerCropApplied is not null || _viewerTurn != 0 || _viewerCropBusy) &&
             e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
         {
-            if (!_viewerCropBusy)
+            // A repeat is the press that was swallowed, still held: let
+            // through, it would take back the cut that had just landed.
+            if (!_viewerCropBusy && !e.IsRepeat)
             {
                 RevertViewerCrop();
             }
