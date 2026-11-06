@@ -95,8 +95,14 @@ public static class PhotoInfoService
 
     // The fields the file has, in order, each with its text. Empty when there
     // is nothing - no EXIF, no handler, a file gone.
-    public static IReadOnlyList<(Field Field, string Value)> Read(string path)
+    public static IReadOnlyList<(Field Field, string Value)> Read(string path) => Read(path, out _);
+
+    // And whether the file could be read at all, which an empty list cannot
+    // say: a file still being copied or a share gone for a moment comes back
+    // empty too, and that is not a picture with no details.
+    public static IReadOnlyList<(Field Field, string Value)> Read(string path, out bool read)
     {
+        read = false;
         var found = new List<(Field, string)>();
         IPropertyStore? store = null;
         try
@@ -122,6 +128,7 @@ public static class PhotoInfoService
                 found.Add((Field.Location, location));
             }
 
+            read = true;
             return found;
         }
         catch (Exception e) when (e is COMException or ArgumentException or FileNotFoundException

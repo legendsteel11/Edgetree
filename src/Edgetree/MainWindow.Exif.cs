@@ -50,8 +50,11 @@ public partial class MainWindow
     private string? _viewerExifPath;
     private int _viewerExifTicket;
 
-    // The fields the file on screen has values for.
+    // The fields the file on screen has values for, and whether that is an
+    // answer: the set is also empty before the read lands, and after one that
+    // failed.
     private readonly HashSet<PhotoInfoService.Field> _viewerExifPresent = new();
+    private bool _viewerExifRead;
 
     // With the view shut: the file last asked about for the button's sake, and
     // whether it came back with nothing (ProbeViewerExifRows).
@@ -147,18 +150,20 @@ public partial class MainWindow
         // one's name until its own arrive.
         ExitViewerMetadataRemoval();
         _viewerExifPath = path;
+        _viewerExifRead = false;
         int ticket = ++_viewerExifTicket;
         ShowViewerExif([]);
         ViewerExifScroll.ScrollToTop();
 
         Task.Run(() =>
         {
-            var fields = PhotoInfoService.Read(path);
+            var fields = PhotoInfoService.Read(path, out bool read);
             Dispatcher.BeginInvoke(() =>
             {
                 if (ticket == _viewerExifTicket &&
                     string.Equals(_viewerExifPath, path, StringComparison.OrdinalIgnoreCase))
                 {
+                    _viewerExifRead = read;
                     ShowViewerExif(fields);
                 }
             });
@@ -203,7 +208,10 @@ public partial class MainWindow
 
         _ = Task.Run(() =>
         {
-            bool none = PhotoInfoService.Read(path).Count == 0;
+            // A read that failed says nothing about the file, so the button
+            // stays live: a press opens an empty view, where a greyed button
+            // would shut a picture out of its details until the next file.
+            bool none = PhotoInfoService.Read(path, out bool read).Count == 0 && read;
             Dispatcher.BeginInvoke(() =>
             {
                 if (ticket == _viewerExifProbeTicket)
@@ -519,10 +527,11 @@ public partial class MainWindow
         // EVERY ROW SHOWN, AND 그 밖의 정보: the whole lot - all fifteen asked
         // for, since a file can hold a row it shows nothing for (see
         // JpegMetadataRemover's note on a Canon's GPS directory). Only once
-        // there are rows to count: the set is empty until the read lands and
-        // stays empty if it fails, and "every row of none" turned a tick on
-        // 그 밖의 정보 alone into the whole lot (2026-11-06 review).
-        if (other && _viewerExifPresent.Count > 0 && _viewerExifPresent.All(fields.Contains))
+        // the read has answered: the set is empty until it lands and stays
+        // empty if it fails, and "every row of none" turned a tick on 그 밖의
+        // 정보 alone into the whole lot (2026-11-06 review). A read that
+        // answered with no rows is that case for real, and stays the whole lot.
+        if (other && _viewerExifRead && _viewerExifPresent.All(fields.Contains))
         {
             fields = [.. ViewerExifFields];
         }
