@@ -30909,11 +30909,22 @@ public partial class MainWindow : Window
             ViewerNavigatorImage.Source = ViewerImage.Source;
         }
 
-        double shorter = Math.Min(ViewerImageHost.ActualWidth, ViewerImageHost.ActualHeight);
-        double side = Math.Clamp(
-            shorter * ViewerNavigatorSideRatio,
-            Math.Min(shorter * ViewerNavigatorMinSideShare, ViewerNavigatorMinSide),
-            ViewerNavigatorMaxSide);
+        // THE PANEL'S HEIGHT, NOT THE HOST'S (2026-11-06, on report). The host
+        // is what the strip and the EXIF view take their rows from, so
+        // dragging the strip's edge resized the map whenever that made the
+        // host's height the shorter side: 178px to 170px on an 810px panel.
+        // Measured on the panel it only follows the panel. The host still caps
+        // it, at the floor's share, or a strip taking most of the panel would
+        // leave the map covering the picture it is there to read; that cap
+        // starts to bite below a host of about 400px.
+        double hostShorter = Math.Min(ViewerImageHost.ActualWidth, ViewerImageHost.ActualHeight);
+        double shorter = Math.Min(ViewerImageHost.ActualWidth, ViewerPanel.ActualHeight);
+        double side = Math.Min(
+            hostShorter * ViewerNavigatorMinSideShare,
+            Math.Clamp(
+                shorter * ViewerNavigatorSideRatio,
+                Math.Min(shorter * ViewerNavigatorMinSideShare, ViewerNavigatorMinSide),
+                ViewerNavigatorMaxSide));
         double plateWidth, plateHeight;
         if (_viewerPixelWidth >= _viewerPixelHeight)
         {
