@@ -992,6 +992,12 @@ public class AppSettings
     // MainWindow.xaml.cs's ApplyFavoritesPosition.
     public bool FavoritesAtBottom { get; set; } = false;
 
+    // 번호 표시 in the 북마크 패널 menu (2026-11-06, on request): the number
+    // beside each bookmark row. Off by default, which also takes the numbers
+    // off an existing settings file: it has no such key yet. Only what the
+    // panel shows - the order and Ctrl+Alt+L's cycle stay.
+    public bool ShowBookmarkNumbers { get; set; } = false;
+
     // Docks against the right edge of the work area instead of the left -
     // see MainWindow.xaml.cs's PositionToWorkArea/ResizeThumb_DragDelta/
     // AnimateWidth, all of which branch on this to keep the right edge

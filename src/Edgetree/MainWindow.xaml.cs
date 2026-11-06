@@ -796,6 +796,7 @@ public partial class MainWindow : Window
         // themselves need to already be in the right Grid.Row by then, not
         // just left at their XAML-default (top) positions.
         ApplyFavoritesPosition();
+        ApplyBookmarkNumbers();
 
         // Before SetExpandedContentVisibility too: the footer row is Auto and
         // measures whatever the strip currently is, so the path bar has to
@@ -9540,13 +9541,16 @@ public partial class MainWindow : Window
             }
 
             if (FindMenuItem(sidePanel, "sidePanelShow") is { } panelShow &&
-                FindMenuItem(sidePanel, "favoritesAtBottom") is { } favoritesAtBottom)
+                FindMenuItem(sidePanel, "favoritesAtBottom") is { } favoritesAtBottom &&
+                FindMenuItem(sidePanel, "bookmarkNumbers") is { } bookmarkNumbers)
             {
                 panelShow.IsChecked = !IsPanelHiddenMode;
 
-                // Nothing to place while the panel is off.
+                // Nothing to place or number while the panel is off.
                 favoritesAtBottom.IsChecked = _settings.FavoritesAtBottom;
                 favoritesAtBottom.IsEnabled = !IsPanelHiddenMode;
+                bookmarkNumbers.IsChecked = _settings.ShowBookmarkNumbers;
+                bookmarkNumbers.IsEnabled = !IsPanelHiddenMode;
             }
             else
             {
@@ -12661,6 +12665,23 @@ public partial class MainWindow : Window
         }
     }
 
+    private void BookmarkNumbersMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem menuItem)
+        {
+            _settings.ShowBookmarkNumbers = menuItem.IsChecked;
+            _settingsService.Save(_settings);
+            ApplyBookmarkNumbers();
+        }
+    }
+
+    // One resource for every row, read by the row template. Collapsed rather
+    // than hidden: the number's column is Auto, so the names move left into
+    // the room it leaves.
+    private void ApplyBookmarkNumbers()
+        => Resources["BookmarkNumberVisibility"] =
+            _settings.ShowBookmarkNumbers ? Visibility.Visible : Visibility.Collapsed;
+
     // ----- 앱 프리셋 ---------------------------------------------------------
     //
     // A named shape of the whole app, put on from the header's right-click menu.
@@ -13187,6 +13208,7 @@ public partial class MainWindow : Window
             ApplyHeaderIcon();
             ApplyPathBarVisibility();
             ApplyFavoritesPosition();
+            ApplyBookmarkNumbers();
             ApplySidePanelMode();
 
             // THE SIDE PANEL'S HEIGHT, PUT BACK (2026-08-16, reported as "the

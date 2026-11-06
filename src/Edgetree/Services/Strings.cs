@@ -295,6 +295,7 @@ public static class Strings
     // the strip is always on now that it carries the history chevrons.
     // 북마크 패널 서브메뉴 안, 표시 아래. 주어는 메뉴 이름이 이미 말했다.
     public static string MenuSidePanelAtBottom = "아래에 표시";
+    public static string MenuSidePanelNumbers = "번호 표시";
     // In the colour window, not the options menu - among behaviour toggles the
     // word reads as a shadow around the whole app. The tip says which shadow.
     public static string ButtonEdgeShades = "그림자";
@@ -1384,6 +1385,7 @@ public static class Strings
         MenuDragMoves = "Drag moves (hold Ctrl to copy)";
         MenuShowPanelDividers = "Panel dividers";
         MenuSidePanelAtBottom = "Show at bottom";
+        MenuSidePanelNumbers = "Show numbers";
         ButtonEdgeShades = "Shading";
         ButtonEdgeShadesTip = "Veils the top and bottom ends of a list";
         MenuViewerSideSwapped = "Swap sides";

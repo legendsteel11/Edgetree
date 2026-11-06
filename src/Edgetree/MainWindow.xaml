@@ -2660,6 +2660,10 @@
                         IsCheckable="True"
                         AutomationProperties.AutomationId="favoritesAtBottom"
                         Click="FavoritesAtBottomMenuItem_Click"/>
+                <MenuItem Header="{x:Static services:Strings.MenuSidePanelNumbers}"
+                        IsCheckable="True"
+                        AutomationProperties.AutomationId="bookmarkNumbers"
+                        Click="BookmarkNumbersMenuItem_Click"/>
             </MenuItem>
             <Separator/>
             <!-- Contents are built in code on every open (RebuildBookmarkListMenu)
@@ -5534,6 +5538,7 @@
                                      quiet is the point. -->
                                 <TextBlock x:Name="BookmarkNumberText"
                                         Grid.Column="1"
+                                        Visibility="{DynamicResource BookmarkNumberVisibility}"
                                         Text="{Binding Number}"
                                         FontSize="{DynamicResource PanelNumberFontSize}"
                                         MinWidth="{DynamicResource PanelNumberWidth}"
