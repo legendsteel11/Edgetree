@@ -45,6 +45,43 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // TEN LINES. The image tools lead with five - the crop, its last area,
+    // rotation, the EXIF view, metadata removal - then the paste and drop
+    // undo, PSD at its own size, the thumbnails' file menu, Shift+Enter and
+    // the network drive's reopening. No fix line: what this round repaired
+    // was its own new code, and the older fault in it (a PSD's 1:1 was the
+    // panel's width) reads better as what it brings. The notes carry the
+    // crop's keys, the question on leaving a cut, the border option, the
+    // film's size buttons, and three changes: bookmark numbers hidden by
+    // default, the handle's length in pixels, the panel closed after a
+    // restart.
+    version: 'v2.9.0',
+    ko: [
+      '멀티미디어 패널에서 이미지를 자르고 원본 옆에 저장하거나 클립보드로 복사할 수 있습니다.',
+      '마지막으로 자른 영역을 다른 이미지에 같은 위치와 크기로 다시 적용할 수 있습니다.',
+      '이미지를 90도씩 회전해 저장할 수 있으며, JPEG는 화질 손실 없이 저장됩니다.',
+      '패널에서 카메라·노출·위치 등 EXIF 정보를 확인할 수 있습니다.',
+      '위치나 찍은 날짜 등 선택한 메타데이터를 제거한 사본을 저장할 수 있습니다. 여러 장도 한 번에 처리할 수 있습니다.',
+      '`Ctrl+Z`로 마지막 붙여넣기와 드롭을 취소할 수 있습니다.',
+      'PSD 파일을 원본 크기로 표시하고 자를 수 있습니다.',
+      '썸네일 우클릭 메뉴에서 트리와 같은 파일 작업을 사용할 수 있습니다.',
+      '`Shift+Enter`로 파일을 기본 프로그램에서 열 수 있습니다.',
+      '네트워크 드라이브가 다시 연결되면 보던 폴더가 다시 열립니다.',
+    ],
+    en: [
+      'Crop images in the multimedia panel, then save the result next to the original or copy it to the clipboard.',
+      'Reuse your last crop area on another image, at the same position and size.',
+      'Rotate images in 90° steps and save them. JPEGs are rotated losslessly.',
+      'See camera, exposure, location and other EXIF information in the panel.',
+      'Save a copy with selected metadata removed, such as location or date taken. Works on multiple files at once.',
+      'Undo the last paste or drop with Ctrl+Z.',
+      'PSD files now display at full size and can be cropped.',
+      'Right-click a thumbnail for the same file actions as in the tree.',
+      'Press Shift+Enter to open a file in its default app.',
+      'When a network drive reconnects, the folder you were viewing reopens.',
+    ],
+  },
+  {
     // v2.8.0 AND v2.8.1 IN ONE ENTRY. 2.8.1 is two fixes two days after the
     // PDF release, and a card of two fix lines would have stood above the
     // download button in place of the features - the burial v2.5.1 and

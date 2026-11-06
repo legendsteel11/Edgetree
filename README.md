@@ -1,4 +1,4 @@
-# Edgetree v2.8.1
+# Edgetree v2.9.0
 
 [한국어 안내](README-ko.md)
 
@@ -93,6 +93,8 @@ leaves them where they are.
 - **Drag files out** into Explorer or any other app — a standard Windows
   file drag.
 
+- **Undo a paste**: `Ctrl+Z` undoes the last paste or drop.
+
 ### The multimedia panel
 
 - **Pictures, music and video in the app.** The picture icon in the title bar
@@ -107,6 +109,12 @@ leaves them where they are.
   usual formats. The thumbnail bar takes a size of its own, and a picture
   drags straight out into another app. The mouse thumb buttons page through
   the folder.
+- **Crop and rotate**: crop (`F4`) and rotate in 90° steps in the panel. Results
+  are saved next to the original as `name-cropped` and `name-rotated`, and
+  JPEGs rotate losslessly. Your last crop area can be reused on another image.
+- **EXIF and metadata**: see camera, exposure, location and other EXIF
+  information in the panel. Save a JPEG copy with selected metadata removed,
+  such as location or date taken, or right-click to do many files at once.
 - **Slideshow**: right-click a picture, or `F8`.
 - **Wallpaper**: set a picture as the desktop background, separately on each
   monitor.
@@ -141,8 +149,9 @@ leaves them where they are.
 
 - **Bookmark panel**: keep the folders and files you go back to, and reach any
   of them with one click — the tree expands and scrolls straight there, even
-  across drives. Every row is numbered, and that number is its place in the
-  `Ctrl+Alt+L`/`J` cycle; drag a row to change it.
+  across drives. The order of the list is the
+  `Ctrl+Alt+L`/`J` cycle: drag a row to change it, and use Show numbers to see
+  each row's place.
 - **Folder search** (`Ctrl+F`): pick a folder and find files by name, with
   substring or `*`/`?` wildcard matching. Results are grouped by folder;
   click one to jump to it in the tree, or drag it into another app.
@@ -233,6 +242,19 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.9.0 (2026-11-06)
+
+- Crop images in the multimedia panel, then save the result next to the original or copy it to the clipboard.
+- Reuse your last crop area on another image, at the same position and size.
+- Rotate images in 90° steps and save them. JPEGs are rotated losslessly.
+- See camera, exposure, location and other EXIF information in the panel.
+- Save a copy with selected metadata removed, such as location or date taken. Works on multiple files at once.
+- Undo the last paste or drop with Ctrl+Z.
+- PSD files now display at full size and can be cropped.
+- Right-click a thumbnail for the same file actions as in the tree.
+- Press Shift+Enter to open a file in its default app.
+- When a network drive reconnects, the folder you were viewing reopens.
 
 ### v2.8.1 (2026-10-30)
 
