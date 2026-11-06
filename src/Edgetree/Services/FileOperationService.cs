@@ -860,10 +860,13 @@ public static class FileOperationService
     // other delete here - and on a share that has no bin it is gone for good,
     // silently (FOF_WANTNUKEWARNING never warns, measured 2026-08-13). So a
     // copy is only ever taken away while it is still exactly the copy, and
-    // while what it was copied from is still there: then nothing is lost
-    // that the original does not still hold. Anything else is left, and
-    // counted. Nothing asks first - a confirmation on taking back one's own
-    // paste would ask about the only thing the person just did.
+    // while what it was copied from is still there and still the same: then
+    // nothing is lost that the original does not still hold. A copy kept as a
+    // backup of a file edited since is the one version left of it, and the
+    // undo has no time limit, so "still there" alone was not enough (2026-11-06
+    // review). Anything else is left, and counted. Nothing asks first - a
+    // confirmation on taking back one's own paste would ask about the only
+    // thing the person just did.
     //
     // A MOVE GOES BACK where it came from, under its old name, never
     // numbered: only while that name is free and its folder is still there.
@@ -906,11 +909,24 @@ public static class FileOperationService
 
         private static bool Exists(string path) => File.Exists(path) || Directory.Exists(path);
 
+        // The source read now against the copy as it landed - a copy keeps its
+        // files' times, so the two agree until someone edits the source. Taken
+        // here rather than recorded at the paste: a folder's walk is paid on
+        // the rare undo, not on every paste. Two seconds is the coarsest clock
+        // a copy can land on (FAT rounds to it); a difference that small
+        // reads as the same, anything else leaves the copy, which is the safe
+        // way to be wrong.
+        private static bool SourceUnchanged(string source, Fingerprint? landed)
+            => landed is { } copy && TakeFingerprint(source) is { } now &&
+               now.Count == copy.Count && now.Bytes == copy.Bytes &&
+               (now.Latest - copy.Latest).Duration() <= TimeSpan.FromSeconds(2);
+
         private Result RemoveCopies(IntPtr owner)
         {
             var candidates = _items
-                .Where(item => Exists(item.Landing.Path) && Exists(item.Landing.Source) &&
-                               TakeFingerprint(item.Landing.Path) == item.Print)
+                .Where(item => Exists(item.Landing.Path) &&
+                               TakeFingerprint(item.Landing.Path) == item.Print &&
+                               SourceUnchanged(item.Landing.Source, item.Print))
                 .Select(item => item.Landing.Path)
                 .ToList();
             int stillThere = _items.Count(item => Exists(item.Landing.Path));
