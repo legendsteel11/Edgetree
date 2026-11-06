@@ -288,12 +288,14 @@ public static class HelpContent
                       "Shift · Ctrl while dragging", "Force a move · force a copy"),
                     R("Ctrl+Alt+K", "북마크 표시 · 해제", "Ctrl+Alt+K", "Bookmark, or take it back"),
                     R("Ctrl+Alt+L · J", "다음 · 이전 북마크로 이동", "Ctrl+Alt+L · J", "Next · previous bookmark"),
-                    // 번호가 화면에 있으니 "순서가 바뀐다"는 라벨이 말해 준다.
-                    // 여기 적을 값어치가 있는 것은 그 순서가 단축키의 순서이기도
-                    // 하다는 것 - 목록만 보면 알 길이 없다.
-                    R("북마크 패널에서 행 드래그", "순서 변경 · 번호가 곧 Ctrl+Alt+L 순서",
+                    // What is worth saying here is that the order is also the
+                    // shortcut's order: the list alone does not say so, and
+                    // with 번호 표시 off by default nothing on screen does.
+                    R("북마크 패널에서 행 드래그", "순서 변경 · 이 순서가 곧 Ctrl+Alt+L 순서",
                       "Drag a row in the bookmark panel",
-                      "Reorders it - the numbers are the Ctrl+Alt+L order"),
+                      "Reorders it - this order is the Ctrl+Alt+L order"),
+                    R("옵션 → 북마크 패널 → 번호 표시", "각 행에 순서 번호 표시",
+                      "Options → Bookmark panel → Show numbers", "Shows each row's place in the order"),
                     // The parenthesis is the part a menu label cannot say, and
                     // it is what a whole paragraph used to say instead.
                     R("우클릭 → 숨기기", "트리에서 폴더나 드라이브를 감춤, 검색에서는 보이나 작업 시 숨김 해제 필요",
@@ -631,6 +633,11 @@ public static class HelpContent
                     R("상단 메타데이터 제거 버튼 (JPEG)", "선택한 항목을 제거한 사본을 원본 옆에 이름-metadataremoved로 저장 · Esc로 종료",
                       "The remove metadata button at the top (JPEG)",
                       "Saves a copy without the ticked items beside the original as name-metadataremoved · Esc to stop"),
+                    // Next to the button's row because it has to be read before
+                    // pressing: these rows take more than their labels say.
+                    R("카메라 · 렌즈 · 찍은 날짜 · 위치 제거", "IPTC · HDR 정보 등 사진의 추가 데이터도 함께 제거",
+                      "Removing camera, lens, date taken or location",
+                      "Also removes IPTC, HDR information and other data added to the picture"),
                     R("우클릭 → 선택 파일 메타데이터 제거 (JPEG)", "한 장은 원본 옆에 이름-metadataremoved, 여러 장은 선택한 폴더에 사본 저장",
                       "Right-click → Remove metadata from the selected files (JPEG)",
                       "One file: a name-metadataremoved copy beside it · several: copies in a folder you choose"),
@@ -660,8 +667,8 @@ public static class HelpContent
                     // had all along. Says it does NOT carry over, because the
                     // picture's does and someone who met it there will expect
                     // the same.
-                    R("우클릭 → 영상 크기 → 채우기", "패널을 꽉 채우고 넘치는 부분은 잘라냄",
-                      "Right-click → Video size → Fill",
+                    R("컨트롤 패널 위 채우기 · 우클릭 → 영상 크기 → 채우기", "패널을 꽉 채우고 넘치는 부분은 잘라냄",
+                      "Fill above the playback controls · Right-click → Video size → Fill",
                       "Fills the panel and crops the overflow"),
                     // 바로 위 줄의 반대편. 그 줄은 창 안에서 영상을 어떻게 놓을지
                     // 정하고, 이 줄은 영상에 창을 맞춘다.
