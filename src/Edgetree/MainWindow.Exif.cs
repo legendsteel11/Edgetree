@@ -459,8 +459,11 @@ public partial class MainWindow
         bool other = _viewerExifOtherCheck?.IsChecked == true;
         // EVERY ROW SHOWN, AND 그 밖의 정보: the whole lot - all fifteen asked
         // for, since a file can hold a row it shows nothing for (see
-        // JpegMetadataRemover's note on a Canon's GPS directory).
-        if (other && _viewerExifPresent.All(fields.Contains))
+        // JpegMetadataRemover's note on a Canon's GPS directory). Only once
+        // there are rows to count: the set is empty until the read lands and
+        // stays empty if it fails, and "every row of none" turned a tick on
+        // 그 밖의 정보 alone into the whole lot (2026-11-06 review).
+        if (other && _viewerExifPresent.Count > 0 && _viewerExifPresent.All(fields.Contains))
         {
             fields = [.. ViewerExifFields];
         }

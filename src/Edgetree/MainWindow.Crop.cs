@@ -1700,9 +1700,13 @@ public partial class MainWindow
             // WRITTEN OVER THE FILE ON SCREEN - its own name chosen in the save
             // dialog: what the panel holds is that file as it was, so it is
             // read again. Missing until 2026-11-05 (found reading the code,
-            // not seen): the crop's save left the old picture on screen.
+            // not seen): the crop's save left the old picture on screen. The
+            // EXIF view is read again with it: a cut is written with no
+            // metadata, and the view keys on the path, so it went on listing
+            // what the file no longer holds (2026-11-06 review).
             if (string.Equals(Path.GetFullPath(target), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
             {
+                _viewerExifPath = null;
                 _pendingViewerPath = null;
                 UpdateViewerPreview();
             }
