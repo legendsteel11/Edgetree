@@ -539,6 +539,7 @@ public static class Strings
     // not 노출 보정. 위치 is the one the app names: Windows has 위도 and 경도
     // as two rows, the panel shows them as one.
     public static string ViewerExifToggle = "EXIF 정보 표시";
+    public static string ViewerExifNone = "EXIF 정보가 없습니다";
     // 메타데이터 제거 in the EXIF view (2026-11-05). 그 밖의 정보 is the row for
     // what the view does not show; its value cell says what that is.
     //
@@ -1487,6 +1488,7 @@ public static class Strings
         ViewerEditRevert = "Undo edits (Ctrl+Z)";
         ViewerRotateSaveFailedTitle = "The rotated image could not be saved";
         ViewerExifToggle = "Show EXIF information";
+        ViewerExifNone = "This picture has no EXIF information";
         ViewerMetadataRemove = "Remove metadata";
         ViewerMetadataRemoveUnavailable = "Metadata can be removed from JPEG files only";
         ExifOther = "Everything else";

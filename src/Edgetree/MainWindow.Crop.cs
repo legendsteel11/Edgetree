@@ -1707,6 +1707,7 @@ public partial class MainWindow
             if (string.Equals(Path.GetFullPath(target), Path.GetFullPath(path), StringComparison.OrdinalIgnoreCase))
             {
                 _viewerExifPath = null;
+                _viewerExifProbePath = null;
                 _pendingViewerPath = null;
                 UpdateViewerPreview();
             }

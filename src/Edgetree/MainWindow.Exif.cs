@@ -53,6 +53,13 @@ public partial class MainWindow
     // The fields the file on screen has values for.
     private readonly HashSet<PhotoInfoService.Field> _viewerExifPresent = new();
 
+    // With the view shut: the file last asked about for the button's sake, and
+    // whether it came back with nothing (ProbeViewerExifRows).
+    private string? _viewerExifProbePath;
+    private int _viewerExifProbeTicket;
+    private bool _viewerExifProbeNone;
+    private const int ViewerExifProbeDelayMs = 150;
+
     private bool _viewerMetadataRemoving;
     // A copy being written, from the press until it is kept or refused.
     private bool _viewerMetadataBusy;
@@ -101,6 +108,7 @@ public partial class MainWindow
     private void UpdateViewerExif()
     {
         ViewerExifToggle.IsChecked = _settings.ViewerExif;
+        ApplyViewerExifToggle();
 
         bool canRemove = CanRemoveViewerMetadata;
         ViewerMetadataRemoveToggle.IsEnabled = canRemove && !_viewerMetadataBusy;
@@ -118,6 +126,7 @@ public partial class MainWindow
             }
             _viewerExifPath = null;
             ExitViewerMetadataRemoval();
+            ProbeViewerExifRows();
             return;
         }
 
@@ -151,6 +160,56 @@ public partial class MainWindow
                     string.Equals(_viewerExifPath, path, StringComparison.OrdinalIgnoreCase))
                 {
                     ShowViewerExif(fields);
+                }
+            });
+        });
+    }
+
+    // NOTHING TO OPEN ON A PICTURE WITH NO DETAILS (2026-11-06, on request): the
+    // button is greyed there and its tooltip says why - but only while the
+    // view is shut. Open, it stays live: a view left on walks through such a
+    // picture with its rows empty, so the slot does not close and open under
+    // the picture, and the button is the way to shut it.
+    private void ApplyViewerExifToggle()
+    {
+        bool nothingToOpen = !_settings.ViewerExif && _viewerExifProbeNone;
+        ViewerExifToggle.IsEnabled = !nothingToOpen;
+        ViewerExifToggle.ToolTip = nothingToOpen ? Strings.ViewerExifNone : Strings.ViewerExifToggle;
+    }
+
+    // WITH THE VIEW SHUT NOTHING HAS READ THE FILE, so this reads it for the
+    // button alone. Measured 2026-11-06: 3-6ms on a local disk, 7-28ms the
+    // first time from a NAS, on a worker, so it is paid for every picture.
+    //
+    // The wait comes first for a key held down a folder: each step takes the
+    // last one's ticket, so only the file it stops on is read. The answer
+    // before stands until then, which keeps a run of files alike from
+    // flickering; for the moment it is wrong, a press only opens an empty view.
+    private async void ProbeViewerExifRows()
+    {
+        if (!ViewerPictureBarWanted || _pendingViewerPath is not { } path ||
+            string.Equals(_viewerExifProbePath, path, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _viewerExifProbePath = path;
+        int ticket = ++_viewerExifProbeTicket;
+        await Task.Delay(ViewerExifProbeDelayMs);
+        if (ticket != _viewerExifProbeTicket)
+        {
+            return;
+        }
+
+        _ = Task.Run(() =>
+        {
+            bool none = PhotoInfoService.Read(path).Count == 0;
+            Dispatcher.BeginInvoke(() =>
+            {
+                if (ticket == _viewerExifProbeTicket)
+                {
+                    _viewerExifProbeNone = none;
+                    ApplyViewerExifToggle();
                 }
             });
         });
