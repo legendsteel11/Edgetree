@@ -22955,7 +22955,7 @@ public partial class MainWindow : Window
 
     private void RenameTextBox_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
     {
-        if (sender is not TextBox { DataContext: FileSystemItem item })
+        if (sender is not TextBox { DataContext: FileSystemItem item } textBox)
         {
             return;
         }
@@ -22978,6 +22978,26 @@ public partial class MainWindow : Window
                 _newTextFileToEdit = null;
                 OpenNewTextFileForEditing(item.FullPath, keyboardStayed: true);
             }
+        }
+        else if (Keyboard.Modifiers == ModifierKeys.None &&
+                 e.Key is Key.Add or Key.Subtract or Key.Multiply)
+        {
+            // THE NUMBER PAD'S + - * ARE THE TREE ROW'S OWN KEYS (2026-11-08,
+            // on report): TreeViewItem opens, closes and opens-everything-under
+            // on them, and the box sits inside a row, so a "-" typed into a
+            // name with the number pad shut the folder. The box leaves the key
+            // unhandled - it takes the character, not the key - and the row
+            // below takes it. Marked handled here, before the row; and since a
+            // key marked handled is never turned into a character, the
+            // character is typed in by hand.
+            textBox.SelectedText = e.Key switch
+            {
+                Key.Add => "+",
+                Key.Subtract => "-",
+                _ => "*",
+            };
+            textBox.Select(textBox.SelectionStart + textBox.SelectionLength, 0);
+            e.Handled = true;
         }
     }
 
