@@ -908,6 +908,12 @@ public static class FileSystemService
                 {
                     result.Add(new FileSystemItem(name, file, isDirectory: false, parent));
                 }
+                else if (FileTypeFilter.IsLetThrough(file))
+                {
+                    // Just pasted or dropped here: listed for now, and not
+                    // counted among what the filter took out.
+                    result.Add(new FileSystemItem(name, file, isDirectory: false, parent) { IsFilterLetThrough = true });
+                }
                 else
                 {
                     // COUNTED WHERE IT IS DROPPED, because this is the only pass

@@ -495,6 +495,12 @@ public class FileSystemItem : INotifyPropertyChanged
         set => SetField(ref _isHiddenFolderShown, value);
     }
 
+    // The file counterpart (2026-11-07): a file the type filter hides, listed
+    // because it has just been pasted or dropped here (FileTypeFilter.LetThrough)
+    // and drawn the way a hidden folder on screen is, here only for now. Set
+    // when the row is read; a later read without it drops the row.
+    public bool IsFilterLetThrough { get; init; }
+
     private bool _isCut;
 
     // Waiting on a Ctrl+X paste. Fades the row's ICON only (see the tree

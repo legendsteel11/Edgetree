@@ -116,6 +116,39 @@ public static class FileTypeFilter
 
     public static bool IsFiltering => SelectedCategories.Count > 0;
 
+    // FILES JUST PUT HERE, listed although their kind is filtered out
+    // (2026-11-07, on report). A patch pasted into a game folder whose files
+    // the filter hides landed with nothing on screen to show for it, so there
+    // was no telling whether it had worked. They stay listed until the
+    // selection leaves their folder (MainWindow.UpdateFilterArrivals), and the
+    // folder's next read after that drops them as it always would have. Read
+    // from the folder reads' worker threads, hence the lock.
+    private static readonly HashSet<string> LetThroughPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    public static void LetThrough(IEnumerable<string> paths)
+    {
+        lock (LetThroughPaths)
+        {
+            LetThroughPaths.UnionWith(paths);
+        }
+    }
+
+    public static bool IsLetThrough(string path)
+    {
+        lock (LetThroughPaths)
+        {
+            return LetThroughPaths.Count > 0 && LetThroughPaths.Contains(path);
+        }
+    }
+
+    public static void ForgetLetThrough()
+    {
+        lock (LetThroughPaths)
+        {
+            LetThroughPaths.Clear();
+        }
+    }
+
     // The user's own extension list, mirrored from
     // AppSettings.FileFilterCustomExtensions the same way SelectedCategories is
     // mirrored from FileFilterCategories - a listing asks this class, never the

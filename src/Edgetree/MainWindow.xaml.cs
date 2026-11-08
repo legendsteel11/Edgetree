@@ -9860,6 +9860,7 @@ public partial class MainWindow : Window
     // 없었다. 접기는 손으로 칩을 누르는 자리의 답이지 여기의 답이 아니다.
     private void ApplyFileFilter(bool foldTree = true)
     {
+        ForgetFilterArrivals();
         FileTypeFilter.SelectedCategories.Clear();
         foreach (string category in _settings.FileFilterCategories)
         {
@@ -17492,6 +17493,7 @@ public partial class MainWindow : Window
 
         // Merge: a drop adds rows to the target folder, which may well have
         // expanded folders of its own on screen.
+        LetFilteredArrivalsThrough(item, arrived);
         RefreshFolderPreservingState(item);
         SelectArrivalsIfStill(selectedAtStart, item, arrived);
     }
@@ -17547,6 +17549,80 @@ public partial class MainWindow : Window
         {
             SelectArrivedFiles(folder, arrived);
         }
+    }
+
+    // ----- Arrivals the type filter hides (2026-11-07, on report) -----------
+    //
+    // A file pasted or dropped where the filter hides its kind is listed
+    // anyway, so what just landed can be seen and checked (FileTypeFilter's
+    // note), drawn as here-only-for-now. It goes when the person does: once
+    // the selection leaves that folder the files stop being let through, and
+    // they disappear when the selection comes back into it. Not the moment the
+    // selection leaves - taking rows out of a folder above the selection would
+    // shift everything under it, the tree moving by itself.
+    private string? _filterArrivalFolder;
+    private string? _filterArrivalLeftFolder;
+
+    private void LetFilteredArrivalsThrough(FileSystemItem folder, IReadOnlyList<string> arrived)
+    {
+        var hidden = arrived
+            .Where(path => !FileTypeFilter.ShouldShowFile(Path.GetFileName(path)) && File.Exists(path))
+            .ToList();
+        if (hidden.Count == 0)
+        {
+            return;
+        }
+
+        // One folder at a time: arrivals somewhere else end the last ones.
+        if (_filterArrivalFolder is { } earlier &&
+            !string.Equals(earlier, folder.FullPath, StringComparison.OrdinalIgnoreCase))
+        {
+            FileTypeFilter.ForgetLetThrough();
+            _filterArrivalLeftFolder = earlier;
+        }
+
+        FileTypeFilter.LetThrough(hidden);
+        _filterArrivalFolder = folder.FullPath;
+    }
+
+    // From every selection change, before anything else reads the folder.
+    private void UpdateFilterArrivals(FileSystemItem? selected)
+    {
+        if (_filterArrivalFolder is null && _filterArrivalLeftFolder is null)
+        {
+            return;
+        }
+
+        string? at = selected is { IsPlaceholder: false } ? selected.FullPath : null;
+        bool Inside(string folder) => at is not null && FileOperationService.IsSameOrBeneath(at, folder);
+
+        if (_filterArrivalFolder is { } folder && !Inside(folder))
+        {
+            FileTypeFilter.ForgetLetThrough();
+            _filterArrivalFolder = null;
+            _filterArrivalLeftFolder = folder;
+            return;
+        }
+
+        // Back in, on one of its ordinary rows: the folder is read again and
+        // the arrivals go. Not while the selection stands on one of them -
+        // the read would take the selected row away from under it.
+        if (_filterArrivalLeftFolder is { } left && Inside(left) && selected is { IsFilterLetThrough: false })
+        {
+            _filterArrivalLeftFolder = null;
+            if (FindLoadedItemForPath(left) is { ChildrenLoaded: true } loaded)
+            {
+                RefreshFolderPreservingState(loaded);
+            }
+        }
+    }
+
+    // A filter change reads every open folder again anyway.
+    private void ForgetFilterArrivals()
+    {
+        FileTypeFilter.ForgetLetThrough();
+        _filterArrivalFolder = null;
+        _filterArrivalLeftFolder = null;
     }
 
     // WHAT ARRIVED IS WHAT IS SELECTED. Explorer leaves a paste or a drop with
@@ -17814,6 +17890,8 @@ public partial class MainWindow : Window
         // writer that must survive this, FinishReveal, sets the flag after
         // its assignment returns, so this clear runs first.
         _selectionPlacedByReveal = false;
+
+        UpdateFilterArrivals(e.NewValue as FileSystemItem);
 
         // The moment the native selection lands on a row OUTSIDE the
         // multi-selection - keyboard navigation, right-click on an unrelated
@@ -22270,6 +22348,7 @@ public partial class MainWindow : Window
         var pasteTarget = FindLoadedItemForPath(destinationFolder) ?? (item.IsDirectory ? item : item.Parent);
         if (pasteTarget is not null)
         {
+            LetFilteredArrivalsThrough(pasteTarget, outcome.CreatedPaths);
             RefreshFolderPreservingState(pasteTarget);
             SelectArrivalsIfStill(selectedAtStart, pasteTarget, outcome.CreatedPaths);
         }

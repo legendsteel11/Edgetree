@@ -5350,6 +5350,20 @@
                             Property="Foreground"
                             Value="{DynamicResource MutedFolderNameForeground}"/>
                 </DataTrigger>
+                <!-- The same for a FILE the type filter hides, on screen because
+                     it has just been pasted or dropped here (2026-11-07, on
+                     report): here on purpose and only for now, so it reads the
+                     way a hidden folder on screen does - italic, a step towards
+                     the background - and not as cut, which fades the icon. -->
+                <DataTrigger Binding="{Binding IsFilterLetThrough}"
+                        Value="True">
+                    <Setter TargetName="NameText"
+                            Property="FontStyle"
+                            Value="Italic"/>
+                    <Setter TargetName="NameText"
+                            Property="Foreground"
+                            Value="{DynamicResource MutedFileNameForeground}"/>
+                </DataTrigger>
                 <!-- Drive not answering: red dot, and the row greyed out.
                      LAST on purpose - every folder/file/selection colour above
                      targets the same Foreground, and the last matching trigger
