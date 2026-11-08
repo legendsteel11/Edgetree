@@ -17418,20 +17418,55 @@ public partial class MainWindow : Window
             new Action(() => CompleteDrop(item, importablePaths, move)));
     }
 
-    private void CompleteDrop(FileSystemItem item, string[] importablePaths, bool move)
+    private async void CompleteDrop(FileSystemItem item, string[] importablePaths, bool move)
     {
         Activate();
+        if (_fileOperationRunning)
+        {
+            return;
+        }
 
-        string? error;
-        IReadOnlyList<string> arrived;
-        IReadOnlyList<FileOperationService.Landing> landings;
+        string folderPath = item.FullPath;
+        string? selectedAtStart = (ExplorerTree.SelectedItem as FileSystemItem)?.FullPath;
+        IntPtr keepAbove = ShellWindowsKeepAbove;
+        (bool Done, IReadOnlyList<string> Emptied, IReadOnlyList<string> Arrived,
+            IReadOnlyList<FileOperationService.Landing> Landings, string? Error) result;
+        _fileOperationRunning = true;
+        try
+        {
+            result = await RunFileOperation(() =>
+            {
+                if (move)
+                {
+                    bool moved = FileOperationService.TryMoveDroppedPaths(importablePaths, folderPath, keepAbove,
+                        out var emptiedFolders, out var movedPaths, out var movedLandings, out var moveError);
+                    return (moved, emptiedFolders, movedPaths, movedLandings, moveError);
+                }
+
+                bool copied = FileOperationService.TryImportDroppedPaths(importablePaths, folderPath, keepAbove,
+                    out var copiedPaths, out var copiedLandings, out var copyError);
+                return (copied, (IReadOnlyList<string>)Array.Empty<string>(), copiedPaths, copiedLandings, copyError);
+            });
+        }
+        finally
+        {
+            _fileOperationRunning = false;
+        }
+
+        if (!result.Done)
+        {
+            return;
+        }
+
+        // The folder's row read again rather than the one the drop landed on:
+        // during a long copy the watcher may have replaced it.
+        item = FindLoadedItemForPath(folderPath) ?? item;
+        string? error = result.Error;
+        IReadOnlyList<string> arrived = result.Arrived;
+        IReadOnlyList<FileOperationService.Landing> landings = result.Landings;
         if (move)
         {
-            if (!FileOperationService.TryMoveDroppedPaths(
-                    importablePaths, item.FullPath, out var emptied, out arrived, out landings, out error))
-            {
-                return;
-            }
+            var emptied = result.Emptied;
 
             // A move empties the folders the rows came FROM, and those may be
             // open on screen - the destination refresh below would otherwise
@@ -17448,11 +17483,6 @@ public partial class MainWindow : Window
                 }
             }
         }
-        else if (!FileOperationService.TryImportDroppedPaths(
-                     importablePaths, item.FullPath, ConfirmOverwrite, out arrived, out landings, out error))
-        {
-            return;
-        }
 
         RecordArrival(move, landings);
         if (error is not null)
@@ -17463,7 +17493,60 @@ public partial class MainWindow : Window
         // Merge: a drop adds rows to the target folder, which may well have
         // expanded folders of its own on screen.
         RefreshFolderPreservingState(item);
-        SelectArrivedFiles(item, arrived);
+        SelectArrivalsIfStill(selectedAtStart, item, arrived);
+    }
+
+    // ----- Paste and drop off the UI thread (2026-11-08, on report) ---------
+    //
+    // A paste or a drop that meets a name already there goes to the shell's
+    // copy, and run on the UI thread that copy held the whole app: a 4GB copy
+    // took no clicks anywhere for as long as its progress window stood (the
+    // report came with a screenshot of it at 46%). So the file work runs on a
+    // thread of its own - an STA one, which the clipboard and the shell both
+    // want - and the app goes on while it does. One at a time: a second paste
+    // or drop while one runs is let go, as numbering against a folder still
+    // being written is a guess.
+    private bool _fileOperationRunning;
+
+    private static Task<T> RunFileOperation<T>(Func<T> work)
+    {
+        var done = new TaskCompletionSource<T>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                done.SetResult(work());
+            }
+            catch (Exception ex)
+            {
+                done.SetException(ex);
+            }
+        })
+        {
+            IsBackground = true,
+            Name = "file operation",
+        };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return done.Task;
+    }
+
+    // The window the shell's own must not open behind - this one, while it is
+    // topmost (FileOperationService.ShellTransfer).
+    private IntPtr ShellWindowsKeepAbove
+        => Topmost ? new System.Windows.Interop.WindowInteropHelper(this).Handle : IntPtr.Zero;
+
+    // WHAT ARRIVED IS SELECTED - unless the person has gone elsewhere while it
+    // was arriving. A long copy ends whenever it ends, and taking the
+    // selection off a row someone has since moved to would be the app moving
+    // the tree by itself. Compared by path: the row may have been read again.
+    private void SelectArrivalsIfStill(string? selectedAtStart, FileSystemItem folder, IReadOnlyList<string> arrived)
+    {
+        if (string.Equals((ExplorerTree.SelectedItem as FileSystemItem)?.FullPath, selectedAtStart,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            SelectArrivedFiles(folder, arrived);
+        }
     }
 
     // WHAT ARRIVED IS WHAT IS SELECTED. Explorer leaves a paste or a drop with
@@ -17591,12 +17674,6 @@ public partial class MainWindow : Window
         }
     }
 
-    private bool ConfirmOverwrite(string name)
-    {
-        var result = MessageBox.Show(this, string.Format(Strings.OverwriteConfirmBody, name),
-            Strings.OverwriteConfirmTitle, MessageBoxButton.YesNo, MessageBoxImage.Question);
-        return result == MessageBoxResult.Yes;
-    }
 
     private void TreeViewItem_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
@@ -22135,13 +22212,13 @@ public partial class MainWindow : Window
         return _searchEntries.RemoveAll(gone);
     }
 
-    private void PasteItem_Click(object sender, RoutedEventArgs e)
+    private async void PasteItem_Click(object sender, RoutedEventArgs e)
     {
         // Not while the search view covers the tree: the folder this would
         // paste into is the tree's selection, which is out of sight there (see
         // FilmstripContextMenu_Opened, 2026-10-06). A paste goes to a folder
         // picked in the tree.
-        if (_isSearchViewActive ||
+        if (_isSearchViewActive || _fileOperationRunning ||
             ExplorerTree.SelectedItem is not FileSystemItem { IsPlaceholder: false } item)
         {
             return;
@@ -22153,10 +22230,31 @@ public partial class MainWindow : Window
             return;
         }
 
-        if (!FileOperationService.TryPaste(destinationFolder, out var outcome, out var error))
+        // Off the UI thread (see RunFileOperation): a collision hands the
+        // paste to the shell's copy, which can run for minutes.
+        string? selectedAtStart = item.FullPath;
+        IntPtr keepAbove = ShellWindowsKeepAbove;
+        (bool Pasted, FileOperationService.PasteOutcome Outcome, string? Error) result;
+        _fileOperationRunning = true;
+        try
+        {
+            result = await RunFileOperation(() =>
+            {
+                bool pasted = FileOperationService.TryPaste(destinationFolder, keepAbove, out var pasteOutcome, out var pasteError);
+                return (pasted, pasteOutcome, pasteError);
+            });
+        }
+        finally
+        {
+            _fileOperationRunning = false;
+        }
+
+        if (!result.Pasted)
         {
             return; // Clipboard has nothing pasteable.
         }
+        var outcome = result.Outcome;
+        var error = result.Error;
         RecordArrival(outcome.WasMove, outcome.Landings);
         if (error is not null)
         {
@@ -22167,11 +22265,13 @@ public partial class MainWindow : Window
         // user is looking at, and a clear-and-refill collapses every expanded
         // subtree beside them (and drops the scroll position with it). Same
         // reasoning as the watcher paths - see RefreshFolderPreservingState.
-        var pasteTarget = item.IsDirectory ? item : item.Parent;
+        // The folder's row is looked up again: during a long copy the watcher
+        // may have read it afresh, and the row in hand would be a stale one.
+        var pasteTarget = FindLoadedItemForPath(destinationFolder) ?? (item.IsDirectory ? item : item.Parent);
         if (pasteTarget is not null)
         {
             RefreshFolderPreservingState(pasteTarget);
-            SelectArrivedFiles(pasteTarget, outcome.CreatedPaths);
+            SelectArrivalsIfStill(selectedAtStart, pasteTarget, outcome.CreatedPaths);
         }
 
         if (outcome.WasMove)

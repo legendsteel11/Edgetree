@@ -99,8 +99,8 @@ public static class FileOperationService
     // folders need refreshing too (a move empties them) and can drop its cut
     // markers once they've been acted on.
     // CreatedPaths is where things actually LANDED, which the caller cannot work
-    // out from the sources: a collision numbers up to " (2)", and a cut pasted
-    // back into its own folder lands nowhere at all.
+    // out from the sources: a copy beside itself numbers up to " (2)", and a cut
+    // pasted back into its own folder lands nowhere at all.
     public sealed record PasteOutcome(
         bool WasMove, IReadOnlyList<string> SourcePaths, IReadOnlyList<string> CreatedPaths,
         IReadOnlyList<Landing> Landings)
@@ -110,14 +110,15 @@ public static class FileOperationService
     }
 
     // WHERE ONE ITEM OF A PASTE OR A DROP LANDED, and from what (2026-11-03,
-    // for 복사 취소 / 이동 취소 - see ArrivalUndo). Replaced: it went over
-    // something already there, the drop's 대체 answer, which no undo can give
-    // back - so it is never taken away.
+    // for 복사 취소 / 이동 취소 - see ArrivalUndo). Replaced: the name was
+    // already there, and the shell's 덮어쓰기 went over it or its 건너뛰기 left
+    // it (ShellTransfer cannot tell which) - either way no undo can give the
+    // old one back, so it is never taken away.
     public readonly record struct Landing(string Source, string Path, bool Replaced);
 
     // Returns false only when the clipboard has nothing pasteable, so the
     // caller can distinguish "nothing to do" from "tried and failed".
-    public static bool TryPaste(string destinationFolder, out PasteOutcome outcome, out string? error)
+    public static bool TryPaste(string destinationFolder, IntPtr keepAbove, out PasteOutcome outcome, out string? error)
     {
         error = null;
         outcome = PasteOutcome.None;
@@ -144,7 +145,13 @@ public static class FileOperationService
         var landings = new List<Landing>();
         outcome = new PasteOutcome(move, sourcePaths, created, landings);
 
-        foreach (string sourcePath in sourcePaths)
+        var (viaShell, viaApp) = SplitForShell(sourcePaths, destinationFolder);
+        if (viaShell.Count > 0)
+        {
+            ShellTransfer(viaShell, destinationFolder, move, keepAbove, created, landings, ref error);
+        }
+
+        foreach (string sourcePath in viaApp)
         {
             try
             {
@@ -154,7 +161,8 @@ public static class FileOperationService
                 if (landed is not null)
                 {
                     created.Add(landed);
-                    // A paste never writes over anything (numbered instead).
+                    // What comes this way meets no name that was in the folder
+                    // before (SplitForShell), so nothing here was written over.
                     landings.Add(new Landing(sourcePath, landed, Replaced: false));
                 }
             }
@@ -283,9 +291,10 @@ public static class FileOperationService
         return null;
     }
 
-    // The cut half of paste. Name conflicts number up to " (2)" exactly like a
-    // copied paste does - the app has never asked before writing, and a move
-    // is not the place to start.
+    // The cut half of paste. A name already in the folder never reaches here -
+    // the set goes to the shell instead (SplitForShell) - so a conflict met
+    // here is one that appeared since, and numbers up to " (2)" rather than
+    // being written over unasked.
     // Returns where it put the item, or null when it did nothing (cut and pasted
     // back into its own folder). Same reason as CopyEntry above.
     private static string? MoveEntry(string sourcePath, string destinationFolder)
@@ -404,12 +413,13 @@ public static class FileOperationService
 
     // Dragging a file in from outside the app always copies (never removes
     // the external original - the safer default for a sidebar utility, not a
-    // full file manager) and asks per top-level dropped item before
-    // overwriting anything that already exists at the destination; declining
-    // just skips that item and moves on to the next. A name the SAME drop has
-    // already put there is numbered instead - see below.
+    // full file manager). A name already in the folder sends the set to the
+    // shell's copy, as a paste does (SplitForShell); it asked once per item
+    // here until 2026-11-07, which a patch of three hundred files made three
+    // hundred questions. A name the SAME drop has already put there is
+    // numbered instead - see below.
     public static bool TryImportDroppedPaths(IReadOnlyList<string> sourcePaths, string destinationFolder,
-        Func<string, bool> confirmOverwrite, out IReadOnlyList<string> createdPaths,
+        IntPtr keepAbove, out IReadOnlyList<string> createdPaths,
         out IReadOnlyList<Landing> landings, out string? error)
     {
         error = null;
@@ -417,7 +427,14 @@ public static class FileOperationService
         var landed = new List<Landing>();
         createdPaths = created;
         landings = landed;
-        foreach (string sourcePath in sourcePaths)
+
+        var (viaShell, viaApp) = SplitForShell(sourcePaths, destinationFolder);
+        if (viaShell.Count > 0)
+        {
+            ShellTransfer(viaShell, destinationFolder, move: false, keepAbove, created, landed, ref error);
+        }
+
+        foreach (string sourcePath in viaApp)
         {
             try
             {
@@ -456,17 +473,14 @@ public static class FileOperationService
                 // to meet the overwrite question for the copy of the first,
                 // made a moment earlier by this same drop. The question cannot
                 // say that is what it means, and answering yes lost a file.
-                // Numbered up to " (2)" the way a paste numbers every
-                // collision; the question is kept for what was in the folder
-                // before the drop.
-                if (exists && created.Contains(destPath, StringComparer.OrdinalIgnoreCase))
+                // Numbered up to " (2)" instead. What was in the folder before
+                // the drop went to the shell (SplitForShell), so any name met
+                // here is this drop's own, or one that appeared since - and
+                // neither is written over.
+                if (exists)
                 {
                     destPath = GetUniqueDestination(destPath);
                     exists = false;
-                }
-                else if (exists && !confirmOverwrite(name))
-                {
-                    continue;
                 }
 
                 if (Directory.Exists(sourcePath))
@@ -500,11 +514,11 @@ public static class FileOperationService
     }
 
     // Shift+드래그. The MOVE half of the drop above, and deliberately NOT a
-    // second idea of what moving means: it goes through MoveEntry, the same
-    // call 잘라내기+붙여넣기 has always used. So a name that already exists
-    // numbers up to " (2)" rather than asking, a folder dropped into its own
-    // subtree is refused before anything is written, and a move across volumes
-    // copies in full BEFORE the source is removed.
+    // second idea of what moving means: it goes the way 잘라내기+붙여넣기
+    // goes. A name already in the folder sends the set to the shell's move
+    // (SplitForShell); otherwise MoveEntry, where a folder dropped into its
+    // own subtree is refused before anything is written, and a move across
+    // volumes copies in full BEFORE the source is removed.
     //
     // Only ever reached for a drag that started inside this app (see
     // MainWindow's InternalDragFormat). A file dragged in from Explorer still
@@ -517,7 +531,7 @@ public static class FileOperationService
     // may well have them open: refreshing only the destination would leave the
     // rows that just left still sitting there.
     public static bool TryMoveDroppedPaths(IReadOnlyList<string> sourcePaths, string destinationFolder,
-        out IReadOnlyList<string> emptiedFolders, out IReadOnlyList<string> createdPaths,
+        IntPtr keepAbove, out IReadOnlyList<string> emptiedFolders, out IReadOnlyList<string> createdPaths,
         out IReadOnlyList<Landing> landings, out string? error)
     {
         error = null;
@@ -526,19 +540,30 @@ public static class FileOperationService
         var moved = new List<Landing>();
         createdPaths = created;
         landings = moved;
+
         foreach (string sourcePath in sourcePaths)
+        {
+            string? parent = Path.GetDirectoryName(sourcePath.TrimEnd(Path.DirectorySeparatorChar));
+            if (parent is not null && !folders.Contains(parent, StringComparer.OrdinalIgnoreCase))
+            {
+                folders.Add(parent);
+            }
+        }
+
+        var (viaShell, viaApp) = SplitForShell(sourcePaths, destinationFolder);
+        if (viaShell.Count > 0)
+        {
+            ShellTransfer(viaShell, destinationFolder, move: true, keepAbove, created, moved, ref error);
+        }
+
+        foreach (string sourcePath in viaApp)
         {
             try
             {
-                string? parent = Path.GetDirectoryName(sourcePath.TrimEnd(Path.DirectorySeparatorChar));
                 if (MoveEntry(sourcePath, destinationFolder) is { } landed)
                 {
                     created.Add(landed);
                     moved.Add(new Landing(sourcePath, landed, Replaced: false));
-                }
-                if (parent is not null && !folders.Contains(parent, StringComparer.OrdinalIgnoreCase))
-                {
-                    folders.Add(parent);
                 }
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
@@ -553,10 +578,11 @@ public static class FileOperationService
         return true;
     }
 
-    // Pasting into a folder that already has an item with the same name
-    // appends " (2)", " (3)", ... instead of overwriting. Shared with
-    // ArchiveService so a second 압축 of the same row numbers up the same way
-    // the rest of the app does.
+    // A name already taken gets " (2)", " (3)", ... instead of being written
+    // over: a copy pasted beside itself, a second 압축 of the same row
+    // (ArchiveService shares this), 새로 만들기. A paste or a drop onto a name
+    // that was already there is the shell's business since 2026-11-07
+    // (SplitForShell).
     // alsoTaken: names to skip that are not on disk (TryCreateEmptyFile).
     internal static string GetUniqueDestination(string path, Predicate<string>? alsoTaken = null)
     {
@@ -701,6 +727,8 @@ public static class FileOperationService
     //                         dropping our own question would have made files on
     //                         a NAS disappear in silence. It partially overrides
     //                         FOF_NOCONFIRMATION, and only for that case.
+    private const int FO_MOVE = 0x0001;
+    private const int FO_COPY = 0x0002;
     private const int FO_DELETE = 0x0003;
     private const ushort FOF_NOCONFIRMATION = 0x0010;
     private const ushort FOF_ALLOWUNDO = 0x0040;
@@ -723,6 +751,187 @@ public static class FileOperationService
 
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
+
+    // NAME COLLISIONS GO TO WINDOWS (2026-11-07, on report). A paste numbered
+    // every name already in the folder, which is right for a duplicate and
+    // wrong for an update: a game's patch or mod pasted over its folder landed
+    // as "Data (2)" beside the folder it was meant to update, and nothing was
+    // updated. So when anything in a paste or a drop would meet a name that is
+    // there, the set is handed to the shell's own copy, the one Explorer runs:
+    // one 파일 바꾸기 또는 건너뛰기 for every collision at any depth, a folder
+    // merged into the one already there, its progress for a long copy, and the
+    // permission prompt a folder such as Program Files needs. Measured
+    // 2026-11-07 through this call, read by UI Automation: the window named
+    // both colliding files (one inside a folder) at once and merged the folder
+    // without asking; 대상 폴더의 파일 덮어쓰기 replaced, 이 파일 건너뛰기 kept
+    // the old file and still copied the rest, and a move merged the same way
+    // and emptied the source.
+    //
+    // What came of it is read off the disk afterwards, top level only. The
+    // shell does not say which answer was given, so a name that was there
+    // before counts as Replaced either way - which keeps 복사 취소 off it. A
+    // copy kept under a new name through 파일 확인 후 결정 is not tracked; the
+    // watcher lists it. The shell shows its own errors, so none is passed on.
+    //
+    // OFF THE UI THREAD, AND WITH NO OWNER (2026-11-08, on report): run on the
+    // UI thread, a 4GB copy left the whole app taking no clicks for as long
+    // as its progress window stood. The caller runs this on a thread of its
+    // own; and an owner was found to do nothing worth having (measured with a
+    // topmost window over the screen): the shell's window is neither owned by
+    // it nor placed by it, and opened at the same spot either way. Without
+    // one it gets a taskbar button of its own, which the sidebar has none of.
+    //
+    // keepAbove: the app's window while it is topmost, or zero. The shell's
+    // window is not topmost, so wherever it overlapped the docked sidebar it
+    // opened BEHIND it (measured: the point at its centre hit the app) - a
+    // question hidden by the app that asked it. For the length of the call
+    // every window this process shows on a thread other than that window's
+    // is raised to topmost as it appears: the shell's progress and question,
+    // and its error and permission boxes. Measured: raised, it is the window
+    // at that point.
+    private static void ShellTransfer(IReadOnlyList<string> sources, string destinationFolder, bool move,
+        IntPtr keepAbove, List<string> created, List<Landing> landings, ref string? error)
+    {
+        var plan = sources
+            .Select(source =>
+            {
+                string trimmed = source.TrimEnd(Path.DirectorySeparatorChar);
+                string destination = Path.Combine(destinationFolder, Path.GetFileName(trimmed));
+                return (Source: source, Trimmed: trimmed, Destination: destination, Existed: EntryExists(destination));
+            })
+            .ToList();
+
+        var op = new SHFILEOPSTRUCT
+        {
+            hwnd = IntPtr.Zero,
+            wFunc = (uint)(move ? FO_MOVE : FO_COPY),
+            pFrom = string.Join('\0', sources) + "\0\0",
+            pTo = destinationFolder + "\0",
+            fFlags = FOF_NOCONFIRMMKDIR,
+        };
+
+        using var raising = new CancellationTokenSource();
+        if (keepAbove != IntPtr.Zero)
+        {
+            uint appThread = GetWindowThreadProcessId(keepAbove, out _);
+            var watch = new Thread(() => RaiseShellWindows(appThread, raising.Token)) { IsBackground = true };
+            watch.Start();
+        }
+
+        try
+        {
+            SHFileOperation(ref op);
+        }
+        catch (Exception ex) when (ex is EntryPointNotFoundException or DllNotFoundException)
+        {
+            error = ex.Message;
+            return;
+        }
+        finally
+        {
+            raising.Cancel();
+        }
+
+        // Cancelled: what was already there may be untouched, and is not
+        // reported as having arrived.
+        bool cancelled = op.fAnyOperationsAborted != 0;
+        foreach (var item in plan)
+        {
+            if (!EntryExists(item.Destination) || cancelled && item.Existed)
+            {
+                continue;
+            }
+
+            if (move)
+            {
+                // Still there: skipped, or a folder only part of which went.
+                if (EntryExists(item.Trimmed))
+                {
+                    continue;
+                }
+                PathMoved?.Invoke(item.Trimmed, item.Destination);
+            }
+
+            created.Add(item.Destination);
+            landings.Add(new Landing(item.Source, item.Destination, Replaced: item.Existed));
+        }
+    }
+
+    // Which of these go to the shell: all of them, the moment one would meet a
+    // name already in the folder - asked of the disk, so a file the type
+    // filter hides counts as well. Kept back for this app's own copy: an item
+    // put into its own folder (a copy beside itself numbers up, a move there
+    // does nothing), a folder into its own subtree (refused before anything
+    // is written), a whole volume, and a name the set has already used. That
+    // last is numbered after the shell has run, as a drop of same-named files
+    // from several folders always was - handed over, the shell would ask
+    // whether to replace the copy this same paste had just made. With no
+    // collision nothing changes: no window, everything as before.
+    private static (List<string> Shell, List<string> App) SplitForShell(
+        IReadOnlyList<string> sources, string destinationFolder)
+    {
+        var shell = new List<string>();
+        var app = new List<string>();
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        bool collides = false;
+        foreach (string source in sources)
+        {
+            string trimmed = source.TrimEnd(Path.DirectorySeparatorChar);
+            string name = Path.GetFileName(trimmed);
+            bool ownFolder = Path.GetDirectoryName(trimmed) is { } parent && IsSamePath(parent, destinationFolder);
+            if (name.Length == 0 || ownFolder || IsSameOrBeneath(destinationFolder, trimmed) || !names.Add(name))
+            {
+                app.Add(source);
+                continue;
+            }
+
+            shell.Add(source);
+            collides |= EntryExists(Path.Combine(destinationFolder, name));
+        }
+
+        return collides ? (shell, app) : (new List<string>(), sources.ToList());
+    }
+
+    private static bool EntryExists(string path) => File.Exists(path) || Directory.Exists(path);
+
+    private static void RaiseShellWindows(uint appThread, CancellationToken stop)
+    {
+        uint process = (uint)Environment.ProcessId;
+        var raised = new HashSet<IntPtr>();
+        while (!stop.IsCancellationRequested)
+        {
+            EnumWindows((hwnd, _) =>
+            {
+                if (!raised.Contains(hwnd) && IsWindowVisible(hwnd) &&
+                    GetWindowThreadProcessId(hwnd, out uint owner) != appThread && owner == process)
+                {
+                    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+                    raised.Add(hwnd);
+                }
+                return true;
+            }, IntPtr.Zero);
+            stop.WaitHandle.WaitOne(150);
+        }
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hwnd, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc callback, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(IntPtr hwnd, IntPtr after, int x, int y, int cx, int cy, uint flags);
+
+    private static readonly IntPtr HWND_TOPMOST = new(-1);
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOACTIVATE = 0x0010;
 
     // cancelled is TRUE when the person said no - which is not a failure and
     // must not be reported as one.

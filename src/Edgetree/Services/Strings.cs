@@ -1220,8 +1220,10 @@ public static class Strings
     public static string LanguageChangeTitle = "언어 변경";
     public static string LanguageChangeBody = "언어를 변경하려면 앱을 다시 시작해야 합니다. 지금 다시 시작할까요?";
     public static string ImportFailedTitle = "가져오기 실패";
+    // The drop's own overwrite question went in 2026-11-07 - the shell's 파일
+    // 바꾸기 또는 건너뛰기 asks now - and this title stays for the text view's
+    // changed-on-disk question, which borrows it.
     public static string OverwriteConfirmTitle = "덮어쓰기 확인";
-    public static string OverwriteConfirmBody = "'{0}'이(가) 이미 있습니다. 덮어쓸까요?";
 
     public static string ExportSettingsFailedTitle = "설정 내보내기 실패";
     public static string ImportSettingsFailedTitle = "설정 가져오기 실패";
@@ -1827,7 +1829,6 @@ public static class Strings
         LanguageChangeBody = "Changing the language requires restarting the app. Restart now?";
         ImportFailedTitle = "Import failed";
         OverwriteConfirmTitle = "Confirm overwrite";
-        OverwriteConfirmBody = "\"{0}\" already exists. Overwrite it?";
 
         ExportSettingsFailedTitle = "Failed to export settings";
         ImportSettingsFailedTitle = "Failed to import settings";
