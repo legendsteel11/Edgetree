@@ -117,7 +117,12 @@ const dict = {
         // Broken at the sentence, not left to wrap: at the hero's width the
         // second sentence ran onto a third line and split 수월합니 / 다
         // (2026-08-06). .description is white-space: pre-line for this.
-        '원하는 폴더와 파일을 선택하여 PC 전체와 네트워크까지 빠르게 탐색하세요.\n엣지트리 하나로 파일 관리와 멀티미디어 재생까지 처리하여 데스크톱 공간을 절약합니다.',
+        // The previews named since 2026-11-08 (image, PDF, text - not 문서,
+        // which reads as Office files the panel does not open). Kept to one
+        // line of the 720px copy column at 16px, about forty syllables: the
+        // "saves desktop space" clause went to make room, and the name stays
+        // for the reason above.
+        '원하는 폴더와 파일을 선택하여 PC 전체와 네트워크까지 빠르게 탐색하세요.\n엣지트리 하나로 파일 관리, 이미지·PDF·텍스트 미리보기, 멀티미디어 재생까지 처리합니다.',
       // Korean page only - the English one leaves this empty and the badge is
       // not rendered at all.
       //
@@ -155,8 +160,8 @@ const dict = {
       title: '주요기능',
       items: [
         {
-          title: '멀티미디어 패널: 이미지',
-          desc: '폴더에 포함된 이미지 전체를 빠르게 넘기며 볼 수 있습니다. 확대/축소/전체화면 및 내비게이터 기능, 썸네일 실시간 크기조정이 가능하고 바로 끌어 작업할 수 있습니다. 바탕화면 지정도 가능합니다.',
+          title: '멀티미디어 패널: 이미지 및 문서(PDF 포함)',
+          desc: '폴더에 포함된 이미지 전체를 빠르게 넘기며 볼 수 있습니다. 확대/축소/전체화면 및 내비게이터 기능, 썸네일 실시간 크기조정이 가능하고 바로 끌어 작업할 수 있습니다. 바탕화면 지정도 가능합니다. 이미지 자르기와 회전, 텍스트·마크다운 문서 편집, PDF 보기 및 인쇄도 패널에서 바로 할 수 있습니다.',
         },
         {
           title: '멀티미디어 패널: 음악 · 영상',
@@ -316,7 +321,7 @@ const dict = {
       // English that noun phrase is the name of a product category, and it
       // promises dual panes and batch operations this app has never had.
       description:
-        'Pick the folders and files you want, and move quickly across your PC and your network.\nOne app for managing files and playing media, so your desktop has room to work.',
+        'Pick the folders and files you want, and move quickly across your PC and your network.\nOne app for managing files, previewing images, PDFs and text, and playing media.',
       // Empty on purpose - see the Korean side. An English reader looking at
       // English screenshots has nothing to be corrected about.
       langBadge: '',
@@ -341,8 +346,8 @@ const dict = {
       title: 'Key Features',
       items: [
         {
-          title: 'Multimedia panel — images',
-          desc: 'Flip quickly through every image a folder holds. Zoom, full screen and a navigator, thumbnails you resize as you go, and drag one straight out to work with. It can set your desktop background too.',
+          title: 'Multimedia panel — images and documents (PDF included)',
+          desc: 'Flip quickly through every image a folder holds. Zoom, full screen and a navigator, thumbnails you resize as you go, and drag one straight out to work with. It can set your desktop background too. Crop and rotate images, edit text and Markdown files, and view and print PDFs right in the panel.',
         },
         {
           title: 'Multimedia panel — music and video',
