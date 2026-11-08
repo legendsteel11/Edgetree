@@ -1,4 +1,4 @@
-# Edgetree v2.9.0
+# Edgetree v2.9.1
 
 [한국어 안내](README-ko.md)
 
@@ -94,6 +94,9 @@ leaves them where they are.
   file drag.
 
 - **Undo a paste**: `Ctrl+Z` undoes the last paste or drop.
+- **Names already there**: a paste or drop onto them goes through File
+  Explorer's replace-or-skip window, and folders merge with the existing ones.
+  With no clash it copies straight away.
 
 ### The multimedia panel
 
@@ -242,6 +245,13 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.9.1 (2026-11-08)
+
+- Pasting or dropping items whose names already exist in a folder now shows the same replace-or-skip dialog as File Explorer. Folders are merged with the existing ones.
+- Files you paste or drop now stay visible until you leave the folder, even if the filter hides their type.
+- The app now stays responsive while large files are being pasted.
+- When renaming, the number pad's + and - keys now type normally.
 
 ### v2.9.0 (2026-11-06)
 

@@ -45,6 +45,29 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // FOUR LINES, NOT MERGED with v2.9.0 although it comes two days after
+    // (the author's call, 2026-11-08, against the burial rule v2.8.1 kept):
+    // the card is read only by someone about to download, and v2.9.0's ten
+    // lines stay one arrow back. Two are changes to paste and drop - a name
+    // already there goes to Windows' replace-or-skip, a file the filter hides
+    // stays in sight - one is the app staying usable through a long paste,
+    // and the last repairs a key that was the tree's before it was the
+    // name's, written as what now works.
+    version: 'v2.9.1',
+    ko: [
+      '같은 이름이 있는 폴더에 붙여넣거나 드롭하면 Windows 탐색기와 같은 덮어쓰기·건너뛰기 창이 표시되고, 폴더는 기존 폴더와 합쳐집니다.',
+      '필터로 숨겨진 형식의 파일도 붙여넣거나 드롭하면 해당 폴더를 벗어날 때까지 표시됩니다.',
+      '큰 파일을 붙여넣는 동안에도 앱을 계속 사용할 수 있습니다.',
+      '이름 바꾸기에서 숫자패드의 `+`, `-`가 그대로 입력됩니다.',
+    ],
+    en: [
+      'Pasting or dropping items whose names already exist in a folder now shows the same replace-or-skip dialog as File Explorer. Folders are merged with the existing ones.',
+      'Files you paste or drop now stay visible until you leave the folder, even if the filter hides their type.',
+      'The app now stays responsive while large files are being pasted.',
+      'When renaming, the number pad\'s + and - keys now type normally.',
+    ],
+  },
+  {
     // TEN LINES. The image tools lead with five - the crop, its last area,
     // rotation, the EXIF view, metadata removal - then the paste and drop
     // undo, PSD at its own size, the thumbnails' file menu, Shift+Enter and
