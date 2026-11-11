@@ -4381,6 +4381,17 @@ public partial class MainWindow : Window
             return;
         }
 
+        // NOR WHILE A NAME IS BEING TYPED (2026-11-11). Typing does not need the
+        // pointer, so it is often moved off the sidebar mid-name, and closing on
+        // that took the box away from the hands still typing into it. Polled like
+        // the drag above, so once the name is committed or cancelled the next tick
+        // closes the sidebar if the cursor is still out.
+        if (IsTypingAName)
+        {
+            _autoHideRehideTimer.Start();
+            return;
+        }
+
         // WPF's routed MouseEnter (which would normally have cancelled this
         // timer already) has been reported unreliable right at a monitor
         // boundary - docked at the edge of a secondary monitor adjacent to
@@ -4424,6 +4435,18 @@ public partial class MainWindow : Window
 
         CloseAutoHideReveal();
     }
+
+    // Asked of the keyboard, not of IsEditing alone. A flag left true on a row
+    // that went away with its box still open would hold the sidebar out for
+    // good, with nothing on screen to say why - the failure _openMenus is a set
+    // rather than a count to avoid. A box that has lost the keyboard is not
+    // being typed into, and the app leaving the foreground reverts both boxes
+    // (OnDeactivated), so neither way can this outlive the editing.
+    private bool IsTypingAName
+        => Keyboard.FocusedElement is TextBox
+        {
+            DataContext: FileSystemItem { IsEditing: true } or FilmstripCell { IsEditing: true }
+        } box && Window.GetWindow(box) == this;
 
     private void CloseAutoHideReveal()
     {
