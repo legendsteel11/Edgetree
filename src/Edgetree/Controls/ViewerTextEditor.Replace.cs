@@ -1,5 +1,8 @@
+using System.ComponentModel;
 using System.Reflection;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Threading;
 using ICSharpCode.AvalonEdit.Search;
 using SidebarExplorer.App.Services;
 // The project also references WinForms, which has a ToolTip of its own.
@@ -123,20 +126,28 @@ public sealed partial class ViewerTextEditor
     private string ReplacementFor(ISearchResult match, string replacement)
         => _search.UseRegex ? match.ReplaceWith(replacement) : replacement;
 
-    // THE COUNT GOES IN THE PANEL'S OWN TOOLTIP, the one that says 일치하는
-    // 항목 없음 - same look, same place, by being the same thing. A tooltip of
+    // THE COUNT GOES IN THE PANEL'S OWN TOOLTIP, the one that used to say
+    // 일치하는 항목 없음 - same place, by being the same thing. A tooltip of
     // our own was the first idea and cannot work: the panel searches again
     // whenever the text changes, so a replace-all that leaves no match makes
     // it open its "no matches" at that very spot (measured 2026-10-13), and
     // the two would sit on top of each other. Writing into the panel's makes
-    // the count the last word, and it goes the way the panel's message always
-    // goes - when the next search finds something, or find closes.
+    // the count the last word.
+    //
+    // IT CLOSES ITSELF AFTER THREE SECONDS (2026-11-27). The tooltip opens
+    // under the find row, over the text's first lines, and the panel only
+    // took it down when a later search found something - so after a replace
+    // it stood over the text being edited until then.
     //
     // The field is private to AvalonEdit, read by reflection. The package is
     // pinned (6.3.1.120); a version that renamed it would simply show no
     // count, and replacing would work as before.
     private static readonly FieldInfo? FindMessageField =
         typeof(SearchPanel).GetField("messageView", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    private const int FindMessageSeconds = 3;
+    private DispatcherTimer? _findMessageTimer;
+    private string? _findMessageText;
 
     private void ShowFindMessage(string text)
     {
@@ -146,6 +157,44 @@ public sealed partial class ViewerTextEditor
             message.PlacementTarget = anchor;
             message.Content = text;
             message.IsOpen = true;
+
+            _findMessageText = text;
+            _findMessageTimer ??= new DispatcherTimer(TimeSpan.FromSeconds(FindMessageSeconds),
+                DispatcherPriority.Background, (_, _) => CloseFindMessage(), Dispatcher);
+            _findMessageTimer.Stop();
+            _findMessageTimer.Start();
         }
+    }
+
+    // Only the message this put up: one the panel has replaced since is the
+    // panel's to close.
+    private void CloseFindMessage()
+    {
+        _findMessageTimer?.Stop();
+        if (FindMessageField?.GetValue(_search) is ToolTip message &&
+            Equals(message.Content, _findMessageText))
+        {
+            message.IsOpen = false;
+        }
+    }
+
+    // NO "NO MATCHES" TOOLTIP ANY MORE (2026-11-27, on report). It opened over
+    // the text's first lines and stayed until a search found something, so an
+    // edit that took the last match away left it covering the very lines being
+    // edited. The count in the field says 0/0 now (FindCount), the same news in
+    // a place that covers nothing. The panel opens it from inside its own
+    // search, so it is collapsed whenever that sentence is its content rather
+    // than prevented; the replace count, written into the same tooltip, still
+    // shows.
+    private void QuietNoMatchesMessage()
+    {
+        if (FindMessageField?.GetValue(_search) is not ToolTip message)
+        {
+            return;
+        }
+
+        DependencyPropertyDescriptor.FromProperty(ContentControl.ContentProperty, typeof(ToolTip))
+            .AddValueChanged(message, (_, _) => message.Visibility =
+                Equals(message.Content, Strings.TextFindNoMatches) ? Visibility.Collapsed : Visibility.Visible);
     }
 }

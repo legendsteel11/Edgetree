@@ -67,6 +67,7 @@ public sealed partial class ViewerTextEditor
             ScheduleFindCount();
         };
         TextChanged += (_, _) => ScheduleFindCount();
+        QuietNoMatchesMessage();
     }
 
     public override void OnApplyTemplate()
@@ -185,8 +186,6 @@ public sealed partial class ViewerTextEditor
             : Array.Empty<int>();
     }
 
-    // Nothing at all for no matches: the panel's own 일치하는 항목 없음 says
-    // that, at the same field.
     private void UpdateFindCountText()
     {
         if (_findCount is null)
@@ -194,10 +193,16 @@ public sealed partial class ViewerTextEditor
             return;
         }
 
+        // 0/0 for a search that found nothing, which is all that says so now
+        // (the panel's tooltip is quieted - QuietNoMatchesMessage). Nothing at
+        // all with no pattern, or one that does not compile: the field's own
+        // outline marks that one.
         int total = _matchStarts.Length;
         if (total == 0)
         {
-            _findCount.Text = string.Empty;
+            _findCount.Text = CurrentSearchStrategy() is not null
+                ? string.Format(Strings.TextFindCount, 0, 0)
+                : string.Empty;
             return;
         }
 

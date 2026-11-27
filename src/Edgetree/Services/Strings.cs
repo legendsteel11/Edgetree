@@ -830,8 +830,9 @@ public static class Strings
     public static string TextFindError = "오류: ";
     public static string TextFindNoMatches = "일치하는 항목 없음";
     // Inside the find field's right end (2026-11-27): the match the selection
-    // is on, of how many. "?" while the selection is on none of them - the
-    // hand moved it, or the text changed under it.
+    // is on, of how many; 0/0 when nothing matches, which TextFindNoMatches
+    // no longer says on screen. "?" while the selection is on none of them -
+    // the hand moved it, or the text changed under it.
     public static string TextFindCount = "{0}/{1}";
     public static string TextFindCountUnknown = "?/{0}";
     // The replace row under it (2026-10-13), editing only. Notepad's and VS
