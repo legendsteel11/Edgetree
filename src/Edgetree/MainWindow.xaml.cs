@@ -18766,62 +18766,87 @@ public partial class MainWindow : Window
     // startup and left running for the app's lifetime; there are only ever a
     // handful of drives, so this is cheap compared to a count that scales
     // with how many folders someone has expanded.
+    //
+    // LOCAL ROOTS ONLY (2026-11-27). Making a watcher opens the folder it
+    // watches, and on a network root that is a call to the server from the UI
+    // thread - one of the two candidates for the ten-minute start recorded in
+    // FileSystemService.TryBuildDriveRoot. Network roots get theirs from the
+    // status poll, on its worker, once the root answers (UpdateNetworkRootStatus).
+    // That also means a NAS that was away at startup is watched when it comes
+    // back; before, its make failed here and nothing tried again until the
+    // next launch.
     private void StartDriveWatchers()
     {
         foreach (var root in _roots)
         {
-            // Already watched - this runs again whenever the set of roots
-            // changes (a drive coming back from the hidden list), and a second
-            // watcher on the same drive would double every event.
-            if (_driveWatchers.Any(w => string.Equals(w.Path, root.FullPath, StringComparison.OrdinalIgnoreCase)))
+            if (root.IsOnNetworkDrive || IsWatched(root.FullPath))
             {
                 continue;
             }
 
-            try
+            if (CreateDriveWatcher(root.FullPath) is { } watcher)
             {
-                var watcher = new FileSystemWatcher(root.FullPath)
-                {
-                    IncludeSubdirectories = true,
-                    // FileName/DirectoryName catch add/remove/rename. Attributes
-                    // is added so toggling an item's Hidden/System attribute
-                    // (which now filters it out of the tree, see
-                    // FileSystemService.VisibleEntryOptions) reflects live via
-                    // the Changed handler below. LastWrite is still deliberately
-                    // excluded - the tree only shows names, so an in-place edit
-                    // (same name) never changes the listing, and watching it
-                    // would let every autosave/log write on the whole drive
-                    // churn some folder's refresh for nothing. Attribute events
-                    // are far rarer (an already-set archive bit doesn't re-fire
-                    // on each write), and the refresh is expanded-folder-only +
-                    // debounced regardless.
-                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Attributes,
-
-                    // A whole-drive recursive watcher rides on one kernel change
-                    // buffer, and the default is only 8KB - a burst of activity
-                    // anywhere on the drive (a build, a browser cache flush)
-                    // overflows it and every queued event is silently thrown
-                    // away, which surfaced as "created a file in an expanded
-                    // folder and it just never appeared". 64KB is the documented
-                    // ceiling; the Error handler below covers the bursts that
-                    // still blow past it.
-                    InternalBufferSize = 64 * 1024
-                };
-                watcher.Created += OnDriveWatcherEvent;
-                watcher.Deleted += OnDriveWatcherEvent;
-                watcher.Renamed += OnDriveWatcherEvent;
-                watcher.Changed += OnDriveWatcherEvent;
-                watcher.Error += OnDriveWatcherError;
-                watcher.EnableRaisingEvents = true;
                 _driveWatchers.Add(watcher);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        }
+    }
+
+    // Already watched - StartDriveWatchers runs again whenever the set of roots
+    // changes (a drive coming back from the hidden list), and a second watcher
+    // on the same drive would double every event.
+    private bool IsWatched(string rootPath)
+        => _driveWatchers.Any(w => string.Equals(w.Path, rootPath, StringComparison.OrdinalIgnoreCase));
+
+    // Safe on any thread: it touches the disk and the new watcher, nothing of
+    // the window's. The caller puts the result in _driveWatchers on the UI
+    // thread. Null when the root cannot be watched right now.
+    private FileSystemWatcher? CreateDriveWatcher(string rootPath)
+    {
+        try
+        {
+            var watcher = new FileSystemWatcher(rootPath)
             {
-                // Drive not ready/accessible (empty optical drive, disconnected
-                // network share, ...) right at startup - same tolerance as any
-                // other filesystem race elsewhere in this app; that one drive
-                // just doesn't get live updates.
-            }
+                IncludeSubdirectories = true,
+                // FileName/DirectoryName catch add/remove/rename. Attributes
+                // is added so toggling an item's Hidden/System attribute
+                // (which now filters it out of the tree, see
+                // FileSystemService.VisibleEntryOptions) reflects live via
+                // the Changed handler below. LastWrite is still deliberately
+                // excluded - the tree only shows names, so an in-place edit
+                // (same name) never changes the listing, and watching it
+                // would let every autosave/log write on the whole drive
+                // churn some folder's refresh for nothing. Attribute events
+                // are far rarer (an already-set archive bit doesn't re-fire
+                // on each write), and the refresh is expanded-folder-only +
+                // debounced regardless.
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName | NotifyFilters.Attributes,
+
+                // A whole-drive recursive watcher rides on one kernel change
+                // buffer, and the default is only 8KB - a burst of activity
+                // anywhere on the drive (a build, a browser cache flush)
+                // overflows it and every queued event is silently thrown
+                // away, which surfaced as "created a file in an expanded
+                // folder and it just never appeared". 64KB is the documented
+                // ceiling; the Error handler below covers the bursts that
+                // still blow past it.
+                InternalBufferSize = 64 * 1024
+            };
+            watcher.Created += OnDriveWatcherEvent;
+            watcher.Deleted += OnDriveWatcherEvent;
+            watcher.Renamed += OnDriveWatcherEvent;
+            watcher.Changed += OnDriveWatcherEvent;
+            watcher.Error += OnDriveWatcherError;
+            watcher.EnableRaisingEvents = true;
+            return watcher;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            // Drive not ready/accessible (an empty optical drive, a network
+            // share that refuses) - same tolerance as any other filesystem
+            // race elsewhere in this app; that one drive just doesn't get
+            // live updates. A network root is tried again the next time it
+            // comes back (see _networkWatchFailed).
+            return null;
         }
     }
 
@@ -19093,7 +19118,8 @@ public partial class MainWindow : Window
         LogDriveChange($"arrived {row.FullPath[..2]}: added at {index} as \"{row.Name}\"");
 
         // A root with no watcher would show whatever it held the moment it
-        // appeared and never change again. Skips the ones already watched.
+        // appeared and never change again. Skips the ones already watched; a
+        // network root's comes from the status poll within two seconds.
         StartDriveWatchers();
     }
 
@@ -19522,8 +19548,18 @@ public partial class MainWindow : Window
     // disconnected, but seconds when the server is up and wedged - so it
     // happens on a timer, off the UI thread, once per DRIVE rather than per
     // row, and never while an earlier check is still out.
+    //
+    // It is also the one place a network root's label is read and its watcher
+    // made (2026-11-27): both ask the server, so both wait for the worker here
+    // to find the root answering - see FileSystemService.TryBuildDriveRoot for
+    // the start they once held up.
     private System.Windows.Threading.DispatcherTimer? _networkStatusTimer;
     private bool _networkStatusCheckRunning;
+
+    // Network roots whose watcher could not be made while they answered. Not
+    // retried every two seconds against a share that refuses; tried again
+    // after the root has been away and come back.
+    private readonly HashSet<string> _networkWatchFailed = new(StringComparer.OrdinalIgnoreCase);
 
     private void StartNetworkRootStatusWatch()
     {
@@ -19553,9 +19589,59 @@ public partial class MainWindow : Window
         try
         {
             var paths = networkRoots.Select(r => r.FullPath).ToList();
-            var offline = await Task.Run(() => paths
-                .Where(FileSystemService.RefreshNetworkRootState)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase));
+
+            // Decided here, where the watcher list lives; done on the worker,
+            // and only for a root that has just answered.
+            var needLabel = paths
+                .Where(p => FileSystemService.IsDriveLetterRoot(p) && !FileSystemService.HasNetworkDriveLabel(p))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var needWatcher = paths
+                .Where(p => !IsWatched(p) && !_networkWatchFailed.Contains(p))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            var (offline, madeWatchers, failedWatches) = await Task.Run(() =>
+            {
+                var down = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var made = new List<FileSystemWatcher>();
+                var failed = new List<string>();
+                foreach (string path in paths)
+                {
+                    if (FileSystemService.RefreshNetworkRootState(path))
+                    {
+                        down.Add(path);
+                        continue;
+                    }
+
+                    if (needLabel.Contains(path))
+                    {
+                        FileSystemService.ReadNetworkDriveLabel(path);
+                    }
+
+                    if (needWatcher.Contains(path))
+                    {
+                        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+                        var watcher = CreateDriveWatcher(path);
+                        LogDriveChange($"network watcher on {path}: {(watcher is null ? "FAILED" : "started")} " +
+                            $"in {System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds:F0} ms");
+                        if (watcher is null)
+                        {
+                            failed.Add(path);
+                        }
+                        else
+                        {
+                            made.Add(watcher);
+                        }
+                    }
+                }
+                return (down, made, failed);
+            });
+
+            AdoptNetworkWatchers(madeWatchers);
+            _networkWatchFailed.UnionWith(failedWatches);
+            if (needLabel.Count > 0)
+            {
+                ApplyNetworkDriveLabels();
+            }
 
             foreach (var root in networkRoots)
             {
@@ -19563,6 +19649,10 @@ public partial class MainWindow : Window
                 if (!isOffline)
                 {
                     _networkRootsSeenOnline.Add(root.FullPath);
+                }
+                else
+                {
+                    _networkWatchFailed.Remove(root.FullPath);
                 }
                 if (root.IsNetworkDriveOffline != isOffline)
                 {
@@ -19583,6 +19673,45 @@ public partial class MainWindow : Window
         finally
         {
             _networkStatusCheckRunning = false;
+        }
+    }
+
+    // Watchers the poll's worker made, taken into the list here on the UI
+    // thread. One the tree no longer needs - its root rebuilt away or already
+    // watched while the worker ran - is let go on a worker too: closing a
+    // network handle is a call to the server like opening one.
+    private void AdoptNetworkWatchers(List<FileSystemWatcher> watchers)
+    {
+        foreach (var watcher in watchers)
+        {
+            bool stillARoot = _roots.Any(r => r.IsOnNetworkDrive &&
+                string.Equals(r.FullPath, watcher.Path, StringComparison.OrdinalIgnoreCase));
+            if (!stillARoot || IsWatched(watcher.Path))
+            {
+                Task.Run(() =>
+                {
+                    watcher.EnableRaisingEvents = false;
+                    watcher.Dispose();
+                });
+                continue;
+            }
+
+            _driveWatchers.Add(watcher);
+        }
+    }
+
+    // The labels the poll has read, onto whichever drive rows are in the tree
+    // now - a ReloadRoots during the read built new ones, which took the
+    // label from the cache already if it was there in time.
+    private void ApplyNetworkDriveLabels()
+    {
+        foreach (var root in _roots)
+        {
+            if (root.IsOnNetworkDrive && FileSystemService.IsDriveLetterRoot(root.FullPath))
+            {
+                root.SetDriveDisplayName(FileSystemService.DriveDisplayName(
+                    root.FullPath, FileSystemService.CachedNetworkDriveLabel(root.FullPath)));
+            }
         }
     }
 

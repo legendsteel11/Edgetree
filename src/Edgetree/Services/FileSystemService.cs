@@ -306,10 +306,17 @@ public static class FileSystemService
 
         foreach (var drive in DriveInfo.GetDrives())
         {
-            if (TryBuildDriveRoot(drive) is { } row)
+            // Timed per drive because this is on the UI thread at every start:
+            // the one stall it has caused was ten minutes inside this loop's
+            // stretch of startup with no line saying which drive or which call
+            // (see the network note in TryBuildDriveRoot).
+            long started = System.Diagnostics.Stopwatch.GetTimestamp();
+            if (TryBuildDriveRoot(drive, mayAskNetwork: false) is { } row)
             {
                 roots.Add(row);
             }
+            LogSlowRead(drive.Name, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                failed: false, origin: "drives");
         }
 
         // AFTER the letters, never among them: the drives are what Windows
@@ -409,7 +416,23 @@ public static class FileSystemService
         return false;
     }
 
-    public static FileSystemItem? TryBuildDriveRoot(DriveInfo drive)
+    // MAYASKNETWORK IS WHICH THREAD THIS IS ON. A network drive is not asked
+    // anything from the UI thread, not even whether it is ready (2026-11-27).
+    // At sign-in Windows restores mapped drives in the background, and while a
+    // mapping reads Reconnecting a call that touches the letter waits for that
+    // attempt to end. With the server hung that was ten and a half minutes: the
+    // app's start stopped between the header and the drive watchers, other
+    // processes touching the drives stopped with it, and all of them went on at
+    // the second the mapping turned Disconnected - after which IsReady answered
+    // false in no time at all, the only case the notes below had measured.
+    // Which call in that stretch was the one waiting was not caught; the
+    // per-drive lines in GetDriveRoots and the poll's own lines would name it.
+    //
+    // So the UI thread builds a network drive's row from the letter and the
+    // label the status poll last read (NetworkDriveLabels), and the poll fills
+    // the label in once the drive answers. The worker callers (a letter that
+    // has just arrived) pass true and read it directly.
+    public static FileSystemItem? TryBuildDriveRoot(DriveInfo drive, bool mayAskNetwork)
     {
         // A hidden drive is dropped exactly like a hidden folder is - one
         // rule rather than a second presentation of its own. A greyed,
@@ -431,17 +454,19 @@ public static class FileSystemService
         // shows exactly these as a crossed-out drive that reconnects when
         // clicked, and the row has to exist for that click to be possible.
         // Local drives still drop out when not ready: an empty card reader
-        // slot is not a place to go.
-        if (!drive.IsReady && !isNetwork)
+        // slot is not a place to go. isNetwork is tested FIRST so a network
+        // drive never reaches IsReady here.
+        if (!isNetwork && !drive.IsReady)
         {
             return null;
         }
 
-        string driveName = drive.Name.TrimEnd('\\');
         // Not readable while the drive is away - the letter alone stands in
-        // until it answers again and a later refresh picks the label up.
-        string? label = drive.IsReady ? TryGetVolumeLabel(drive) : null;
-        string displayName = string.IsNullOrWhiteSpace(label) ? driveName : $"{label} ({driveName})";
+        // until it answers and the status poll reads the label.
+        string? label = isNetwork
+            ? mayAskNetwork ? ReadNetworkDriveLabel(drive.RootDirectory.FullName) : CachedNetworkDriveLabel(drive.RootDirectory.FullName)
+            : drive.IsReady ? TryGetVolumeLabel(drive) : null;
+        string displayName = DriveDisplayName(drive.RootDirectory.FullName, label);
 
         if (isNetwork)
         {
@@ -475,13 +500,76 @@ public static class FileSystemService
     {
         try
         {
-            return TryBuildDriveRoot(new DriveInfo(letterRoot));
+            return TryBuildDriveRoot(new DriveInfo(letterRoot), mayAskNetwork: true);
         }
         catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
         {
             // The letter went away again between the message and the look, or
             // the volume refuses to be asked. Either way there is no row to add.
             return null;
+        }
+    }
+
+    // "DISK2 (Y:)", or the letter alone with no label. One spelling, used by
+    // the row as it is built and by the poll when the label arrives later.
+    public static string DriveDisplayName(string root, string? label)
+    {
+        string driveName = root.TrimEnd('\\');
+        return string.IsNullOrWhiteSpace(label) ? driveName : $"{label} ({driveName})";
+    }
+
+    // A network letter's volume label, as last read off the UI thread. A key
+    // that is present means the drive has been asked; its value is what it
+    // said, null for no label. Absent means not asked yet.
+    private static readonly Dictionary<string, string?> NetworkDriveLabels = new(StringComparer.OrdinalIgnoreCase);
+
+    public static bool HasNetworkDriveLabel(string root)
+    {
+        lock (NetworkDriveLabels)
+        {
+            return NetworkDriveLabels.ContainsKey(root);
+        }
+    }
+
+    // Memory only, so safe from the UI thread. Null for no label and for not
+    // asked yet alike - either way the row shows the letter.
+    public static string? CachedNetworkDriveLabel(string root)
+    {
+        lock (NetworkDriveLabels)
+        {
+            return NetworkDriveLabels.TryGetValue(root, out string? label) ? label : null;
+        }
+    }
+
+    // WORKER ONLY - this asks the drive. Remembered only when the drive
+    // answered, so one that is away is asked again by the next poll that
+    // finds it back.
+    public static string? ReadNetworkDriveLabel(string root)
+    {
+        long started = System.Diagnostics.Stopwatch.GetTimestamp();
+        try
+        {
+            var drive = new DriveInfo(root);
+            if (!drive.IsReady)
+            {
+                return null;
+            }
+
+            string? label = TryGetVolumeLabel(drive);
+            lock (NetworkDriveLabels)
+            {
+                NetworkDriveLabels[root] = label;
+            }
+            return label;
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+        finally
+        {
+            LogSlowRead(root, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds,
+                failed: false, origin: "label");
         }
     }
 

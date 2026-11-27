@@ -18,7 +18,7 @@ public class FileSystemItem : INotifyPropertyChanged
     private bool _isEditing;
     private string _editingName = string.Empty;
 
-    public string Name { get; }
+    public string Name { get; private set; }
     public string FullPath { get; }
     public bool IsDirectory { get; }
     public bool IsPlaceholder { get; }
@@ -45,14 +45,33 @@ public class FileSystemItem : INotifyPropertyChanged
     // A file the panel's text view opens, which puts a 보기 mark at the row's
     // right end (2026-10-11) - every listed text kind since 2026-10-27, shown
     // on the hovered and the selected row only (the row template's triggers).
-    // Name never changes on an item - a rename makes a new one - so a plain
-    // computed property is all this needs.
+    // A file's Name never changes - a rename makes a new item - so a plain
+    // computed property is all this needs. (A drive row's can, once: see
+    // SetDriveDisplayName.)
     public bool IsViewableText =>
         !IsDirectory && !IsPlaceholder && !IsShowMore && TextFileReader.IsTextFile(Name);
 
     // Also called by MainWindow.ApplyIconStyle when the icon mode toggles, so
     // every realized row re-reads Icon under the new mode without a reload.
     public void RefreshIcon() => OnPropertyChanged(nameof(Icon));
+
+    // The one row whose name is not final when it is built: a network drive's,
+    // which goes up as its letter because the UI thread may not ask a network
+    // drive for its label (FileSystemService.TryBuildDriveRoot), and takes the
+    // label when the status poll has read it. Drive rows only, where the name
+    // is a caption - nothing finds a drive by it, the path is what is matched.
+    public void SetDriveDisplayName(string name)
+    {
+        if (DriveKind is null || Name == name)
+        {
+            return;
+        }
+
+        Name = name;
+        OnPropertyChanged(nameof(Name));
+        // The pack-icon mode picks a drive's glyph from its name.
+        OnPropertyChanged(nameof(Icon));
+    }
 
     // Only the first DisplayCap children are ever placed in Children at once;
     // the rest wait in _overflow behind a single "더 보기" row. Keeping the
