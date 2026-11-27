@@ -210,7 +210,17 @@ public sealed partial class ViewerTextEditor : TextEditor
         VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
         // No Background here: it follows IsReadOnly (OnPropertyChanged), and
         // the IsReadOnly above has already set it for reading.
-        Padding = new Thickness(8, 6, 2, 6);
+        Padding = new Thickness(TextLeftPadding, 6, 2, 6);
+        // Line numbers start off, so the room for the find outline's left side
+        // stands now (see PlaceTextEdgeRoom).
+        PlaceTextEdgeRoom(lineNumbers: false);
+        // The find outline's sides stand a pixel outside the match, so on a
+        // match at a line's start the left side lies left of the view. Nothing
+        // else the view draws reaches there (the current-line band starts at
+        // zero), and the scroll viewer around it still clips at its padding on
+        // every side, so what this lets out is that pixel, into the room left
+        // for it.
+        TextArea.TextView.ClipToBounds = false;
         // Monospace, as Notepad and VS Code both open a text file, with VS
         // Code's line spacing - see TextFontFamily.
         FontFamily = TextFontFamily;
@@ -278,15 +288,14 @@ public sealed partial class ViewerTextEditor : TextEditor
         //
         // That makes the current match - the selection, drawn over the marks -
         // the same colour as the rest, so it alone gets an outline in the
-        // text's ink while the marks are up (_findOutline).
+        // text's ink while the marks are up (FindOutlineLayer, in
+        // ViewerTextEditor.FindOutline.cs).
         BindingOperations.SetBinding(_search, SearchPanel.MarkerBrushProperty, MarkerBinding());
         _search.MarkerCornerRadius = 0;
-        _findOutline = new Pen { Thickness = 1 };
-        BindingOperations.SetBinding(_findOutline, Pen.BrushProperty,
-            new Binding(nameof(Foreground)) { Source = this });
 
         TextArea.SelectionChanged += (_, _) => OnSelectionChangedForFind();
         InitFindCount();
+        InitFindOutline();
         // F3 in the text, taken here rather than left to the panel's own
         // binding, so it goes through DriveFind like the row's arrows do.
         //
@@ -398,7 +407,6 @@ public sealed partial class ViewerTextEditor : TextEditor
     // keyboard is in the find row (typing there searches live). Anything else
     // that leaves a non-empty selection is the hand. A caret move that only
     // clears the selection leaves the marks as they are.
-    private readonly Pen _findOutline;
     private bool _findDriving;
     private bool _marksShown = true;
 
@@ -431,7 +439,7 @@ public sealed partial class ViewerTextEditor : TextEditor
             _marksShown = true;
             BindingOperations.SetBinding(_search, SearchPanel.MarkerBrushProperty, MarkerBinding());
         }
-        TextArea.SelectionBorder = FindIsOpen ? _findOutline : null;
+        SetFindOutlineShown(FindIsOpen);
         SetFindRulerShown(true);
     }
 
@@ -447,7 +455,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         _marksShown = false;
         BindingOperations.ClearBinding(_search, SearchPanel.MarkerBrushProperty);
         _search.MarkerBrush = Brushes.Transparent;
-        TextArea.SelectionBorder = null;
+        SetFindOutlineShown(false);
         SetFindRulerShown(false);
     }
 
@@ -1314,6 +1322,31 @@ public sealed partial class ViewerTextEditor : TextEditor
             _lineNumbers = null;
             _lineNumberGap = null;
         }
+        PlaceTextEdgeRoom(show);
+    }
+
+    // ROOM LEFT OF THE TEXT THAT NOTHING CLIPS (2026-11-27). The find outline
+    // stands one pixel outside a match's sides, so a match at a line's start
+    // puts its left side left of the text view - painted there because the
+    // view's ClipToBounds is off (see the constructor), and visible only if
+    // what lies there is still inside the scroll viewer's clip. With line
+    // numbers on, their gap is that room. With them off the text began at the
+    // clip's edge, so a 2px margin of nothing stands there instead, taken out
+    // of the editor's left padding: the text does not move either way.
+    private const double TextEdgeRoom = 2;
+    private const double TextLeftPadding = 8;
+    private readonly Border _textEdgeRoom = new() { Width = TextEdgeRoom };
+
+    private void PlaceTextEdgeRoom(bool lineNumbers)
+    {
+        TextArea.LeftMargins.Remove(_textEdgeRoom);
+        if (!lineNumbers)
+        {
+            TextArea.LeftMargins.Add(_textEdgeRoom);
+        }
+
+        double left = lineNumbers ? TextLeftPadding : TextLeftPadding - TextEdgeRoom;
+        Padding = new Thickness(left, Padding.Top, Padding.Right, Padding.Bottom);
     }
 
     // 85% of the text, whole points, and a gap of most of an em - both from
