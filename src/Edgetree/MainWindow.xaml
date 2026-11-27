@@ -210,6 +210,19 @@
              the two row states this sits underneath. -->
         <SolidColorBrush x:Key="TreeSelectionZoneBackground"
                 Color="#FF252525"/>
+        <!-- How far that band and a row's hover/selection colour reach LEFT of
+             the row that owns them (2026-11-27, on request): further than any
+             nesting can indent, so each runs to the tree's left edge instead of
+             starting at its own indent. The tree's scroll presenter clips at
+             its edge, so nothing paints outside the tree; with the tree's 4px
+             padding that edge is where a drive row's highlight already began.
+             A bleed rather than depth x indent: the indent is an option and
+             follows the font, and a number that has to track both is one more
+             thing to fall out of step. A negative margin also keeps the element
+             out of WPF's layout clip (the expander's overhang relies on the
+             same). Guide lines still draw over it - each folder's line comes
+             after its rows in the template. -->
+        <Thickness x:Key="TreeRowBleed">-4000,0,0,0</Thickness>
         <!-- 펼침기호. A literal on the toggle's own template until 2026-08-15,
              which made it the only colour in the app with no light/dark pair -
              both themes drew this same grey. ApplyColorSettings replaces it. -->
@@ -3374,9 +3387,27 @@
                                  GuideLine below). Painting the panel handed that
                                  strip back, on the one folder most likely to be
                                  clicked near. -->
+                            <!-- TreeRowBleed carries it left past this
+                                 row's indent to the tree's edge - see the
+                                 resource. -->
                             <Border x:Name="SelectionZone"
+                                    Margin="{StaticResource TreeRowBleed}"
                                     IsHitTestVisible="False"/>
                             <StackPanel>
+                                <Grid>
+                                <!-- The row's hover and selection colour, painted
+                                     here and not on RowBorder (2026-11-27), so it
+                                     can run the tree's whole width the way the band
+                                     above does: RowBorder holds the arrow and the
+                                     name, and bleeding IT left would drag them
+                                     along. Out of the hit test for the band's
+                                     reason - the strip it adds is the indent, which
+                                     stays nobody's target. RowBorder keeps its
+                                     Transparent background, which is what makes the
+                                     row's own width answer the pointer. -->
+                                <Border x:Name="RowBackdrop"
+                                        Margin="{StaticResource TreeRowBleed}"
+                                        IsHitTestVisible="False"/>
                                 <Border x:Name="RowBorder"
                                         Background="{TemplateBinding Background}"
                                         Padding="{TemplateBinding Padding}"
@@ -3440,6 +3471,7 @@
                                                 VerticalAlignment="Center"/>
                                     </Grid>
                                 </Border>
+                                </Grid>
                                 <!-- Each nesting level compounds this margin, producing the
                                      cascading indent that the default template gets "for free" -
                                      our custom template has to add it back explicitly. The left
@@ -3543,7 +3575,7 @@
                             <Trigger SourceName="RowBorder"
                                     Property="IsMouseOver"
                                     Value="True">
-                                <Setter TargetName="RowBorder"
+                                <Setter TargetName="RowBackdrop"
                                         Property="Background"
                                         Value="{DynamicResource TreeRowHoverBackground}"/>
                                 <!-- No TargetName: sets TreeViewItem.Foreground itself (see the
@@ -3564,7 +3596,7 @@
                                  setters win when both apply to the same row. -->
                             <DataTrigger Binding="{Binding IsMultiSelected}"
                                     Value="True">
-                                <Setter TargetName="RowBorder"
+                                <Setter TargetName="RowBackdrop"
                                         Property="Background"
                                         Value="{DynamicResource TreeRowSelectedActiveBackground}"/>
                                 <Setter Property="Foreground"
@@ -3582,7 +3614,7 @@
                                  rows need no matching trigger of their own. -->
                             <DataTrigger Binding="{Binding IsDropTarget}"
                                     Value="True">
-                                <Setter TargetName="RowBorder"
+                                <Setter TargetName="RowBackdrop"
                                         Property="Background"
                                         Value="{DynamicResource TreeRowSelectedActiveBackground}"/>
                                 <Setter Property="Foreground"
@@ -3596,7 +3628,7 @@
                                  always renders the same way regardless of focus. -->
                             <Trigger Property="IsSelected"
                                     Value="True">
-                                <Setter TargetName="RowBorder"
+                                <Setter TargetName="RowBackdrop"
                                         Property="Background"
                                         Value="{DynamicResource TreeRowSelectedActiveBackground}"/>
                             </Trigger>
