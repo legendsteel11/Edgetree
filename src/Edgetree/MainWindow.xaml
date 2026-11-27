@@ -9952,16 +9952,39 @@
                                         BorderBrush="{DynamicResource ControlBorder}"
                                         BorderThickness="1"
                                         CornerRadius="3"/>
-                                <TextBox x:Name="ViewerTextFindBox"
-                                        Grid.Column="1"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        Foreground="{DynamicResource DialogForeground}"
-                                        CaretBrush="{DynamicResource ForegroundText}"
-                                        FontSize="{DynamicResource PathBarFontSize}"
-                                        Padding="6,0"
-                                        VerticalContentAlignment="Center"
-                                        PreviewKeyDown="ViewerTextFindBox_PreviewKeyDown"/>
+                                <!-- The count sits INSIDE the field, at its right
+                                     end (2026-11-27, on request): VS Code's place for
+                                     it. Its own column of the field rather than an
+                                     overlay, so a long pattern stops short of it
+                                     instead of running underneath. Written by the
+                                     editor (ViewerTextEditor.FindCount.cs). The
+                                     type of the Aa / ab toggles beside it, which
+                                     also sits it on the field's middle (a smaller
+                                     size rode visibly low); the muted ink is the
+                                     author's call, taken from the app's own
+                                     SecondaryForeground rather than an opacity. -->
+                                <Grid Grid.Column="1">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="ViewerTextFindBox"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Foreground="{DynamicResource DialogForeground}"
+                                            CaretBrush="{DynamicResource ForegroundText}"
+                                            FontSize="{DynamicResource PathBarFontSize}"
+                                            Padding="6,0"
+                                            VerticalContentAlignment="Center"
+                                            PreviewKeyDown="ViewerTextFindBox_PreviewKeyDown"/>
+                                    <TextBlock x:Name="ViewerTextFindCount"
+                                            Grid.Column="1"
+                                            Margin="0,0,6,0"
+                                            VerticalAlignment="Center"
+                                            FontSize="{DynamicResource PathBarFontSize}"
+                                            Foreground="{DynamicResource SecondaryForeground}"
+                                            IsHitTestVisible="False"/>
+                                </Grid>
                                 <ToggleButton x:Name="ViewerTextFindMatchCase"
                                         Grid.Column="2"
                                         Style="{StaticResource PathBarToggleStyle}"

@@ -286,6 +286,7 @@ public sealed partial class ViewerTextEditor : TextEditor
             new Binding(nameof(Foreground)) { Source = this });
 
         TextArea.SelectionChanged += (_, _) => OnSelectionChangedForFind();
+        InitFindCount();
         // F3 in the text, taken here rather than left to the panel's own
         // binding, so it goes through DriveFind like the row's arrows do.
         //
@@ -411,6 +412,8 @@ public sealed partial class ViewerTextEditor : TextEditor
             return;
         }
 
+        UpdateFindCountText();
+
         if (_findDriving || !TextArea.IsKeyboardFocusWithin)
         {
             ShowFindMarks();
@@ -429,6 +432,7 @@ public sealed partial class ViewerTextEditor : TextEditor
             BindingOperations.SetBinding(_search, SearchPanel.MarkerBrushProperty, MarkerBinding());
         }
         TextArea.SelectionBorder = FindIsOpen ? _findOutline : null;
+        SetFindRulerShown(true);
     }
 
     // Transparent rather than taken away: the panel keeps its matches, so
@@ -444,6 +448,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         BindingOperations.ClearBinding(_search, SearchPanel.MarkerBrushProperty);
         _search.MarkerBrush = Brushes.Transparent;
         TextArea.SelectionBorder = null;
+        SetFindRulerShown(false);
     }
 
     private void DriveFind(Action step)
@@ -467,6 +472,7 @@ public sealed partial class ViewerTextEditor : TextEditor
     {
         _search.Close();
         ShowFindMarks();
+        ScheduleFindCount();
     }
 
     // ----- Bringing a far caret into view (2026-10-11) -------------------------
@@ -577,8 +583,11 @@ public sealed partial class ViewerTextEditor : TextEditor
     // is a fine literal, then switch regex on, and UseRegex's setter throws.
     // The rule turns that into an error outline on the control that caused it
     // rather than relying on the binding engine to swallow the exception.
-    public void BindFindBar(TextBox box, ToggleButton matchCase, ToggleButton wholeWords, ToggleButton regex)
+    public void BindFindBar(TextBox box, ToggleButton matchCase, ToggleButton wholeWords, ToggleButton regex,
+        TextBlock count)
     {
+        _findCount = count;
+
         box.SetBinding(TextBox.TextProperty, SearchBinding(nameof(SearchPanel.SearchPattern), live: true));
         matchCase.SetBinding(ToggleButton.IsCheckedProperty, SearchBinding(nameof(SearchPanel.MatchCase)));
         wholeWords.SetBinding(ToggleButton.IsCheckedProperty, SearchBinding(nameof(SearchPanel.WholeWords)));
@@ -622,6 +631,7 @@ public sealed partial class ViewerTextEditor : TextEditor
         {
             _search.SearchPattern = TextArea.Selection.GetText();
         }
+        ScheduleFindCount();
     });
 
     public void CloseFind() => CloseSearch();

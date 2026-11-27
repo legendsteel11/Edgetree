@@ -39570,7 +39570,8 @@ public partial class MainWindow : Window
         // Last child of the dock, so it fills what the find row leaves.
         ViewerTextDock.Children.Add(editor);
         editor.BindFindBar(
-            ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex);
+            ViewerTextFindBox, ViewerTextFindMatchCase, ViewerTextFindWholeWords, ViewerTextFindRegex,
+            ViewerTextFindCount);
         editor.EditStateChanged += (_, _) =>
         {
             UpdateViewerTextEditBar();
