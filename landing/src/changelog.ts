@@ -45,6 +45,28 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    // FOUR LINES, nineteen days after v2.9.1, so no burial question. Find in
+    // the text view gets its count and scroll-bar marks; the tree's row and
+    // folder backgrounds reach its left edge; a rename no longer lets the
+    // auto-hidden window slide away; and a start that waited on a hung network
+    // drive, written as what now happens rather than what used to. The
+    // English for the first two came from an outside review (Find in text,
+    // its folder section), taken whole.
+    version: 'v2.9.2',
+    ko: [
+      '텍스트 찾기에서 결과 개수와 스크롤바의 결과 위치를 확인할 수 있습니다.',
+      '트리에서 선택한 행과 폴더 구간의 배경이 왼쪽 끝까지 표시되도록 변경되었습니다.',
+      '자동 숨김 상태에서 이름 바꾸기 중에는 창이 숨겨지지 않도록 개선되었습니다.',
+      '네트워크 드라이브가 응답하지 않아도 앱이 지연 없이 시작되도록 개선되었습니다.',
+    ],
+    en: [
+      'Find in text now shows the number of matches and marks where they are on the scroll bar.',
+      'In the tree, the background of the selected row and its folder section now extends to the left edge.',
+      'With auto-hide on, the window no longer hides while you are renaming an item.',
+      'The app now starts without delay even when a network drive is not responding.',
+    ],
+  },
+  {
     // FOUR LINES, NOT MERGED with v2.9.0 although it comes two days after
     // (the author's call, 2026-11-08, against the burial rule v2.8.1 kept):
     // the card is read only by someone about to download, and v2.9.0's ten

@@ -1,4 +1,4 @@
-# Edgetree v2.9.1
+# Edgetree v2.9.2
 
 [한국어 안내](README-ko.md)
 
@@ -245,6 +245,13 @@ lands in `releases/v<version>/` beside the other two. The script reads its
 version out of the exe it packages, so bumping the csproj is enough.
 
 ## Changelog
+
+### v2.9.2 (2026-11-27)
+
+- Find in text now shows the number of matches and marks where they are on the scroll bar.
+- In the tree, the background of the selected row and its folder section now extends to the left edge.
+- With auto-hide on, the window no longer hides while you are renaming an item.
+- The app now starts without delay even when a network drive is not responding.
 
 ### v2.9.1 (2026-11-08)
 
